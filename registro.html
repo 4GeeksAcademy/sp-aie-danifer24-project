@@ -21,29 +21,59 @@
         <section class="rounded-2xl border border-emerald-100 bg-white p-5 shadow-lg shadow-emerald-900/5 md:p-7">
             <h1 class="text-2xl font-semibold">Formulario de aplicacion / registro</h1>
             <p class="mt-1 text-sm text-slate-600 md:text-base">
-                Completa tus datos para entender tu caso y agendar una primera llamada.
+                Completa tus datos personales y empresariales para entender tu caso y agendar una primera llamada.
             </p>
 
             <form action="#" method="post" class="mt-5 grid gap-4">
+                <h2 class="text-base font-semibold text-slate-800">Datos personales</h2>
                 <div class="grid gap-4 md:grid-cols-2">
                     <div>
                         <label for="nombre" class="mb-1 block text-sm font-semibold">Nombre completo *</label>
                         <input id="nombre" name="nombre" type="text" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
                     </div>
                     <div>
-                        <label for="email" class="mb-1 block text-sm font-semibold">Email corporativo *</label>
-                        <input id="email" name="email" type="email" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
+                        <label for="apellido" class="mb-1 block text-sm font-semibold">Apellido *</label>
+                        <input id="apellido" name="apellido" type="text" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
                     </div>
                 </div>
 
                 <div class="grid gap-4 md:grid-cols-2">
                     <div>
+                        <label for="email" class="mb-1 block text-sm font-semibold">Email corporativo *</label>
+                        <input id="email" name="email" type="email" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
+                    </div>
+                    <div>
                         <label for="telefono" class="mb-1 block text-sm font-semibold">Telefono</label>
                         <input id="telefono" name="telefono" type="tel" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
                     </div>
+                </div>
+
+                <div class="grid gap-4 md:grid-cols-2">
+                    <div>
+                        <label for="cargo" class="mb-1 block text-sm font-semibold">Cargo *</label>
+                        <input id="cargo" name="cargo" type="text" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
+                    </div>
+                    <div>
+                        <label for="pais" class="mb-1 block text-sm font-semibold">Pais *</label>
+                        <input id="pais" name="pais" type="text" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
+                    </div>
+                </div>
+
+                <h2 class="pt-2 text-base font-semibold text-slate-800">Datos de empresa y necesidad</h2>
+                <div class="grid gap-4 md:grid-cols-2">
                     <div>
                         <label for="empresa" class="mb-1 block text-sm font-semibold">Empresa *</label>
                         <input id="empresa" name="empresa" type="text" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
+                    </div>
+                    <div>
+                        <label for="tamano" class="mb-1 block text-sm font-semibold">Tamano de empresa *</label>
+                        <select id="tamano" name="tamano" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
+                            <option value="">Selecciona una opcion</option>
+                            <option>1-50 empleados</option>
+                            <option>51-200 empleados</option>
+                            <option>201-1000 empleados</option>
+                            <option>Mas de 1000 empleados</option>
+                        </select>
                     </div>
                 </div>
 
