@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registro | Nexova Solutions</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-gradient-to-br from-emerald-50 via-slate-50 to-teal-100 text-slate-900 antialiased">
+    <header class="border-b border-emerald-100 bg-white/90 backdrop-blur">
+        <div class="mx-auto flex w-full max-w-5xl items-center justify-between px-5 py-4 md:px-8">
+            <a href="index.html" class="text-lg font-bold text-emerald-800">Nexova Solutions</a>
+            <nav aria-label="Navegacion principal" class="flex items-center gap-5 text-sm font-semibold text-slate-700">
+                <a href="index.html" class="transition hover:text-emerald-700">Landing</a>
+                <a href="registro.html" class="rounded-lg bg-emerald-600 px-3 py-2 text-white transition hover:bg-emerald-700">Registro</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="mx-auto w-full max-w-4xl px-5 py-10 md:px-8">
+        <section class="rounded-2xl border border-emerald-100 bg-white p-5 shadow-lg shadow-emerald-900/5 md:p-7">
+            <h1 class="text-2xl font-semibold">Formulario de aplicacion / registro</h1>
+            <p class="mt-1 text-sm text-slate-600 md:text-base">
+                Completa tus datos para entender tu caso y agendar una primera llamada.
+            </p>
+
+            <form action="#" method="post" class="mt-5 grid gap-4">
+                <div class="grid gap-4 md:grid-cols-2">
+                    <div>
+                        <label for="nombre" class="mb-1 block text-sm font-semibold">Nombre completo *</label>
+                        <input id="nombre" name="nombre" type="text" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
+                    </div>
+                    <div>
+                        <label for="email" class="mb-1 block text-sm font-semibold">Email corporativo *</label>
+                        <input id="email" name="email" type="email" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
+                    </div>
+                </div>
+
+                <div class="grid gap-4 md:grid-cols-2">
+                    <div>
+                        <label for="telefono" class="mb-1 block text-sm font-semibold">Telefono</label>
+                        <input id="telefono" name="telefono" type="tel" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
+                    </div>
+                    <div>
+                        <label for="empresa" class="mb-1 block text-sm font-semibold">Empresa *</label>
+                        <input id="empresa" name="empresa" type="text" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
+                    </div>
+                </div>
+
+                <div class="grid gap-4 md:grid-cols-2">
+                    <div>
+                        <label for="sector" class="mb-1 block text-sm font-semibold">Sector</label>
+                        <select id="sector" name="sector" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
+                            <option value="">Selecciona una opcion</option>
+                            <option>Tecnologia</option>
+                            <option>Retail</option>
+                            <option>Servicios financieros</option>
+                            <option>Otro</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="interes" class="mb-1 block text-sm font-semibold">Area de interes principal *</label>
+                        <select id="interes" name="interes" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
+                            <option value="">Selecciona una opcion</option>
+                            <option>Operaciones de Seleccion</option>
+                            <option>Soporte al Cliente</option>
+                            <option>Ventas y Desarrollo de Negocio</option>
+                            <option>Formacion Corporativa</option>
+                            <option>Portal interno de RRHH</option>
+                            <option>Dashboard Ejecutivo</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label for="reto" class="mb-1 block text-sm font-semibold">Reto principal que quieres resolver *</label>
+                    <textarea id="reto" name="reto" placeholder="Cual es el proceso que quieres automatizar o mejorar" required class="min-h-28 w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring"></textarea>
+                </div>
+
+                <label class="flex items-start gap-2 text-sm text-slate-600" for="consentimiento">
+                    <input id="consentimiento" name="consentimiento" type="checkbox" required class="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
+                    Acepto que Nexova Solutions utilice mis datos para contactarme sobre sus servicios.
+                </label>
+
+                <button type="submit" class="inline-flex w-full items-center justify-center rounded-lg bg-emerald-600 px-4 py-3 font-bold text-white transition hover:bg-emerald-700 md:w-auto">Enviar registro</button>
+            </form>
+        </section>
+    </main>
+
+    <footer class="px-5 pb-10 text-center text-sm text-slate-600">
+        Nexova Solutions &copy; 2011-2026 | Valencia - Miami
+    </footer>
+</body>
+</html>
