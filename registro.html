@@ -24,16 +24,17 @@
                 Completa tus datos personales y empresariales para entender tu caso y agendar una primera llamada.
             </p>
 
-            <form action="#" method="post" class="mt-5 grid gap-4">
+            <form id="form-registro" action="#" method="post" novalidate class="mt-5 grid gap-4">
+                <div id="form-mensaje" class="hidden rounded-lg border px-4 py-3 text-sm"></div>
                 <h2 class="text-base font-semibold text-slate-800">Datos personales</h2>
                 <div class="grid gap-4 md:grid-cols-2">
                     <div>
                         <label for="nombre" class="mb-1 block text-sm font-semibold">Nombre completo *</label>
-                        <input id="nombre" name="nombre" type="text" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
+                        <input id="nombre" name="nombre" type="text" minlength="2" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
                     </div>
                     <div>
                         <label for="apellido" class="mb-1 block text-sm font-semibold">Apellido *</label>
-                        <input id="apellido" name="apellido" type="text" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
+                        <input id="apellido" name="apellido" type="text" minlength="2" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
                     </div>
                 </div>
 
@@ -44,18 +45,18 @@
                     </div>
                     <div>
                         <label for="telefono" class="mb-1 block text-sm font-semibold">Telefono</label>
-                        <input id="telefono" name="telefono" type="tel" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
+                        <input id="telefono" name="telefono" type="tel" pattern="^[0-9+()\-\s]{7,20}$" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
                     </div>
                 </div>
 
                 <div class="grid gap-4 md:grid-cols-2">
                     <div>
                         <label for="cargo" class="mb-1 block text-sm font-semibold">Cargo *</label>
-                        <input id="cargo" name="cargo" type="text" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
+                        <input id="cargo" name="cargo" type="text" minlength="2" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
                     </div>
                     <div>
                         <label for="pais" class="mb-1 block text-sm font-semibold">Pais *</label>
-                        <input id="pais" name="pais" type="text" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
+                        <input id="pais" name="pais" type="text" minlength="2" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
                     </div>
                 </div>
 
@@ -79,8 +80,8 @@
 
                 <div class="grid gap-4 md:grid-cols-2">
                     <div>
-                        <label for="sector" class="mb-1 block text-sm font-semibold">Sector</label>
-                        <select id="sector" name="sector" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
+                        <label for="sector" class="mb-1 block text-sm font-semibold">Sector *</label>
+                        <select id="sector" name="sector" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
                             <option value="">Selecciona una opcion</option>
                             <option>Tecnologia</option>
                             <option>Retail</option>
@@ -102,9 +103,45 @@
                     </div>
                 </div>
 
+                <div class="grid gap-4 md:grid-cols-2">
+                    <div>
+                        <label for="proceso-prioritario" class="mb-1 block text-sm font-semibold">Proceso prioritario a mejorar *</label>
+                        <select id="proceso-prioritario" name="proceso-prioritario" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
+                            <option value="">Selecciona una opcion</option>
+                            <option>Cribado y ranking de candidatos</option>
+                            <option>Seguimiento de candidatos y clientes</option>
+                            <option>Prospeccion y seguimiento comercial</option>
+                            <option>Soporte y cumplimiento de SLA</option>
+                            <option>Onboarding y RRHH interno</option>
+                            <option>Dashboard ejecutivo y reporting</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="volumen" class="mb-1 block text-sm font-semibold">Volumen mensual aproximado *</label>
+                        <input id="volumen" name="volumen" type="text" placeholder="Ej: 80 vacantes, 1200 tickets o 500 leads" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
+                    </div>
+                </div>
+
+                <div class="grid gap-4 md:grid-cols-2">
+                    <div>
+                        <label for="herramientas" class="mb-1 block text-sm font-semibold">Herramientas actuales *</label>
+                        <input id="herramientas" name="herramientas" type="text" placeholder="Ej: HubSpot, Zendesk, ATS, Google Sheets" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
+                    </div>
+                    <div>
+                        <label for="plazo" class="mb-1 block text-sm font-semibold">Plazo objetivo de implementacion *</label>
+                        <select id="plazo" name="plazo" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
+                            <option value="">Selecciona una opcion</option>
+                            <option>0-1 mes</option>
+                            <option>1-3 meses</option>
+                            <option>3-6 meses</option>
+                            <option>Mas de 6 meses</option>
+                        </select>
+                    </div>
+                </div>
+
                 <div>
                     <label for="reto" class="mb-1 block text-sm font-semibold">Reto principal que quieres resolver *</label>
-                    <textarea id="reto" name="reto" placeholder="Cual es el proceso que quieres automatizar o mejorar" required class="min-h-28 w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring"></textarea>
+                    <textarea id="reto" name="reto" minlength="30" placeholder="Describe el problema actual, su impacto y el resultado esperado" required class="min-h-28 w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring"></textarea>
                 </div>
 
                 <label class="flex items-start gap-2 text-sm text-slate-600" for="consentimiento">
@@ -120,5 +157,73 @@
     <footer class="px-5 pb-10 text-center text-sm text-slate-600">
         Nexova Solutions &copy; 2011-2026 | Valencia - Miami
     </footer>
+
+    <script>
+        const form = document.getElementById("form-registro");
+        const mensaje = document.getElementById("form-mensaje");
+        const campos = Array.from(form.querySelectorAll("input, select, textarea"));
+
+        function marcarCampo(input, valido) {
+            input.classList.remove("border-red-500", "focus:border-red-500", "focus:ring-red-200");
+            input.classList.remove("border-emerald-500", "focus:border-emerald-500", "focus:ring-emerald-200");
+
+            if (valido) {
+                input.classList.add("border-emerald-500", "focus:border-emerald-500", "focus:ring-emerald-200");
+            } else {
+                input.classList.add("border-red-500", "focus:border-red-500", "focus:ring-red-200");
+            }
+        }
+
+        function mensajeError(input) {
+            if (input.validity.valueMissing) return "Este campo es obligatorio.";
+            if (input.validity.typeMismatch && input.type === "email") return "Introduce un email valido.";
+            if (input.validity.patternMismatch && input.id === "telefono") return "Introduce un telefono valido (7 a 20 caracteres).";
+            if (input.validity.tooShort && input.id === "reto") return "Describe el reto con al menos 30 caracteres.";
+            if (input.validity.tooShort) return "Completa este campo con mas detalle.";
+            return "Revisa este campo.";
+        }
+
+        campos.forEach((campo) => {
+            campo.addEventListener("input", () => {
+                if (campo.checkValidity()) {
+                    marcarCampo(campo, true);
+                    campo.setCustomValidity("");
+                }
+            });
+        });
+
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+
+            const invalidos = [];
+            campos.forEach((campo) => {
+                campo.setCustomValidity("");
+                const valido = campo.checkValidity();
+                marcarCampo(campo, valido);
+                if (!valido) {
+                    const msg = mensajeError(campo);
+                    campo.setCustomValidity(msg);
+                    invalidos.push({ campo, msg });
+                }
+            });
+
+            mensaje.classList.remove("hidden", "border-red-200", "bg-red-50", "text-red-700", "border-emerald-200", "bg-emerald-50", "text-emerald-700");
+
+            if (invalidos.length > 0) {
+                const primero = invalidos[0].campo;
+                primero.focus();
+                mensaje.classList.add("border-red-200", "bg-red-50", "text-red-700");
+                mensaje.textContent = "Faltan datos requeridos o hay campos invalidos. Revisa el formulario e intentalo de nuevo.";
+                return;
+            }
+
+            mensaje.classList.add("border-emerald-200", "bg-emerald-50", "text-emerald-700");
+            mensaje.textContent = "Aplicacion enviada correctamente. En una implementacion real, este formulario se enviaria al backend.";
+            form.reset();
+            campos.forEach((campo) => {
+                campo.classList.remove("border-emerald-500", "focus:border-emerald-500", "focus:ring-emerald-200");
+            });
+        });
+    </script>
 </body>
 </html>
