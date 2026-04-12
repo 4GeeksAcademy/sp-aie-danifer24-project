@@ -14,7 +14,7 @@
     <header class="border-b border-emerald-100 bg-white/90 backdrop-blur">
         <div class="mx-auto flex w-full max-w-5xl flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5 md:px-8">
             <a href="index.html" class="text-lg font-bold text-emerald-800">Nexova Solutions</a>
-            <nav aria-label="Navegacion principal" class="flex w-full items-center justify-between gap-3 text-sm font-semibold text-slate-700 sm:w-auto sm:justify-end sm:gap-5">
+            <nav aria-label="Navegación principal" class="flex w-full items-center justify-between gap-3 text-sm font-semibold text-slate-700 sm:w-auto sm:justify-end sm:gap-5">
                 <a href="index.html" class="transition hover:text-emerald-700">Landing</a>
                 <a href="registro.html" aria-current="page" class="rounded-lg bg-emerald-600 px-3 py-2 text-white transition hover:bg-emerald-700">Registro</a>
             </nav>
@@ -23,13 +23,12 @@
 
     <main id="contenido" class="mx-auto w-full max-w-4xl px-4 py-8 sm:px-5 sm:py-10 md:px-8">
         <section class="rounded-2xl border border-emerald-100 bg-white p-4 shadow-lg shadow-emerald-900/5 sm:p-5 md:p-7" aria-labelledby="titulo-formulario">
-            <h1 id="titulo-formulario" class="text-xl font-semibold sm:text-2xl">Formulario de aplicacion / registro</h1>
+            <h1 id="titulo-formulario" class="text-xl font-semibold sm:text-2xl">Formulario de aplicación / registro</h1>
             <p id="descripcion-formulario" class="mt-1 text-sm text-slate-600 sm:text-base">
                 Completa tus datos personales y empresariales para entender tu caso y agendar una primera llamada.
             </p>
 
             <form id="form-registro" action="#" method="post" novalidate aria-describedby="descripcion-formulario" class="mt-5 grid gap-4">
-                <div id="form-mensaje" role="status" aria-live="polite" class="hidden rounded-lg border px-4 py-3 text-sm"></div>
                 <fieldset class="grid gap-4">
                 <legend class="text-base font-semibold text-slate-800">Datos personales</legend>
                 <div class="grid gap-4 md:grid-cols-2">
@@ -49,19 +48,19 @@
                         <input id="email" name="email" type="email" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
                     </div>
                     <div>
-                        <label for="telefono" class="mb-1 block text-sm font-semibold">Telefono</label>
+                        <label for="telefono" class="mb-1 block text-sm font-semibold">Teléfono</label>
                         <input id="telefono" name="telefono" type="tel" pattern="^[0-9+()\-\s]{7,20}$" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
                     </div>
                 </div>
 
                 <div class="grid gap-4 md:grid-cols-2">
                     <div>
-                        <label for="cargo" class="mb-1 block text-sm font-semibold">Cargo *</label>
-                        <input id="cargo" name="cargo" type="text" minlength="2" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
+                        <label for="cargo" class="mb-1 block text-sm font-semibold">Cargo</label>
+                        <input id="cargo" name="cargo" type="text" minlength="2" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
                     </div>
                     <div>
-                        <label for="pais" class="mb-1 block text-sm font-semibold">Pais *</label>
-                        <input id="pais" name="pais" type="text" minlength="2" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
+                        <label for="pais" class="mb-1 block text-sm font-semibold">País</label>
+                        <input id="pais" name="pais" type="text" minlength="2" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
                     </div>
                 </div>
                 </fieldset>
@@ -74,36 +73,36 @@
                         <input id="empresa" name="empresa" type="text" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
                     </div>
                     <div>
-                        <label for="tamano" class="mb-1 block text-sm font-semibold">Tamano de empresa *</label>
-                        <select id="tamano" name="tamano" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
-                            <option value="">Selecciona una opcion</option>
+                        <label for="tamano" class="mb-1 block text-sm font-semibold">Tamaño de empresa</label>
+                        <select id="tamano" name="tamano" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
+                            <option value="">Selecciona una opción</option>
                             <option>1-50 empleados</option>
                             <option>51-200 empleados</option>
                             <option>201-1000 empleados</option>
-                            <option>Mas de 1000 empleados</option>
+                            <option>Más de 1000 empleados</option>
                         </select>
                     </div>
                 </div>
 
                 <div class="grid gap-4 md:grid-cols-2">
                     <div>
-                        <label for="sector" class="mb-1 block text-sm font-semibold">Sector *</label>
-                        <select id="sector" name="sector" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
-                            <option value="">Selecciona una opcion</option>
-                            <option>Tecnologia</option>
+                        <label for="sector" class="mb-1 block text-sm font-semibold">Sector</label>
+                        <select id="sector" name="sector" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
+                            <option value="">Selecciona una opción</option>
+                            <option>Tecnología</option>
                             <option>Retail</option>
                             <option>Servicios financieros</option>
                             <option>Otro</option>
                         </select>
                     </div>
                     <div>
-                        <label for="interes" class="mb-1 block text-sm font-semibold">Area de interes principal *</label>
+                        <label for="interes" class="mb-1 block text-sm font-semibold">Área de interés principal *</label>
                         <select id="interes" name="interes" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
-                            <option value="">Selecciona una opcion</option>
-                            <option>Operaciones de Seleccion</option>
+                            <option value="">Selecciona una opción</option>
+                            <option>Operaciones de Selección</option>
                             <option>Soporte al Cliente</option>
                             <option>Ventas y Desarrollo de Negocio</option>
-                            <option>Formacion Corporativa</option>
+                            <option>Formación Corporativa</option>
                             <option>Portal interno de RRHH</option>
                             <option>Dashboard Ejecutivo</option>
                         </select>
@@ -112,40 +111,40 @@
 
                 <div class="grid gap-4 md:grid-cols-2">
                     <div>
-                        <label for="proceso-prioritario" class="mb-1 block text-sm font-semibold">Proceso prioritario a mejorar *</label>
-                        <select id="proceso-prioritario" name="proceso-prioritario" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
-                            <option value="">Selecciona una opcion</option>
+                        <label for="proceso-prioritario" class="mb-1 block text-sm font-semibold">Proceso prioritario a mejorar</label>
+                        <select id="proceso-prioritario" name="proceso-prioritario" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
+                            <option value="">Selecciona una opción</option>
                             <option>Cribado y ranking de candidatos</option>
                             <option>Seguimiento de candidatos y clientes</option>
-                            <option>Prospeccion y seguimiento comercial</option>
+                            <option>Prospección y seguimiento comercial</option>
                             <option>Soporte y cumplimiento de SLA</option>
                             <option>Onboarding y RRHH interno</option>
                             <option>Dashboard ejecutivo y reporting</option>
                         </select>
                     </div>
                     <div>
-                        <label for="volumen" class="mb-1 block text-sm font-semibold">Volumen mensual aproximado *</label>
-                        <input id="volumen" name="volumen" type="number" min="1" step="1" placeholder="Ej: 80" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
+                        <label for="volumen" class="mb-1 block text-sm font-semibold">Volumen mensual aproximado</label>
+                        <input id="volumen" name="volumen" type="number" min="1" step="1" placeholder="Ej: 80" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
                     </div>
                 </div>
 
                 <div class="grid gap-4 md:grid-cols-2">
                     <div>
-                        <label for="fecha-inicio" class="mb-1 block text-sm font-semibold">Fecha objetivo para iniciar *</label>
-                        <input id="fecha-inicio" name="fecha-inicio" type="date" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
+                        <label for="fecha-inicio" class="mb-1 block text-sm font-semibold">Fecha objetivo para iniciar</label>
+                        <input id="fecha-inicio" name="fecha-inicio" type="date" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
                     </div>
                     <div>
-                        <label for="herramientas" class="mb-1 block text-sm font-semibold">Herramientas actuales *</label>
-                        <input id="herramientas" name="herramientas" type="text" placeholder="Ej: HubSpot, Zendesk, ATS, Google Sheets" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
+                        <label for="herramientas" class="mb-1 block text-sm font-semibold">Herramientas actuales</label>
+                        <input id="herramientas" name="herramientas" type="text" placeholder="Ej: HubSpot, Zendesk, ATS, Google Sheets" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
                     </div>
                     <div>
-                        <label for="plazo" class="mb-1 block text-sm font-semibold">Plazo objetivo de implementacion *</label>
-                        <select id="plazo" name="plazo" required class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
-                            <option value="">Selecciona una opcion</option>
+                        <label for="plazo" class="mb-1 block text-sm font-semibold">Plazo objetivo de implementación</label>
+                        <select id="plazo" name="plazo" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring">
+                            <option value="">Selecciona una opción</option>
                             <option>0-1 mes</option>
                             <option>1-3 meses</option>
                             <option>3-6 meses</option>
-                            <option>Mas de 6 meses</option>
+                            <option>Más de 6 meses</option>
                         </select>
                     </div>
                 </div>
@@ -153,7 +152,7 @@
                 <div>
                     <label for="reto" class="mb-1 block text-sm font-semibold">Reto principal que quieres resolver *</label>
                     <textarea id="reto" name="reto" aria-describedby="ayuda-reto" minlength="30" placeholder="Describe el problema actual, su impacto y el resultado esperado" required class="min-h-28 w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none ring-emerald-200 transition focus:border-emerald-500 focus:ring"></textarea>
-                    <p id="ayuda-reto" class="mt-1 text-xs text-slate-500">Minimo 30 caracteres.</p>
+                    <p id="ayuda-reto" class="mt-1 text-xs text-slate-500">Mínimo 30 caracteres.</p>
                 </div>
                 </fieldset>
 
@@ -166,6 +165,8 @@
                     <button type="submit" class="inline-flex w-full items-center justify-center rounded-lg bg-emerald-600 px-4 py-3 font-bold text-white transition hover:bg-emerald-700">Enviar registro</button>
                     <button type="reset" class="inline-flex w-full items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-3 font-bold text-slate-700 transition hover:bg-slate-100">Limpiar formulario</button>
                 </div>
+
+                <div id="form-mensaje" role="status" aria-live="polite" class="hidden rounded-lg border px-4 py-3 text-sm"></div>
             </form>
         </section>
     </main>
@@ -174,88 +175,6 @@
         Nexova Solutions &copy; 2011-2026 | Valencia - Miami
     </footer>
 
-    <script>
-        const form = document.getElementById("form-registro");
-        const mensaje = document.getElementById("form-mensaje");
-        const campos = Array.from(form.querySelectorAll("input, select, textarea"));
-
-        function limpiarEstadoVisual() {
-            mensaje.classList.add("hidden");
-            mensaje.textContent = "";
-            campos.forEach((campo) => {
-                campo.classList.remove("border-red-500", "focus:border-red-500", "focus:ring-red-200", "border-emerald-500", "focus:border-emerald-500", "focus:ring-emerald-200");
-                campo.removeAttribute("title");
-                campo.setCustomValidity("");
-                campo.setAttribute("aria-invalid", "false");
-            });
-        }
-
-        function marcarCampo(input, valido) {
-            input.classList.remove("border-red-500", "focus:border-red-500", "focus:ring-red-200");
-            input.classList.remove("border-emerald-500", "focus:border-emerald-500", "focus:ring-emerald-200");
-            input.setAttribute("aria-invalid", valido ? "false" : "true");
-
-            if (valido) {
-                input.classList.add("border-emerald-500", "focus:border-emerald-500", "focus:ring-emerald-200");
-            } else {
-                input.classList.add("border-red-500", "focus:border-red-500", "focus:ring-red-200");
-            }
-        }
-
-        function mensajeError(input) {
-            if (input.validity.valueMissing) return "Este campo es obligatorio.";
-            if (input.validity.typeMismatch && input.type === "email") return "Introduce un email valido.";
-            if (input.validity.patternMismatch && input.id === "telefono") return "Introduce un telefono valido (7 a 20 caracteres).";
-            if (input.validity.tooShort && input.id === "reto") return "Describe el reto con al menos 30 caracteres.";
-            if (input.validity.tooShort) return "Completa este campo con mas detalle.";
-            return "Revisa este campo.";
-        }
-
-        campos.forEach((campo) => {
-            campo.addEventListener("input", () => {
-                if (campo.checkValidity()) {
-                    marcarCampo(campo, true);
-                    campo.setCustomValidity("");
-                    campo.removeAttribute("title");
-                }
-            });
-        });
-
-        form.addEventListener("submit", (event) => {
-            event.preventDefault();
-
-            const invalidos = [];
-            campos.forEach((campo) => {
-                campo.setCustomValidity("");
-                const valido = campo.checkValidity();
-                marcarCampo(campo, valido);
-                if (!valido) {
-                    const msg = mensajeError(campo);
-                    campo.setCustomValidity(msg);
-                    campo.setAttribute("title", msg);
-                    invalidos.push({ campo, msg });
-                }
-            });
-
-            mensaje.classList.remove("hidden", "border-red-200", "bg-red-50", "text-red-700", "border-emerald-200", "bg-emerald-50", "text-emerald-700");
-
-            if (invalidos.length > 0) {
-                const primero = invalidos[0].campo;
-                primero.focus();
-                mensaje.classList.add("border-red-200", "bg-red-50", "text-red-700");
-                mensaje.textContent = "Faltan datos requeridos o hay campos invalidos. Revisa el formulario e intentalo de nuevo.";
-                return;
-            }
-
-            mensaje.classList.add("border-emerald-200", "bg-emerald-50", "text-emerald-700");
-            mensaje.textContent = "Aplicacion enviada correctamente. En una implementacion real, este formulario se enviaria al backend.";
-            form.reset();
-            limpiarEstadoVisual();
-        });
-
-        form.addEventListener("reset", () => {
-            limpiarEstadoVisual();
-        });
-    </script>
+    <script src="validation.js" defer></script>
 </body>
 </html>
