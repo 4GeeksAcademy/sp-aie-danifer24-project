@@ -30,7 +30,7 @@ function sortCandidatesBySalary(candidates: Candidate[], order: "asc" | "desc"):
 
 /*Retorna candidatos ordenados por años de experiencia
 No debe mutar el array original*/
-function sortCandidatesByExperience(candidates: Candidate[], order: "asc" | "desc"): Candidate[]{
+function sortCandidatesByExperience(candidates: Candidate[], order: "asc" | "desc"): Candidate[] {
     return [...candidates].sort((a, b) =>
         order === "asc" ? a.yearsOfExperience - b.yearsOfExperience : b.yearsOfExperience - a.yearsOfExperience
     );
