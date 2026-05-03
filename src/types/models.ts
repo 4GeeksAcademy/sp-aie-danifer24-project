@@ -63,3 +63,5 @@ type ProcessStage =
   | "Offer"
   | "Rejected"
   | "Hired";
+
+  export { Candidate, EnglishLevel, SeniorityLevel, AvailabilityStatus, CandidateStatus, Vacancy, VacancyStatus, SelectionProcess, ProcessStage };
