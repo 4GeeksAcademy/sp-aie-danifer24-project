@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+
+<html class="light" lang="es">
+
+<head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Gestión de Talentos - HR Canvas</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;display=swap" rel="stylesheet" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+        rel="stylesheet" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+        rel="stylesheet" />
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-dim": "#d9d9e7",
+                        "surface-container-lowest": "#ffffff",
+                        "primary-fixed-dim": "#b9c3ff",
+                        "surface-bright": "#fbf8ff",
+                        "surface": "#fbf8ff",
+                        "tertiary-fixed": "#ffdbd1",
+                        "on-surface": "#191b25",
+                        "surface-container-low": "#f3f2ff",
+                        "outline": "#747688",
+                        "on-error": "#ffffff",
+                        "on-secondary-fixed-variant": "#2f4090",
+                        "on-primary-fixed-variant": "#0032c3",
+                        "inverse-on-surface": "#f0effe",
+                        "on-primary-fixed": "#001258",
+                        "on-secondary": "#ffffff",
+                        "tertiary-container": "#bb3100",
+                        "surface-variant": "#e2e1ef",
+                        "on-secondary-fixed": "#001258",
+                        "error-container": "#ffdad6",
+                        "error": "#ba1a1a",
+                        "on-error-container": "#93000a",
+                        "secondary-fixed-dim": "#b9c3ff",
+                        "tertiary-fixed-dim": "#ffb5a0",
+                        "on-tertiary": "#ffffff",
+                        "tertiary": "#912400",
+                        "on-background": "#191b25",
+                        "surface-container": "#edecfb",
+                        "on-tertiary-fixed-variant": "#872100",
+                        "background": "#fbf8ff",
+                        "surface-container-high": "#e8e7f5",
+                        "primary": "#0037d0",
+                        "secondary-fixed": "#dee1ff",
+                        "surface-container-highest": "#e2e1ef",
+                        "secondary": "#4858a9",
+                        "outline-variant": "#c4c5d9",
+                        "inverse-surface": "#2e303a",
+                        "on-tertiary-container": "#ffdad0",
+                        "on-surface-variant": "#434656",
+                        "primary-container": "#1b4dff",
+                        "primary-fixed": "#dee1ff",
+                        "on-primary": "#ffffff",
+                        "surface-tint": "#0b46f9",
+                        "on-secondary-container": "#263888",
+                        "inverse-primary": "#b9c3ff",
+                        "on-primary-container": "#dde0ff",
+                        "on-tertiary-fixed": "#3b0900",
+                        "secondary-container": "#95a6fd"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "container-max-width": "1120px",
+                        "section-margin": "48px",
+                        "base": "8px",
+                        "element-gap": "16px",
+                        "grid-gutter": "24px"
+                    },
+                    "fontFamily": {
+                        "display-lg": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "table-data": ["Inter"],
+                        "label-caps": ["Inter"],
+                        "body-base": ["Inter"]
+                    },
+                    "fontSize": {
+                        "display-lg": ["32px", { "lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "headline-md": ["20px", { "lineHeight": "1.4", "fontWeight": "600" }],
+                        "body-sm": ["14px", { "lineHeight": "1.5", "fontWeight": "400" }],
+                        "table-data": ["14px", { "lineHeight": "1.2", "fontWeight": "400" }],
+                        "label-caps": ["12px", { "lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "body-base": ["16px", { "lineHeight": "1.6", "fontWeight": "400" }]
+                    }
+                },
+            },
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #fbf8ff;
+            /* background token */
+        }
+
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+
+        .canvas-container {
+            max-width: 1120px;
+            margin: 0 auto;
+        }
+    </style>
+</head>
+
+<body class="bg-background text-on-background antialiased">
+    <!-- Main Content Area -->
+    <main class="canvas-container py-[section-margin] px-grid-gutter">
+        <!-- Header Section -->
+        <header class="flex justify-between items-end mb-section-margin">
+            <div>
+                <h1 class="font-display-lg text-display-lg text-on-surface">Gestión de Talentos</h1>
+                <p class="font-body-base text-on-surface-variant mt-base">Administra y sigue el progreso de tus procesos
+                    de selección.</p>
+            </div>
+            <button
+                class="bg-primary text-on-primary px-grid-gutter py-3 rounded-xl font-headline-md flex items-center gap-base hover:bg-primary-container transition-colors duration-150">
+                <span class="material-symbols-outlined" data-icon="add">add</span>
+                Nueva Candidatura
+            </button>
+        </header>
+        <!-- Search and Filters Section -->
+        <section
+            class="bg-surface-container-lowest border border-outline-variant rounded-xl p-grid-gutter mb-element-gap">
+            <div class="flex flex-col md:flex-row gap-grid-gutter items-center">
+                <!-- Search Input -->
+                <div class="relative flex-grow w-full">
+                    <span
+                        class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline">search</span>
+                    <input
+                        class="w-full pl-12 pr-4 py-3 bg-surface-bright border border-outline-variant rounded-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary font-body-sm text-on-surface"
+                        placeholder="Buscar por nombre o puesto..." type="text" />
+                </div>
+                <!-- Filters Group -->
+                <div class="flex gap-element-gap w-full md:w-auto">
+                    <div class="relative w-full md:w-48">
+                        <select
+                            class="appearance-none w-full px-4 py-3 bg-surface-bright border border-outline-variant rounded-lg font-body-sm text-on-surface-variant focus:outline-none focus:border-primary">
+                            <option>Estado: Todos</option>
+                            <option>Nuevo</option>
+                            <option>Entrevista</option>
+                            <option>Oferta</option>
+                            <option>Rechazado</option>
+                        </select>
+                        <span
+                            class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-outline">expand_more</span>
+                    </div>
+                    <div class="relative w-full md:w-48">
+                        <select
+                            class="appearance-none w-full px-4 py-3 bg-surface-bright border border-outline-variant rounded-lg font-body-sm text-on-surface-variant focus:outline-none focus:border-primary">
+                            <option>Etapa: Todas</option>
+                            <option>Screening</option>
+                            <option>Técnica</option>
+                            <option>Final</option>
+                        </select>
+                        <span
+                            class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-outline">expand_more</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <!-- Data Table Section -->
+        <section class="bg-surface-container-lowest border border-outline-variant rounded-xl overflow-hidden">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="bg-surface-container-low">
+                        <th
+                            class="px-grid-gutter py-4 font-label-caps text-label-caps text-outline uppercase tracking-wider">
+                            Nombre</th>
+                        <th
+                            class="px-grid-gutter py-4 font-label-caps text-label-caps text-outline uppercase tracking-wider">
+                            Puesto</th>
+                        <th
+                            class="px-grid-gutter py-4 font-label-caps text-label-caps text-outline uppercase tracking-wider">
+                            Estado</th>
+                        <th
+                            class="px-grid-gutter py-4 font-label-caps text-label-caps text-outline uppercase tracking-wider">
+                            Etapa</th>
+                        <th
+                            class="px-grid-gutter py-4 font-label-caps text-label-caps text-outline uppercase tracking-wider text-right">
+                            Acciones</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-outline-variant">
+                    <!-- Row 1 -->
+                    <tr class="hover:bg-surface-container transition-colors group">
+                        <td class="px-grid-gutter py-5">
+                            <div class="flex items-center gap-element-gap">
+                                <img alt="Avatar" class="w-10 h-10 rounded-full object-cover"
+                                    data-alt="A professional headshot of a smiling woman with a neutral, soft-focus office background. She has a confident expression, wearing a minimalist navy blazer. The lighting is bright and even, reflecting a clean and modern corporate aesthetic with a high-key light-mode feel and natural color tones."
+                                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuAdfBylfMi2ohSShT6DbcHyFzOVW3ttahdk1QPqEsnsKQpSCDhm2KjZar0U5O8usHszvG_flnRdmQQo-MzV4bNOZDYlDIZuqCMo7mxsVb7Y3Sy-z5fbPpiy8muKrti11lWxFVx6M7iaxSIOR73TiJn_JZlH0CsPD2mYo3EQVZoNSZVINQSIVS4YdRJ43RLgEPxa-r5nEkxZXn71TUM90CtOmPM7dA4cgw18fXWEYoJjgsPqvTt0Gc6VBWDru6H31EpeDHce_uQmUt8" />
+                                <div>
+                                    <span class="block font-table-data text-on-surface font-semibold">Elena
+                                        Rodríguez</span>
+                                    <span class="block font-body-sm text-outline">elena.rodriguez@email.com</span>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-grid-gutter py-5 font-table-data text-on-surface-variant">Senior Product Designer
+                        </td>
+                        <td class="px-grid-gutter py-5">
+                            <span
+                                class="inline-flex items-center px-3 py-1 rounded-full text-[12px] font-bold bg-secondary-container text-on-secondary-container">ENTREVISTA</span>
+                        </td>
+                        <td class="px-grid-gutter py-5 font-table-data text-on-surface-variant">Prueba Técnica</td>
+                        <td class="px-grid-gutter py-5 text-right">
+                            <button class="text-primary hover:text-primary-container p-2 rounded-lg transition-colors">
+                                <span class="material-symbols-outlined" data-icon="visibility">visibility</span>
+                            </button>
+                            <button class="text-outline hover:text-on-surface p-2 rounded-lg transition-colors">
+                                <span class="material-symbols-outlined" data-icon="more_vert">more_vert</span>
+                            </button>
+                        </td>
+                    </tr>
+                    <!-- Row 2 -->
+                    <tr class="hover:bg-surface-container transition-colors group">
+                        <td class="px-grid-gutter py-5">
+                            <div class="flex items-center gap-element-gap">
+                                <img alt="Avatar" class="w-10 h-10 rounded-full object-cover"
+                                    data-alt="A close-up portrait of a professional man in a white button-down shirt against a minimalist grey background. His expression is friendly and approachable. The lighting is soft and studio-quality, emphasizing a professional and clean environment consistent with a high-end HR dashboard interface."
+                                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuBytGdOJZbSUWYO_O6HZS92JjBq54qTGV9pb_ANz2yL4dWrt7P158t4E7yum7tgy--CwolE2JDUJ8uoi0YXNiZ3BJUONjP4abEZ6Ul4dBZDLbnyc0cjMGj9ee1CRSZyOhKB3jw_7x3gcUEEnHxzIJfB3S-mQEyCgub3eSS2NS0_hCPzK2GVi-RwxNLl6ph8JBLUngursc2scht4cQFL2ep15-Sz_RtI563LUfqpAMv6t7GHd-qsYscAWDEPZwDfR_K4jTx3Dtrdn7o" />
+                                <div>
+                                    <span class="block font-table-data text-on-surface font-semibold">Marc Soler</span>
+                                    <span class="block font-body-sm text-outline">m.soler@email.com</span>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-grid-gutter py-5 font-table-data text-on-surface-variant">Frontend Developer</td>
+                        <td class="px-grid-gutter py-5">
+                            <span
+                                class="inline-flex items-center px-3 py-1 rounded-full text-[12px] font-bold bg-tertiary-fixed text-on-tertiary-fixed-variant">NUEVO</span>
+                        </td>
+                        <td class="px-grid-gutter py-5 font-table-data text-on-surface-variant">Screening CV</td>
+                        <td class="px-grid-gutter py-5 text-right">
+                            <button class="text-primary hover:text-primary-container p-2 rounded-lg transition-colors">
+                                <span class="material-symbols-outlined" data-icon="visibility">visibility</span>
+                            </button>
+                            <button class="text-outline hover:text-on-surface p-2 rounded-lg transition-colors">
+                                <span class="material-symbols-outlined" data-icon="more_vert">more_vert</span>
+                            </button>
+                        </td>
+                    </tr>
+                    <!-- Row 3 -->
+                    <tr class="hover:bg-surface-container transition-colors group">
+                        <td class="px-grid-gutter py-5">
+                            <div class="flex items-center gap-element-gap">
+                                <img alt="Avatar" class="w-10 h-10 rounded-full object-cover"
+                                    data-alt="A professional woman with glasses smiling at the camera, set against a blurred modern architectural backdrop. She exudes competence and warmth. The photography uses a shallow depth of field and high-key lighting to match a clean, professional corporate UI palette of whites and soft blues."
+                                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuBmgwulS0pV95MGZbJJJ9NrzaesHkVf_EfzwyLDpdxmS3wJAxRG_E9SXEZ0vv0zK2gAd2rqA5XyG6qsh3e4KPfaoxm3PQ3gI_jswZZkEJXZ5GjCxyYtEhjpKg6uCA9sL1NAD_oLPl5Lyw23O-DC-45v_gvCtuPwuWxdgyIPkU74sUzX2Sx9A6Ca9VJgKYu4TtTGS9HbfvRhG0dWU2XosYFmoRHauZSk04axQObfsXJdUqvZJpXALxGA0z_PdfzWIuEkZlQKD8N-98U" />
+                                <div>
+                                    <span class="block font-table-data text-on-surface font-semibold">Ana Beltrán</span>
+                                    <span class="block font-body-sm text-outline">ana.b@email.com</span>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-grid-gutter py-5 font-table-data text-on-surface-variant">HR Business Partner</td>
+                        <td class="px-grid-gutter py-5">
+                            <span
+                                class="inline-flex items-center px-3 py-1 rounded-full text-[12px] font-bold bg-primary-fixed text-on-primary-fixed-variant">OFERTA</span>
+                        </td>
+                        <td class="px-grid-gutter py-5 font-table-data text-on-surface-variant">Negociación Final</td>
+                        <td class="px-grid-gutter py-5 text-right">
+                            <button class="text-primary hover:text-primary-container p-2 rounded-lg transition-colors">
+                                <span class="material-symbols-outlined" data-icon="visibility">visibility</span>
+                            </button>
+                            <button class="text-outline hover:text-on-surface p-2 rounded-lg transition-colors">
+                                <span class="material-symbols-outlined" data-icon="more_vert">more_vert</span>
+                            </button>
+                        </td>
+                    </tr>
+                    <!-- Row 4 -->
+                    <tr class="hover:bg-surface-container transition-colors group">
+                        <td class="px-grid-gutter py-5">
+                            <div class="flex items-center gap-element-gap">
+                                <img alt="Avatar" class="w-10 h-10 rounded-full object-cover"
+                                    data-alt="A sharp, professional male candidate in a tailored suit, looking directly at the camera with a calm demeanor. The background is a minimalist corporate setting with soft natural light streaming in. The image has a clean, refined aesthetic with a focus on neutral tones and professional clarity."
+                                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuAaPgAGJdmspaQt0KG9RGmKOihdyebuFohdaSr-qGCNNkQFl1nl0QEAt9HuL0JlJdB4IaX7xaTSW9RXHUD4r7ynAqoXdMaR_O40nsrkO-8RqUu-E2D0BgRkHk2aWNMZEPpqYADAzkMcI0-zcUjdEx_pr6ZK0ObF1nWapOefN3fPUOWZXg9SpMYxTvJS4cd_Ns6tqQTRO4oT--N_XJrK5ka1Fv-H3hFSnVYXEut5TdmxHNci_BijGz2jP3eQLzKkiQ398DAwyAQ-K9A" />
+                                <div>
+                                    <span class="block font-table-data text-on-surface font-semibold">Jordi Vila</span>
+                                    <span class="block font-body-sm text-outline">jvila@email.com</span>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-grid-gutter py-5 font-table-data text-on-surface-variant">Data Scientist</td>
+                        <td class="px-grid-gutter py-5">
+                            <span
+                                class="inline-flex items-center px-3 py-1 rounded-full text-[12px] font-bold bg-error-container text-on-error-container">RECHAZADO</span>
+                        </td>
+                        <td class="px-grid-gutter py-5 font-table-data text-on-surface-variant">Entrevista Técnica</td>
+                        <td class="px-grid-gutter py-5 text-right">
+                            <button class="text-primary hover:text-primary-container p-2 rounded-lg transition-colors">
+                                <span class="material-symbols-outlined" data-icon="visibility">visibility</span>
+                            </button>
+                            <button class="text-outline hover:text-on-surface p-2 rounded-lg transition-colors">
+                                <span class="material-symbols-outlined" data-icon="more_vert">more_vert</span>
+                            </button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <!-- Pagination / Footer -->
+            <footer
+                class="px-grid-gutter py-4 border-t border-outline-variant flex justify-between items-center bg-surface-bright">
+                <span class="font-body-sm text-outline">Mostrando 4 de 48 candidatos</span>
+                <div class="flex gap-2">
+                    <button
+                        class="p-2 border border-outline-variant rounded-lg hover:bg-surface-container-high transition-colors text-outline">
+                        <span class="material-symbols-outlined" data-icon="chevron_left">chevron_left</span>
+                    </button>
+                    <button class="px-4 py-2 bg-primary text-on-primary rounded-lg font-body-sm">1</button>
+                    <button
+                        class="px-4 py-2 border border-outline-variant rounded-lg hover:bg-surface-container-high transition-colors font-body-sm text-on-surface-variant">2</button>
+                    <button
+                        class="px-4 py-2 border border-outline-variant rounded-lg hover:bg-surface-container-high transition-colors font-body-sm text-on-surface-variant">3</button>
+                    <button
+                        class="p-2 border border-outline-variant rounded-lg hover:bg-surface-container-high transition-colors text-outline">
+                        <span class="material-symbols-outlined" data-icon="chevron_right">chevron_right</span>
+                    </button>
+                </div>
+            </footer>
+        </section>
+        <!-- Empty State (Hidden, for logic reference) -->
+        <div class="hidden flex flex-col items-center justify-center py-24 text-center">
+            <div
+                class="w-64 h-64 bg-surface-container-low rounded-full flex items-center justify-center mb-element-gap">
+                <span class="material-symbols-outlined text-primary text-[80px]"
+                    data-icon="person_search">person_search</span>
+            </div>
+            <h2 class="font-headline-md text-on-surface mb-2">No se encontraron candidaturas</h2>
+            <p class="font-body-base text-outline mb-grid-gutter max-w-sm">Intenta ajustar tus filtros o añade un nuevo
+                candidato para empezar el proceso.</p>
+            <button
+                class="bg-primary text-on-primary px-grid-gutter py-3 rounded-xl font-headline-md transition-colors hover:bg-primary-container">
+                Añadir Candidato
+            </button>
+        </div>
+    </main>
+</body>
+
+</html>
