@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { getRecords } from "@/services/api";
@@ -65,15 +66,6 @@ function getInitials(fullName: string): string {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
-}
-
-function ActionEyeIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12Z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  );
 }
 
 function KebabIcon() {
@@ -152,6 +144,7 @@ export default function HomePage() {
   const pathname = usePathname();
   const router = useRouter();
   const searchParamsRef = useRef(searchParams);
+  const detailQuery = searchParams.toString();
 
   const [records, setRecords] = useState<RecordOut[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -345,8 +338,13 @@ export default function HomePage() {
             </thead>
             <tbody>
               {filteredRecords.map((candidate) => (
-                <tr key={candidate.id} className="border-t border-[#E2E1EF] transition-colors hover:bg-[#FBF8FF]">
+                <tr key={candidate.id} className="relative border-t border-[#E2E1EF] transition-colors hover:bg-[#FBF8FF]">
                   <td className="px-5 py-4">
+                    <Link
+                      href={detailQuery ? `/candidates/${candidate.id}?${detailQuery}` : `/candidates/${candidate.id}`}
+                      className="absolute inset-0 z-10"
+                      aria-label={`Ver detalle de ${candidate.full_name}`}
+                    />
                     <div className="flex items-center gap-3">
                       <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#DEE1FF] text-[11px] font-bold text-[#2F4090]">
                         {getInitials(candidate.full_name)}
@@ -367,14 +365,7 @@ export default function HomePage() {
                   </td>
                   <td className="px-5 py-4 text-[#191B25]">{stageLabel(candidate.stage)}</td>
                   <td className="px-5 py-4">
-                    <div className="flex justify-end gap-2 text-[#0037D0]">
-                      <button
-                        type="button"
-                        className="rounded-md p-1.5 text-[#0037D0] transition hover:bg-[#DEE1FF]"
-                        aria-label="Ver"
-                      >
-                        <ActionEyeIcon />
-                      </button>
+                    <div className="relative z-20 flex justify-end gap-2 text-[#0037D0]">
                       <button
                         type="button"
                         className="rounded-md p-1.5 text-[#747688] transition hover:bg-[#F3F2FF]"
