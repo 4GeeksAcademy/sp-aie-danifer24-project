@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getRecordById, patchRecord } from "@/services/api";
-import type { RecordOut } from "@/types/candidates";
+import { createRecordNote, deleteRecordNote, getRecordById, getRecordNotes, patchRecord } from "@/services/api";
+import type { NoteOut, NotesResponse, RecordOut } from "@/types/candidates";
 
 const STATUS_OPTIONS = [
   { value: "received", label: "Recibido" },
@@ -22,6 +22,10 @@ const STAGE_OPTIONS = [
 ];
 
 type ControlState = "idle" | "loading" | "success" | "error";
+
+function notesFromResponse(response: NotesResponse): NoteOut[] {
+  return Array.isArray(response) ? response : response.data;
+}
 
 function ChevronIcon() {
   return (
@@ -95,6 +99,16 @@ export default function CandidateDetailPage() {
   const [statusError, setStatusError] = useState<string | null>(null);
   const [stageState, setStageState] = useState<ControlState>("idle");
   const [stageError, setStageError] = useState<string | null>(null);
+  const [notes, setNotes] = useState<NoteOut[]>([]);
+  const [notesState, setNotesState] = useState<ControlState>("idle");
+  const [notesError, setNotesError] = useState<string | null>(null);
+  const [noteContent, setNoteContent] = useState("");
+  const [createNoteState, setCreateNoteState] = useState<ControlState>("idle");
+  const [createNoteError, setCreateNoteError] = useState<string | null>(null);
+  const [deletingNoteId, setDeletingNoteId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleteNoteState, setDeleteNoteState] = useState<ControlState>("idle");
+  const [deleteNoteError, setDeleteNoteError] = useState<string | null>(null);
 
   const listHref = useMemo(() => {
     const query = searchParams.toString();
@@ -118,6 +132,24 @@ export default function CandidateDetailPage() {
   useEffect(() => {
     void fetchCandidate();
   }, [fetchCandidate]);
+
+  const fetchNotes = useCallback(async () => {
+    try {
+      setNotesState("loading");
+      setNotesError(null);
+      const response = await getRecordNotes(candidateId);
+      setNotes(notesFromResponse(response));
+      setNotesState("success");
+    } catch (err) {
+      setNotes([]);
+      setNotesState("error");
+      setNotesError(err instanceof Error ? err.message : "No se pudieron cargar las notas.");
+    }
+  }, [candidateId]);
+
+  useEffect(() => {
+    void fetchNotes();
+  }, [fetchNotes]);
 
   const handleStatusChange = useCallback(
     async (nextStatus: string) => {
@@ -159,6 +191,56 @@ export default function CandidateDetailPage() {
     [candidateId, record],
   );
 
+  const handleCreateNote = useCallback(
+    async (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+
+      const trimmedContent = noteContent.trim();
+
+      if (!trimmedContent) {
+        setCreateNoteState("error");
+        setCreateNoteError("Completa el contenido para guardar la nota.");
+        return;
+      }
+
+      try {
+        setCreateNoteState("loading");
+        setCreateNoteError(null);
+        const created = await createRecordNote(candidateId, {
+          title: trimmedContent.slice(0, 50),
+          content: trimmedContent,
+        });
+        setNotes((current) => [created, ...current]);
+        setNoteContent("");
+        setCreateNoteState("success");
+      } catch (err) {
+        setCreateNoteState("error");
+        setCreateNoteError(err instanceof Error ? err.message : "No se pudo crear la nota.");
+      }
+    },
+    [candidateId, noteContent],
+  );
+
+  const handleDeleteNote = useCallback(
+    async (noteId: string) => {
+      try {
+        setDeletingNoteId(noteId);
+        setDeleteNoteState("loading");
+        setDeleteNoteError(null);
+        await deleteRecordNote(candidateId, noteId);
+        setNotes((current) => current.filter((note) => note.id !== noteId));
+        setConfirmDeleteId(null);
+        setDeleteNoteState("success");
+      } catch (err) {
+        setDeleteNoteState("error");
+        setDeleteNoteError(err instanceof Error ? err.message : "No se pudo eliminar la nota.");
+      } finally {
+        setDeletingNoteId(null);
+      }
+    },
+    [candidateId],
+  );
+
   return (
     <main className="mx-auto w-full max-w-[1120px] px-6 py-8">
       <div className="mb-6">
@@ -184,13 +266,14 @@ export default function CandidateDetailPage() {
       )}
 
       {!isLoading && !error && record && (
-        <section className="rounded-xl border border-[#C4C5D9] bg-white p-6">
-          <header className="mb-6">
-            <h1 className="text-3xl font-semibold tracking-[-0.02em] text-[#191B25]">{record.full_name}</h1>
-            <p className="mt-1 text-[#434656]">{record.position}</p>
-          </header>
+        <div className="grid gap-6 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] md:items-start">
+          <section className="rounded-xl border border-[#C4C5D9] bg-white p-6">
+            <header className="mb-6">
+              <h1 className="text-3xl font-semibold tracking-[-0.02em] text-[#191B25]">{record.full_name}</h1>
+              <p className="mt-1 text-[#434656]">{record.position}</p>
+            </header>
 
-          <dl className="grid gap-4 md:grid-cols-2">
+            <dl className="grid gap-4 md:grid-cols-2">
             <div className="rounded-lg border border-[#E2E1EF] p-4">
               <dt className="text-xs font-semibold uppercase tracking-[0.04em] text-[#747688]">Email</dt>
               <dd className="mt-2 text-[#191B25]">{record.email}</dd>
@@ -298,8 +381,112 @@ export default function CandidateDetailPage() {
               <dt className="text-xs font-semibold uppercase tracking-[0.04em] text-[#747688]">Fecha de aplicación</dt>
               <dd className="mt-2 text-[#191B25]">{formatAppliedDate(record.applied_at)}</dd>
             </div>
-          </dl>
-        </section>
+            </dl>
+          </section>
+
+          <section className="rounded-xl border border-[#C4C5D9] bg-white p-6">
+            <header className="mb-4">
+              <h2 className="text-xl font-semibold text-[#191B25]">Notas internas</h2>
+            </header>
+
+            <form onSubmit={handleCreateNote} className="mb-5 rounded-lg border border-[#E2E1EF] p-4">
+              <div className="grid gap-3">
+                <textarea
+                  placeholder="Escribe una nota interna..."
+                  value={noteContent}
+                  onChange={(event) => setNoteContent(event.target.value)}
+                  disabled={createNoteState === "loading"}
+                  rows={4}
+                  className="w-full resize-y rounded-lg border border-[#C4C5D9] bg-[#F3F2FF] px-4 py-3 text-sm text-[#191B25] placeholder:text-[#747688]"
+                />
+                <div>
+                  <button
+                    type="submit"
+                    disabled={createNoteState === "loading"}
+                    className="rounded-lg bg-[#0037D0] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {createNoteState === "loading" ? "Guardando..." : "Añadir nota"}
+                  </button>
+                </div>
+              </div>
+              {createNoteState === "success" && <p className="mt-3 text-xs text-emerald-700">Nota creada.</p>}
+              {createNoteState === "error" && <p className="mt-3 text-xs text-rose-700">{createNoteError ?? "No se pudo crear la nota."}</p>}
+            </form>
+
+            {notesState === "loading" && <p className="text-sm text-[#434656]">Cargando notas...</p>}
+            {notesState === "error" && (
+              <div className="rounded-lg border border-rose-200 bg-rose-50 p-4">
+                <p className="text-sm font-medium text-rose-900">No se pudieron cargar las notas.</p>
+                <p className="mt-1 text-xs text-rose-800">{notesError}</p>
+                <button
+                  type="button"
+                  onClick={() => void fetchNotes()}
+                  className="mt-3 rounded-lg border border-rose-300 px-3 py-1.5 text-xs font-medium text-rose-800 hover:bg-rose-100"
+                >
+                  Reintentar
+                </button>
+              </div>
+            )}
+
+            {notesState === "success" && notes.length === 0 && (
+              <p className="text-sm text-[#434656]">Aun no hay notas para esta candidatura.</p>
+            )}
+
+            {notesState === "success" && notes.length > 0 && (
+              <ul className="space-y-3">
+                {notes.map((note) => {
+                  const isConfirmingDelete = confirmDeleteId === note.id;
+                  const isDeletingThisNote = deletingNoteId === note.id;
+
+                  return (
+                    <li key={note.id} className="rounded-lg border border-[#E2E1EF] bg-[#F8F7FF] p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h3 className="text-sm font-semibold text-[#191B25]">{note.title}</h3>
+                          <p className="mt-1 text-sm text-[#434656]">{note.content}</p>
+                        </div>
+                        {!isConfirmingDelete && (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteId(note.id)}
+                            className="rounded-lg border border-[#C4C5D9] px-3 py-1.5 text-xs font-medium text-[#434656] hover:bg-[#F3F2FF]"
+                          >
+                            Eliminar
+                          </button>
+                        )}
+                        {isConfirmingDelete && (
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => void handleDeleteNote(note.id)}
+                              disabled={isDeletingThisNote}
+                              className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70"
+                            >
+                              {isDeletingThisNote ? "Eliminando..." : "Confirmar"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteId(null)}
+                              disabled={isDeletingThisNote}
+                              className="rounded-lg border border-[#C4C5D9] px-3 py-1.5 text-xs font-medium text-[#434656] hover:bg-[#F3F2FF] disabled:cursor-not-allowed disabled:opacity-70"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+
+            {deleteNoteState === "success" && <p className="mt-3 text-xs text-emerald-700">Nota eliminada.</p>}
+            {deleteNoteState === "error" && (
+              <p className="mt-3 text-xs text-rose-700">{deleteNoteError ?? "No se pudo eliminar la nota."}</p>
+            )}
+          </section>
+        </div>
       )}
     </main>
   );
