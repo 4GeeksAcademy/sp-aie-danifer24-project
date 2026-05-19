@@ -3,8 +3,22 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { getRecords } from "@/services/api";
-import type { RecordOut, RecordsResponse } from "@/types/candidates";
+import { createRecord, getRecords } from "@/services/api";
+import type { RecordCreate, RecordOut, RecordsResponse } from "@/types/candidates";
+
+type SubmitState = "idle" | "loading" | "success" | "error";
+
+interface CreateFormData {
+  full_name: string;
+  email: string;
+  phone: string;
+  position: string;
+  linkedin_url: string;
+  cv_url: string;
+  experience_years: string;
+}
+
+type CreateFormErrors = Partial<Record<keyof CreateFormData, string>>;
 
 function recordsFromResponse(response: RecordsResponse): RecordOut[] {
   return Array.isArray(response) ? response : response.data;
@@ -154,6 +168,58 @@ export default function HomePage() {
   const stageFilter = searchParams.get("stage") ?? "all";
   const [inputValue, setInputValue] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [createState, setCreateState] = useState<SubmitState>("idle");
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [createFormErrors, setCreateFormErrors] = useState<CreateFormErrors>({});
+  const [createForm, setCreateForm] = useState<CreateFormData>({
+    full_name: "",
+    email: "",
+    phone: "",
+    position: "",
+    linkedin_url: "",
+    cv_url: "",
+    experience_years: "",
+  });
+
+  const validateCreateForm = useCallback((values: CreateFormData): CreateFormErrors => {
+    const nextErrors: CreateFormErrors = {};
+
+    if (!values.full_name.trim()) nextErrors.full_name = "El nombre es obligatorio.";
+
+    const email = values.email.trim();
+    if (!email) nextErrors.email = "El email es obligatorio.";
+    else if (!/^\S+@\S+\.\S+$/.test(email)) nextErrors.email = "El email no es válido.";
+
+    if (!values.phone.trim()) nextErrors.phone = "El teléfono es obligatorio.";
+    if (!values.position.trim()) nextErrors.position = "El puesto es obligatorio.";
+
+    if (!values.experience_years.trim()) {
+      nextErrors.experience_years = "Los años de experiencia son obligatorios.";
+    } else {
+      const years = Number(values.experience_years);
+      if (!Number.isFinite(years) || years < 0) {
+        nextErrors.experience_years = "Introduce un número válido (0 o más).";
+      }
+    }
+
+    return nextErrors;
+  }, []);
+
+  const resetCreateForm = useCallback(() => {
+    setCreateForm({
+      full_name: "",
+      email: "",
+      phone: "",
+      position: "",
+      linkedin_url: "",
+      cv_url: "",
+      experience_years: "",
+    });
+    setCreateFormErrors({});
+    setCreateError(null);
+    setCreateState("idle");
+  }, []);
 
   const fetchRecords = useCallback(async () => {
     try {
@@ -172,6 +238,46 @@ export default function HomePage() {
   useEffect(() => {
     void fetchRecords();
   }, [fetchRecords]);
+
+  const handleCreateCandidate = useCallback(
+    async (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+
+      const validationErrors = validateCreateForm(createForm);
+      setCreateFormErrors(validationErrors);
+
+      if (Object.keys(validationErrors).length > 0) {
+        setCreateState("error");
+        setCreateError("Revisa los campos obligatorios.");
+        return;
+      }
+
+      const payload: RecordCreate = {
+        full_name: createForm.full_name.trim(),
+        email: createForm.email.trim(),
+        phone: createForm.phone.trim(),
+        position: createForm.position.trim(),
+        experience_years: Number(createForm.experience_years),
+        linkedin_url: createForm.linkedin_url.trim() || undefined,
+        cv_url: createForm.cv_url.trim() || undefined,
+      };
+
+      try {
+        setCreateState("loading");
+        setCreateError(null);
+        await createRecord(payload);
+        setCreateState("success");
+        await fetchRecords();
+        setIsCreateModalOpen(false);
+        resetCreateForm();
+        router.replace("/", { scroll: false });
+      } catch (err) {
+        setCreateState("error");
+        setCreateError(err instanceof Error ? err.message : "No se pudo crear la candidatura.");
+      }
+    },
+    [createForm, fetchRecords, resetCreateForm, router, validateCreateForm],
+  );
 
   useEffect(() => {
     searchParamsRef.current = searchParams;
@@ -241,6 +347,10 @@ export default function HomePage() {
         </div>
         <button
           type="button"
+          onClick={() => {
+            resetCreateForm();
+            setIsCreateModalOpen(true);
+          }}
           className="inline-flex items-center gap-2 rounded-lg bg-[#0037D0] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#1B4DFF]"
         >
           <PlusIcon />
@@ -415,6 +525,147 @@ export default function HomePage() {
             </div>
           </footer>
         </section>
+      )}
+
+      {isCreateModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#191B25]/45 px-4"
+          onClick={() => {
+            setIsCreateModalOpen(false);
+            resetCreateForm();
+          }}
+        >
+          <div
+            className="w-full max-w-2xl rounded-xl border border-[#C4C5D9] bg-white p-6 shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-2xl font-semibold text-[#191B25]">Nueva candidatura</h2>
+                <p className="mt-1 text-sm text-[#434656]">Completa los datos obligatorios para registrar la candidatura.</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleCreateCandidate} className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-[#191B25]">Nombre completo *</span>
+                  <input
+                    value={createForm.full_name}
+                    onChange={(event) => {
+                      setCreateForm((prev) => ({ ...prev, full_name: event.target.value }));
+                      setCreateFormErrors((prev) => ({ ...prev, full_name: undefined }));
+                    }}
+                    className="w-full rounded-lg border border-[#C4C5D9] bg-[#F3F2FF] px-4 py-3 text-sm text-[#191B25]"
+                  />
+                  {createFormErrors.full_name && <span className="mt-1 block text-xs text-rose-700">{createFormErrors.full_name}</span>}
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-[#191B25]">Email *</span>
+                  <input
+                    type="email"
+                    value={createForm.email}
+                    onChange={(event) => {
+                      setCreateForm((prev) => ({ ...prev, email: event.target.value }));
+                      setCreateFormErrors((prev) => ({ ...prev, email: undefined }));
+                    }}
+                    className="w-full rounded-lg border border-[#C4C5D9] bg-[#F3F2FF] px-4 py-3 text-sm text-[#191B25]"
+                  />
+                  {createFormErrors.email && <span className="mt-1 block text-xs text-rose-700">{createFormErrors.email}</span>}
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-[#191B25]">Teléfono *</span>
+                  <input
+                    value={createForm.phone}
+                    onChange={(event) => {
+                      setCreateForm((prev) => ({ ...prev, phone: event.target.value }));
+                      setCreateFormErrors((prev) => ({ ...prev, phone: undefined }));
+                    }}
+                    className="w-full rounded-lg border border-[#C4C5D9] bg-[#F3F2FF] px-4 py-3 text-sm text-[#191B25]"
+                  />
+                  {createFormErrors.phone && <span className="mt-1 block text-xs text-rose-700">{createFormErrors.phone}</span>}
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-[#191B25]">Puesto *</span>
+                  <input
+                    value={createForm.position}
+                    onChange={(event) => {
+                      setCreateForm((prev) => ({ ...prev, position: event.target.value }));
+                      setCreateFormErrors((prev) => ({ ...prev, position: undefined }));
+                    }}
+                    className="w-full rounded-lg border border-[#C4C5D9] bg-[#F3F2FF] px-4 py-3 text-sm text-[#191B25]"
+                  />
+                  {createFormErrors.position && <span className="mt-1 block text-xs text-rose-700">{createFormErrors.position}</span>}
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-[#191B25]">Años de experiencia *</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={createForm.experience_years}
+                    onChange={(event) => {
+                      setCreateForm((prev) => ({ ...prev, experience_years: event.target.value }));
+                      setCreateFormErrors((prev) => ({ ...prev, experience_years: undefined }));
+                    }}
+                    className="w-full rounded-lg border border-[#C4C5D9] bg-[#F3F2FF] px-4 py-3 text-sm text-[#191B25]"
+                  />
+                  {createFormErrors.experience_years && (
+                    <span className="mt-1 block text-xs text-rose-700">{createFormErrors.experience_years}</span>
+                  )}
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-[#191B25]">LinkedIn</span>
+                  <input
+                    type="url"
+                    value={createForm.linkedin_url}
+                    onChange={(event) => setCreateForm((prev) => ({ ...prev, linkedin_url: event.target.value }))}
+                    className="w-full rounded-lg border border-[#C4C5D9] bg-[#F3F2FF] px-4 py-3 text-sm text-[#191B25]"
+                  />
+                </label>
+
+                <label className="block md:col-span-2">
+                  <span className="mb-1 block text-sm font-medium text-[#191B25]">URL CV</span>
+                  <input
+                    type="url"
+                    value={createForm.cv_url}
+                    onChange={(event) => setCreateForm((prev) => ({ ...prev, cv_url: event.target.value }))}
+                    className="w-full rounded-lg border border-[#C4C5D9] bg-[#F3F2FF] px-4 py-3 text-sm text-[#191B25]"
+                  />
+                </label>
+              </div>
+
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsCreateModalOpen(false);
+                    resetCreateForm();
+                  }}
+                  disabled={createState === "loading"}
+                  className="rounded-lg border border-[#C4C5D9] px-4 py-2 text-sm font-medium text-[#434656] hover:bg-[#F3F2FF] disabled:opacity-70"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={createState === "loading"}
+                  className="rounded-lg bg-[#0037D0] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1B4DFF] disabled:opacity-70"
+                >
+                  {createState === "loading" ? "Guardando..." : "Guardar candidatura"}
+                </button>
+              </div>
+
+              {createState === "success" && <p className="text-sm text-emerald-700">Candidatura creada correctamente.</p>}
+              {createState === "error" && createError && <p className="text-sm text-rose-700">{createError}</p>}
+            </form>
+          </div>
+        </div>
       )}
     </main>
   );
