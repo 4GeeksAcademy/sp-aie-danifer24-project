@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { getRecords } from "@/services/api";
 import type { RecordOut, RecordsResponse } from "@/types/candidates";
 
@@ -39,6 +40,23 @@ function statusBadgeClass(status: string): string {
 
   return map[status] ?? "bg-[#E2E1EF] text-[#434656]";
 }
+
+const STATUS_OPTIONS = [
+  { value: "all", label: "Estado: Todos" },
+  { value: "received", label: "Recibido" },
+  { value: "in_progress", label: "En proceso" },
+  { value: "selected", label: "Seleccionado" },
+  { value: "discarded", label: "Descartado" },
+];
+
+const STAGE_OPTIONS = [
+  { value: "all", label: "Etapa: Todas" },
+  { value: "pending", label: "Pendiente" },
+  { value: "review", label: "Revisión" },
+  { value: "personal_interview", label: "Entrevista personal" },
+  { value: "technical_interview", label: "Entrevista técnica" },
+  { value: "offer_presented", label: "Oferta presentada" },
+];
 
 function getInitials(fullName: string): string {
   return fullName
@@ -130,9 +148,19 @@ function LoadingSkeleton() {
 }
 
 export default function HomePage() {
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParamsRef = useRef(searchParams);
+
   const [records, setRecords] = useState<RecordOut[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const statusFilter = searchParams.get("status") ?? "all";
+  const stageFilter = searchParams.get("stage") ?? "all";
+  const [inputValue, setInputValue] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const fetchRecords = useCallback(async () => {
     try {
@@ -152,7 +180,60 @@ export default function HomePage() {
     void fetchRecords();
   }, [fetchRecords]);
 
-  const hasRecords = useMemo(() => records.length > 0, [records]);
+  useEffect(() => {
+    searchParamsRef.current = searchParams;
+  }, [searchParams]);
+
+  const filteredRecords = useMemo(() => {
+    return records.filter((candidate) => {
+      const matchesStatus = statusFilter === "all" || candidate.status === statusFilter;
+      const matchesStage = stageFilter === "all" || candidate.stage === stageFilter;
+
+      const query = searchQuery.trim().toLowerCase();
+      const matchesSearch =
+        query.length === 0 ||
+        candidate.full_name.toLowerCase().includes(query) ||
+        candidate.email.toLowerCase().includes(query);
+
+      return matchesStatus && matchesStage && matchesSearch;
+    });
+  }, [records, searchQuery, stageFilter, statusFilter]);
+
+  const hasRecords = useMemo(() => filteredRecords.length > 0, [filteredRecords]);
+
+  const updateParams = useCallback(
+    (next: { status?: string; stage?: string; search?: string }) => {
+      const params = new URLSearchParams(searchParamsRef.current.toString());
+
+      if (next.status !== undefined) {
+        if (!next.status || next.status === "all") params.delete("status");
+        else params.set("status", next.status);
+      }
+
+      if (next.stage !== undefined) {
+        if (!next.stage || next.stage === "all") params.delete("stage");
+        else params.set("stage", next.stage);
+      }
+
+      if (next.search !== undefined) {
+        if (!next.search.trim()) params.delete("search");
+        else params.set("search", next.search);
+      }
+
+      const query = params.toString();
+      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    },
+    [pathname, router],
+  );
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setSearchQuery(inputValue);
+      updateParams({ search: inputValue });
+    }, 300);
+
+    return () => window.clearTimeout(timeout);
+  }, [inputValue, updateParams]);
 
   return (
     <main className="mx-auto w-full max-w-[1120px] px-6 py-8">
@@ -177,11 +258,10 @@ export default function HomePage() {
       <section className="mb-3 rounded-xl border border-[#C4C5D9] bg-white p-4">
         <div className="flex flex-col gap-4 md:flex-row md:items-center">
           <div className="relative flex-1">
-            <SearchIcon />
             <input
               placeholder="Buscar por nombre o puesto..."
-              disabled
-              readOnly
+              value={inputValue}
+              onChange={(event) => setInputValue(event.target.value)}
               className="w-full rounded-lg border border-[#C4C5D9] bg-[#F3F2FF] py-3 pl-11 pr-4 text-sm text-[#191B25] placeholder:text-[#747688]"
             />
             <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#747688]">
@@ -190,22 +270,40 @@ export default function HomePage() {
           </div>
 
           <div className="flex w-full gap-3 md:w-auto">
-            <button
-              type="button"
-              disabled
-              className="inline-flex w-full items-center justify-between rounded-lg border border-[#C4C5D9] bg-[#F3F2FF] px-4 py-3 text-sm text-[#434656] md:w-[146px]"
+            <div className="relative w-full md:w-[146px]"
             >
-              Estado: Todos
-              <ChevronIcon direction="down" />
-            </button>
-            <button
-              type="button"
-              disabled
-              className="inline-flex w-full items-center justify-between rounded-lg border border-[#C4C5D9] bg-[#F3F2FF] px-4 py-3 text-sm text-[#434656] md:w-[146px]"
+              <select
+                value={statusFilter}
+                onChange={(event) => updateParams({ status: event.target.value })}
+                className="w-full appearance-none rounded-lg border border-[#C4C5D9] bg-[#F3F2FF] px-4 py-3 pr-8 text-sm text-[#434656]"
+              >
+                {STATUS_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#434656]">
+                <ChevronIcon direction="down" />
+              </span>
+            </div>
+            <div className="relative w-full md:w-[146px]"
             >
-              Etapa: Todas
-              <ChevronIcon direction="down" />
-            </button>
+              <select
+                value={stageFilter}
+                onChange={(event) => updateParams({ stage: event.target.value })}
+                className="w-full appearance-none rounded-lg border border-[#C4C5D9] bg-[#F3F2FF] px-4 py-3 pr-8 text-sm text-[#434656]"
+              >
+                {STAGE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#434656]">
+                <ChevronIcon direction="down" />
+              </span>
+            </div>
           </div>
         </div>
       </section>
@@ -246,7 +344,7 @@ export default function HomePage() {
               </tr>
             </thead>
             <tbody>
-              {records.map((candidate) => (
+              {filteredRecords.map((candidate) => (
                 <tr key={candidate.id} className="border-t border-[#E2E1EF] transition-colors hover:bg-[#FBF8FF]">
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-3">
@@ -292,7 +390,7 @@ export default function HomePage() {
           </table>
 
           <footer className="flex flex-col gap-3 border-t border-[#E2E1EF] bg-[#FBF8FF] px-5 py-3 md:flex-row md:items-center md:justify-between">
-            <span className="text-[#747688]">Mostrando {records.length} de {records.length} candidatos</span>
+            <span className="text-[#747688]">Mostrando {filteredRecords.length} de {records.length} candidatos</span>
             <div className="flex items-center gap-2">
               <button
                 type="button"
