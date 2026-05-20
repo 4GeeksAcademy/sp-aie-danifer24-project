@@ -6,6 +6,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createRecord, getRecords } from "@/services/api";
 import type { RecordCreate, RecordOut, RecordsResponse } from "@/types/candidates";
 
+const RECORDS_LIMIT = 20;
+
 type SubmitState = "idle" | "loading" | "success" | "error";
 
 interface CreateFormData {
@@ -20,8 +22,25 @@ interface CreateFormData {
 
 type CreateFormErrors = Partial<Record<keyof CreateFormData, string>>;
 
-function recordsFromResponse(response: RecordsResponse): RecordOut[] {
-  return Array.isArray(response) ? response : response.data;
+function recordsFromResponse(
+  response: RecordsResponse,
+  fallbackPage: number,
+): { records: RecordOut[]; total: number; page: number; limit: number } {
+  if (Array.isArray(response)) {
+    return {
+      records: response,
+      total: response.length,
+      page: fallbackPage,
+      limit: RECORDS_LIMIT,
+    };
+  }
+
+  return {
+    records: response.data,
+    total: typeof response.total === "number" ? response.total : response.data.length,
+    page: typeof response.page === "number" ? response.page : fallbackPage,
+    limit: typeof response.limit === "number" ? response.limit : RECORDS_LIMIT,
+  };
 }
 
 function statusLabel(status: string): string {
@@ -158,16 +177,22 @@ export default function HomePage() {
   const pathname = usePathname();
   const router = useRouter();
   const searchParamsRef = useRef(searchParams);
+  const listingRef = useRef<HTMLElement | null>(null);
   const detailQuery = searchParams.toString();
 
   const [records, setRecords] = useState<RecordOut[]>([]);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [pageLimit, setPageLimit] = useState(RECORDS_LIMIT);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const statusFilter = searchParams.get("status") ?? "all";
   const stageFilter = searchParams.get("stage") ?? "all";
-  const [inputValue, setInputValue] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
+  const pageFromQuery = Number(searchParams.get("page") ?? "1");
+  const currentPage = Number.isFinite(pageFromQuery) && pageFromQuery > 0 ? pageFromQuery : 1;
+  const searchValue = searchParams.get("search") ?? "";
+  const [inputValue, setInputValue] = useState(searchValue);
+  const [searchQuery, setSearchQuery] = useState(searchValue);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [createState, setCreateState] = useState<SubmitState>("idle");
   const [createError, setCreateError] = useState<string | null>(null);
@@ -225,15 +250,25 @@ export default function HomePage() {
     try {
       setIsLoading(true);
       setError(null);
-      const response = await getRecords();
-      setRecords(recordsFromResponse(response));
+      const response = await getRecords({
+        page: currentPage,
+        limit: RECORDS_LIMIT,
+        status: statusFilter !== "all" ? statusFilter : undefined,
+        stage: stageFilter !== "all" ? stageFilter : undefined,
+        search: searchValue.trim() ? searchValue : undefined,
+      });
+      const parsed = recordsFromResponse(response, currentPage);
+      setRecords(parsed.records);
+      setTotalRecords(parsed.total);
+      setPageLimit(parsed.limit);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo cargar el listado de candidaturas.");
       setRecords([]);
+      setTotalRecords(0);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [currentPage, searchValue, stageFilter, statusFilter]);
 
   useEffect(() => {
     void fetchRecords();
@@ -281,6 +316,9 @@ export default function HomePage() {
 
   useEffect(() => {
     searchParamsRef.current = searchParams;
+    const nextSearch = searchParams.get("search") ?? "";
+    setInputValue(nextSearch);
+    setSearchQuery(nextSearch);
   }, [searchParams]);
 
   const filteredRecords = useMemo(() => {
@@ -299,9 +337,24 @@ export default function HomePage() {
   }, [records, searchQuery, stageFilter, statusFilter]);
 
   const hasRecords = useMemo(() => filteredRecords.length > 0, [filteredRecords]);
+  const totalPages = useMemo(() => {
+    if (!totalRecords) return 1;
+    return Math.ceil(totalRecords / pageLimit);
+  }, [pageLimit, totalRecords]);
+  const pageNumbers = useMemo(() => {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }, [totalPages]);
+  const pageStart = useMemo(() => {
+    if (totalRecords === 0 || filteredRecords.length === 0) return 0;
+    return (currentPage - 1) * pageLimit + 1;
+  }, [currentPage, filteredRecords.length, pageLimit, totalRecords]);
+  const pageEnd = useMemo(() => {
+    if (totalRecords === 0 || filteredRecords.length === 0) return 0;
+    return Math.min((currentPage - 1) * pageLimit + filteredRecords.length, totalRecords);
+  }, [currentPage, filteredRecords.length, pageLimit, totalRecords]);
 
   const updateParams = useCallback(
-    (next: { status?: string; stage?: string; search?: string }) => {
+    (next: { status?: string; stage?: string; search?: string; page?: number }) => {
       const params = new URLSearchParams(searchParamsRef.current.toString());
 
       if (next.status !== undefined) {
@@ -319,6 +372,11 @@ export default function HomePage() {
         else params.set("search", next.search);
       }
 
+      if (next.page !== undefined) {
+        if (!next.page || next.page <= 1) params.delete("page");
+        else params.set("page", String(next.page));
+      }
+
       const query = params.toString();
       router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
     },
@@ -328,7 +386,7 @@ export default function HomePage() {
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       setSearchQuery(inputValue);
-      updateParams({ search: inputValue });
+      updateParams({ search: inputValue, page: 1 });
     }, 300);
 
     return () => window.clearTimeout(timeout);
@@ -377,7 +435,7 @@ export default function HomePage() {
             >
               <select
                 value={statusFilter}
-                onChange={(event) => updateParams({ status: event.target.value })}
+                onChange={(event) => updateParams({ status: event.target.value, page: 1 })}
                 className="w-full appearance-none rounded-lg border border-[#C4C5D9] bg-[#F3F2FF] px-4 py-3 pr-8 text-sm text-[#434656]"
               >
                 {STATUS_OPTIONS.map((option) => (
@@ -394,7 +452,7 @@ export default function HomePage() {
             >
               <select
                 value={stageFilter}
-                onChange={(event) => updateParams({ stage: event.target.value })}
+                onChange={(event) => updateParams({ stage: event.target.value, page: 1 })}
                 className="w-full appearance-none rounded-lg border border-[#C4C5D9] bg-[#F3F2FF] px-4 py-3 pr-8 text-sm text-[#434656]"
               >
                 {STAGE_OPTIONS.map((option) => (
@@ -435,7 +493,7 @@ export default function HomePage() {
       )}
 
       {!isLoading && !error && hasRecords && (
-        <section className="overflow-hidden rounded-xl border border-[#C4C5D9] bg-white">
+        <section ref={listingRef} className="overflow-hidden rounded-xl border border-[#C4C5D9] bg-white">
           <table className="w-full border-collapse text-left">
             <thead>
               <tr className="bg-[#F3F2FF] text-[12px] uppercase tracking-[0.05em] text-[#747688]">
@@ -468,7 +526,7 @@ export default function HomePage() {
                   <td className="px-5 py-4 text-[#191B25]">{candidate.position}</td>
                   <td className="px-5 py-4">
                     <span
-                      className={`inline-flex rounded-full px-3 py-1 text-[11px] font-bold uppercase ${statusBadgeClass(candidate.status)}`}
+                      className={`inline-flex whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-bold uppercase ${statusBadgeClass(candidate.status)}`}
                     >
                       {statusLabel(candidate.status)}
                     </span>
@@ -491,33 +549,46 @@ export default function HomePage() {
           </table>
 
           <footer className="flex flex-col gap-3 border-t border-[#E2E1EF] bg-[#FBF8FF] px-5 py-3 md:flex-row md:items-center md:justify-between">
-            <span className="text-[#747688]">Mostrando {filteredRecords.length} de {records.length} candidatos</span>
+            <span className="text-[#747688]">Mostrando {pageStart}-{pageEnd} de {totalRecords} resultados</span>
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                className="rounded-md border border-[#C4C5D9] bg-white p-2 text-[#747688] hover:bg-[#F3F2FF]"
+                onClick={() => {
+                  updateParams({ page: currentPage - 1 });
+                  listingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+                disabled={currentPage <= 1}
+                className="rounded-md border border-[#C4C5D9] bg-white p-2 text-[#747688] hover:bg-[#F3F2FF] disabled:cursor-not-allowed disabled:opacity-50"
                 aria-label="Anterior"
               >
                 <ChevronIcon direction="left" />
               </button>
-              <button type="button" className="rounded-md bg-[#0037D0] px-3 py-2 text-sm font-medium text-white">
-                1
-              </button>
+              {pageNumbers.map((pageNumber) => (
+                <button
+                  key={pageNumber}
+                  type="button"
+                  onClick={() => {
+                    updateParams({ page: pageNumber });
+                    listingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }}
+                  className={
+                    pageNumber === currentPage
+                      ? "rounded-md bg-[#0037D0] px-3 py-2 text-sm font-medium text-white"
+                      : "rounded-md border border-[#C4C5D9] bg-white px-3 py-2 text-sm text-[#434656] hover:bg-[#F3F2FF]"
+                  }
+                  aria-label={`Página ${pageNumber}`}
+                >
+                  {pageNumber}
+                </button>
+              ))}
               <button
                 type="button"
-                className="rounded-md border border-[#C4C5D9] bg-white px-3 py-2 text-sm text-[#434656] hover:bg-[#F3F2FF]"
-              >
-                2
-              </button>
-              <button
-                type="button"
-                className="rounded-md border border-[#C4C5D9] bg-white px-3 py-2 text-sm text-[#434656] hover:bg-[#F3F2FF]"
-              >
-                3
-              </button>
-              <button
-                type="button"
-                className="rounded-md border border-[#C4C5D9] bg-white p-2 text-[#747688] hover:bg-[#F3F2FF]"
+                onClick={() => {
+                  updateParams({ page: currentPage + 1 });
+                  listingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+                disabled={currentPage >= totalPages}
+                className="rounded-md border border-[#C4C5D9] bg-white p-2 text-[#747688] hover:bg-[#F3F2FF] disabled:cursor-not-allowed disabled:opacity-50"
                 aria-label="Siguiente"
               >
                 <ChevronIcon direction="right" />
