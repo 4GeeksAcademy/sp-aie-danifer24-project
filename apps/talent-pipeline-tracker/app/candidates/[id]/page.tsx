@@ -4,100 +4,12 @@ import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createRecordNote, deleteRecordNote, getRecordById, getRecordNotes, patchRecord, replaceRecord } from "@/services/api";
-import type { NoteOut, NotesResponse, RecordCreate, RecordOut } from "@/types/candidates";
-
-const STATUS_OPTIONS = [
-  { value: "received", label: "Recibida" },
-  { value: "in_progress", label: "En proceso" },
-  { value: "selected", label: "Seleccionada" },
-  { value: "discarded", label: "Descartada" },
-];
-
-const STAGE_OPTIONS = [
-  { value: "pending", label: "Pendiente de revisión" },
-  { value: "review", label: "En revisión" },
-  { value: "personal_interview", label: "Entrevista personal" },
-  { value: "technical_interview", label: "Entrevista técnica" },
-  { value: "offer_presented", label: "Oferta presentada" },
-];
-
-type ControlState = "idle" | "loading" | "success" | "error";
-
-interface EditFormData {
-  full_name: string;
-  email: string;
-  phone: string;
-  position: string;
-  linkedin_url: string;
-  cv_url: string;
-  experience_years: string;
-}
-
-type EditFormErrors = Partial<Record<keyof EditFormData, string>>;
-
-function notesFromResponse(response: NotesResponse): NoteOut[] {
-  return Array.isArray(response) ? response : response.data;
-}
-
-function ChevronIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="m6 9 6 6 6-6" />
-    </svg>
-  );
-}
-
-function statusLabel(status: string): string {
-  const map: Record<string, string> = {
-    received: "Recibida",
-    in_progress: "En proceso",
-    selected: "Seleccionada",
-    discarded: "Descartada",
-  };
-  return map[status] ?? "Estado no definido";
-}
-
-function stageLabel(stage: string): string {
-  const map: Record<string, string> = {
-    pending: "Pendiente de revisión",
-    review: "En revisión",
-    personal_interview: "Entrevista personal",
-    technical_interview: "Entrevista técnica",
-    offer_presented: "Oferta presentada",
-  };
-  return map[stage] ?? "Etapa no definida";
-}
-
-function formatAppliedDate(value: string): string {
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return new Intl.DateTimeFormat("es-ES", {
-    dateStyle: "long",
-  }).format(date);
-}
-
-function DetailsSkeleton() {
-  return (
-    <section className="space-y-5">
-      <div className="h-6 w-40 animate-pulse rounded bg-[#E2E1EF]" />
-      <div className="rounded-xl border border-[#C4C5D9] bg-white p-6">
-        <div className="mb-5 h-8 w-72 animate-pulse rounded bg-[#E2E1EF]" />
-        <div className="grid gap-4 md:grid-cols-2">
-          {Array.from({ length: 10 }).map((_, index) => (
-            <div key={index} className="rounded-lg border border-[#E2E1EF] p-4">
-              <div className="h-3 w-24 animate-pulse rounded bg-[#E2E1EF]" />
-              <div className="mt-3 h-4 w-40 animate-pulse rounded bg-[#E2E1EF]" />
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
+import { DetailsSkeleton } from "@/components/details-skeleton";
+import { ChevronIcon } from "@/components/icons";
+import { DETAIL_STAGE_OPTIONS, DETAIL_STATUS_OPTIONS } from "@/lib/candidate-constants";
+import { formatAppliedDate, notesFromResponse } from "@/lib/candidate-utils";
+import type { ControlState, EditFormData, EditFormErrors } from "@/types/forms";
+import type { NoteOut, RecordCreate, RecordOut } from "@/types/candidates";
 
 export default function CandidateDetailPage() {
   const params = useParams<{ id: string }>();
@@ -448,7 +360,7 @@ export default function CandidateDetailPage() {
                     disabled={statusState === "loading"}
                     className="w-full appearance-none rounded-lg border border-[#C4C5D9] bg-[#F3F2FF] px-4 py-3 pr-8 text-sm text-[#434656]"
                   >
-                    {STATUS_OPTIONS.map((option) => (
+                    {DETAIL_STATUS_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}
                       </option>
@@ -474,7 +386,7 @@ export default function CandidateDetailPage() {
                     disabled={stageState === "loading"}
                     className="w-full appearance-none rounded-lg border border-[#C4C5D9] bg-[#F3F2FF] px-4 py-3 pr-8 text-sm text-[#434656]"
                   >
-                    {STAGE_OPTIONS.map((option) => (
+                    {DETAIL_STAGE_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}
                       </option>

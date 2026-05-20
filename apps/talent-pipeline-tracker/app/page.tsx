@@ -4,163 +4,13 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createRecord, getRecords } from "@/services/api";
-import type { RecordCreate, RecordOut, RecordsResponse } from "@/types/candidates";
-
-const RECORDS_LIMIT = 20;
-
-type SubmitState = "idle" | "loading" | "success" | "error";
-
-interface CreateFormData {
-  full_name: string;
-  email: string;
-  phone: string;
-  position: string;
-  linkedin_url: string;
-  cv_url: string;
-  experience_years: string;
-}
-
-type CreateFormErrors = Partial<Record<keyof CreateFormData, string>>;
-
-function recordsFromResponse(
-  response: RecordsResponse,
-  fallbackPage: number,
-): { records: RecordOut[]; total: number; page: number; limit: number } {
-  if (Array.isArray(response)) {
-    return {
-      records: response,
-      total: response.length,
-      page: fallbackPage,
-      limit: RECORDS_LIMIT,
-    };
-  }
-
-  return {
-    records: response.data,
-    total: typeof response.total === "number" ? response.total : response.data.length,
-    page: typeof response.page === "number" ? response.page : fallbackPage,
-    limit: typeof response.limit === "number" ? response.limit : RECORDS_LIMIT,
-  };
-}
-
-function statusLabel(status: string): string {
-  const map: Record<string, string> = {
-    received: "Recibida",
-    in_progress: "En proceso",
-    selected: "Seleccionada",
-    discarded: "Descartada",
-  };
-  return map[status] ?? "Estado no definido";
-}
-
-function stageLabel(stage: string): string {
-  const map: Record<string, string> = {
-    pending: "Pendiente de revisión",
-    review: "En revisión",
-    personal_interview: "Entrevista personal",
-    technical_interview: "Entrevista técnica",
-    offer_presented: "Oferta presentada",
-  };
-  return map[stage] ?? "Etapa no definida";
-}
-
-function statusBadgeClass(status: string): string {
-  const map: Record<string, string> = {
-    in_progress: "bg-[#95A6FD] text-[#263888]",
-    received: "bg-[#FFDBD1] text-[#872100]",
-    selected: "bg-[#DEE1FF] text-[#0032C3]",
-    discarded: "bg-[#FFDAD6] text-[#93000A]",
-  };
-
-  return map[status] ?? "bg-[#E2E1EF] text-[#434656]";
-}
-
-const STATUS_OPTIONS = [
-  { value: "all", label: "Estado: Todos" },
-  { value: "received", label: "Recibida" },
-  { value: "in_progress", label: "En proceso" },
-  { value: "selected", label: "Seleccionada" },
-  { value: "discarded", label: "Descartada" },
-];
-
-const STAGE_OPTIONS = [
-  { value: "all", label: "Etapa: Todas" },
-  { value: "pending", label: "Pendiente de revisión" },
-  { value: "review", label: "En revisión" },
-  { value: "personal_interview", label: "Entrevista personal" },
-  { value: "technical_interview", label: "Entrevista técnica" },
-  { value: "offer_presented", label: "Oferta presentada" },
-];
-
-function getInitials(fullName: string): string {
-  return fullName
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
-}
-
-function SearchIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="11" cy="11" r="7" />
-      <path d="m20 20-3.5-3.5" />
-    </svg>
-  );
-}
-
-function PlusIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M12 5v14M5 12h14" />
-    </svg>
-  );
-}
-
-function ChevronIcon({ direction }: { direction: "left" | "right" | "down" }) {
-  const rotations: Record<string, string> = {
-    left: "rotate-90",
-    right: "-rotate-90",
-    down: "rotate-0",
-  };
-
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className={`h-4 w-4 ${rotations[direction]}`}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-    >
-      <path d="m6 9 6 6 6-6" />
-    </svg>
-  );
-}
-
-function LoadingSkeleton() {
-  return (
-    <section className="overflow-hidden rounded-xl border border-[#C4C5D9] bg-white">
-      <div className="grid grid-cols-5 gap-4 border-b border-[#C4C5D9] bg-[#F3F2FF] px-6 py-4">
-        <div className="h-4 w-28 animate-pulse rounded bg-[#E2E1EF]" />
-        <div className="h-4 w-24 animate-pulse rounded bg-[#E2E1EF]" />
-        <div className="h-4 w-20 animate-pulse rounded bg-[#E2E1EF]" />
-        <div className="h-4 w-20 animate-pulse rounded bg-[#E2E1EF]" />
-        <div className="h-4 w-16 animate-pulse rounded bg-[#E2E1EF]" />
-      </div>
-
-      {Array.from({ length: 6 }).map((_, index) => (
-        <div key={index} className="grid grid-cols-5 gap-4 border-b border-[#E2E1EF] px-6 py-5 last:border-b-0">
-          <div className="h-4 w-52 animate-pulse rounded bg-[#E2E1EF]" />
-          <div className="h-4 w-40 animate-pulse rounded bg-[#E2E1EF]" />
-          <div className="h-4 w-24 animate-pulse rounded bg-[#E2E1EF]" />
-          <div className="h-4 w-32 animate-pulse rounded bg-[#E2E1EF]" />
-          <div className="h-4 w-12 animate-pulse rounded bg-[#E2E1EF]" />
-        </div>
-      ))}
-    </section>
-  );
-}
+import { ChevronIcon, PlusIcon, SearchIcon } from "@/components/icons";
+import { LoadingSkeleton } from "@/components/loading-skeleton";
+import { useDebounce } from "@/hooks/useDebounce";
+import { LIST_STAGE_OPTIONS, LIST_STATUS_OPTIONS, RECORDS_LIMIT } from "@/lib/candidate-constants";
+import { getInitials, recordsFromResponse, stageLabel, statusBadgeClass, statusLabel } from "@/lib/candidate-utils";
+import type { CreateFormData, CreateFormErrors, SubmitState } from "@/types/forms";
+import type { RecordCreate, RecordOut } from "@/types/candidates";
 
 export default function HomePage() {
   const searchParams = useSearchParams();
@@ -182,7 +32,7 @@ export default function HomePage() {
   const currentPage = Number.isFinite(pageFromQuery) && pageFromQuery > 0 ? pageFromQuery : 1;
   const searchValue = searchParams.get("search") ?? "";
   const [inputValue, setInputValue] = useState(searchValue);
-  const [searchQuery, setSearchQuery] = useState(searchValue);
+  const debouncedInputValue = useDebounce(inputValue, 300);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [createState, setCreateState] = useState<SubmitState>("idle");
   const [createError, setCreateError] = useState<string | null>(null);
@@ -311,7 +161,6 @@ export default function HomePage() {
     searchParamsRef.current = searchParams;
     const nextSearch = searchParams.get("search") ?? "";
     setInputValue(nextSearch);
-    setSearchQuery(nextSearch);
   }, [searchParams]);
 
   const filteredRecords = useMemo(() => {
@@ -319,7 +168,7 @@ export default function HomePage() {
       const matchesStatus = statusFilter === "all" || candidate.status === statusFilter;
       const matchesStage = stageFilter === "all" || candidate.stage === stageFilter;
 
-      const query = searchQuery.trim().toLowerCase();
+      const query = debouncedInputValue.trim().toLowerCase();
       const matchesSearch =
         query.length === 0 ||
         candidate.full_name.toLowerCase().includes(query) ||
@@ -327,7 +176,7 @@ export default function HomePage() {
 
       return matchesStatus && matchesStage && matchesSearch;
     });
-  }, [records, searchQuery, stageFilter, statusFilter]);
+  }, [debouncedInputValue, records, stageFilter, statusFilter]);
 
   const hasRecords = useMemo(() => filteredRecords.length > 0, [filteredRecords]);
   const totalPages = useMemo(() => {
@@ -377,13 +226,8 @@ export default function HomePage() {
   );
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      setSearchQuery(inputValue);
-      updateParams({ search: inputValue, page: 1 });
-    }, 300);
-
-    return () => window.clearTimeout(timeout);
-  }, [inputValue, updateParams]);
+    updateParams({ search: debouncedInputValue, page: 1 });
+  }, [debouncedInputValue, updateParams]);
 
   return (
     <main className="mx-auto w-full max-w-[1240px] px-6 py-8">
@@ -428,7 +272,7 @@ export default function HomePage() {
                 onChange={(event) => updateParams({ status: event.target.value, page: 1 })}
                 className="w-full appearance-none rounded-lg border border-[#C4C5D9] bg-[#F3F2FF] px-4 py-3 pr-8 text-sm text-[#434656]"
               >
-                {STATUS_OPTIONS.map((option) => (
+                {LIST_STATUS_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -445,7 +289,7 @@ export default function HomePage() {
                 onChange={(event) => updateParams({ stage: event.target.value, page: 1 })}
                 className="w-full appearance-none rounded-lg border border-[#C4C5D9] bg-[#F3F2FF] px-4 py-3 pr-8 text-sm text-[#434656]"
               >
-                {STAGE_OPTIONS.map((option) => (
+                {LIST_STAGE_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
