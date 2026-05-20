@@ -101,16 +101,6 @@ function getInitials(fullName: string): string {
     .join("");
 }
 
-function KebabIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
-      <circle cx="12" cy="5" r="1.8" />
-      <circle cx="12" cy="12" r="1.8" />
-      <circle cx="12" cy="19" r="1.8" />
-    </svg>
-  );
-}
-
 function SearchIcon() {
   return (
     <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
@@ -301,11 +291,14 @@ export default function HomePage() {
         setCreateState("loading");
         setCreateError(null);
         await createRecord(payload);
-        setCreateState("success");
         await fetchRecords();
-        setIsCreateModalOpen(false);
-        resetCreateForm();
-        router.replace("/", { scroll: false });
+        setCreateState("success");
+
+        window.setTimeout(() => {
+          setIsCreateModalOpen(false);
+          resetCreateForm();
+          router.replace("/", { scroll: false });
+        }, 900);
       } catch (err) {
         setCreateState("error");
         setCreateError(err instanceof Error ? err.message : "No se pudo crear la candidatura.");
@@ -501,7 +494,6 @@ export default function HomePage() {
                 <th className="px-5 py-4 font-semibold">Puesto</th>
                 <th className="px-5 py-4 font-semibold">Estado</th>
                 <th className="px-5 py-4 font-semibold">Etapa</th>
-                <th className="px-5 py-4 text-right font-semibold">Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -532,17 +524,6 @@ export default function HomePage() {
                     </span>
                   </td>
                   <td className="px-5 py-4 text-[#191B25]">{stageLabel(candidate.stage)}</td>
-                  <td className="px-5 py-4">
-                    <div className="relative z-20 flex justify-end gap-2 text-[#0037D0]">
-                      <button
-                        type="button"
-                        className="rounded-md p-1.5 text-[#747688] transition hover:bg-[#F3F2FF]"
-                        aria-label="Más acciones"
-                      >
-                        <KebabIcon />
-                      </button>
-                    </div>
-                  </td>
                 </tr>
               ))}
             </tbody>
