@@ -45,23 +45,23 @@ function recordsFromResponse(
 
 function statusLabel(status: string): string {
   const map: Record<string, string> = {
-    received: "Recibido",
+    received: "Recibida",
     in_progress: "En proceso",
-    selected: "Seleccionado",
-    discarded: "Descartado",
+    selected: "Seleccionada",
+    discarded: "Descartada",
   };
-  return map[status] ?? status;
+  return map[status] ?? "Estado no definido";
 }
 
 function stageLabel(stage: string): string {
   const map: Record<string, string> = {
-    pending: "Pendiente",
-    review: "Revisión",
+    pending: "Pendiente de revisión",
+    review: "En revisión",
     personal_interview: "Entrevista personal",
     technical_interview: "Entrevista técnica",
     offer_presented: "Oferta presentada",
   };
-  return map[stage] ?? stage;
+  return map[stage] ?? "Etapa no definida";
 }
 
 function statusBadgeClass(status: string): string {
@@ -77,16 +77,16 @@ function statusBadgeClass(status: string): string {
 
 const STATUS_OPTIONS = [
   { value: "all", label: "Estado: Todos" },
-  { value: "received", label: "Recibido" },
+  { value: "received", label: "Recibida" },
   { value: "in_progress", label: "En proceso" },
-  { value: "selected", label: "Seleccionado" },
-  { value: "discarded", label: "Descartado" },
+  { value: "selected", label: "Seleccionada" },
+  { value: "discarded", label: "Descartada" },
 ];
 
 const STAGE_OPTIONS = [
   { value: "all", label: "Etapa: Todas" },
-  { value: "pending", label: "Pendiente" },
-  { value: "review", label: "Revisión" },
+  { value: "pending", label: "Pendiente de revisión" },
+  { value: "review", label: "En revisión" },
   { value: "personal_interview", label: "Entrevista personal" },
   { value: "technical_interview", label: "Entrevista técnica" },
   { value: "offer_presented", label: "Oferta presentada" },
@@ -386,15 +386,12 @@ export default function HomePage() {
   }, [inputValue, updateParams]);
 
   return (
-    <main className="mx-auto w-full max-w-[1120px] px-6 py-8">
+    <main className="mx-auto w-full max-w-[1240px] px-6 py-8">
       <header className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className="text-[44px] font-semibold leading-[1.1] tracking-[-0.02em] text-[#191B25]">
             Gestión de Talentos
           </h1>
-          <p className="mt-2 text-[22px] text-[#434656]">
-            Administra y sigue el progreso de tus procesos de selección.
-          </p>
         </div>
         <button
           type="button"

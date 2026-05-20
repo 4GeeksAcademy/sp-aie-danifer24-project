@@ -7,15 +7,15 @@ import { createRecordNote, deleteRecordNote, getRecordById, getRecordNotes, patc
 import type { NoteOut, NotesResponse, RecordCreate, RecordOut } from "@/types/candidates";
 
 const STATUS_OPTIONS = [
-  { value: "received", label: "Recibido" },
+  { value: "received", label: "Recibida" },
   { value: "in_progress", label: "En proceso" },
-  { value: "selected", label: "Seleccionado" },
-  { value: "discarded", label: "Descartado" },
+  { value: "selected", label: "Seleccionada" },
+  { value: "discarded", label: "Descartada" },
 ];
 
 const STAGE_OPTIONS = [
-  { value: "pending", label: "Pendiente" },
-  { value: "review", label: "Revisión" },
+  { value: "pending", label: "Pendiente de revisión" },
+  { value: "review", label: "En revisión" },
   { value: "personal_interview", label: "Entrevista personal" },
   { value: "technical_interview", label: "Entrevista técnica" },
   { value: "offer_presented", label: "Oferta presentada" },
@@ -49,23 +49,23 @@ function ChevronIcon() {
 
 function statusLabel(status: string): string {
   const map: Record<string, string> = {
-    received: "Recibido",
+    received: "Recibida",
     in_progress: "En proceso",
-    selected: "Seleccionado",
-    discarded: "Descartado",
+    selected: "Seleccionada",
+    discarded: "Descartada",
   };
-  return map[status] ?? status;
+  return map[status] ?? "Estado no definido";
 }
 
 function stageLabel(stage: string): string {
   const map: Record<string, string> = {
-    pending: "Pendiente",
-    review: "Revisión",
+    pending: "Pendiente de revisión",
+    review: "En revisión",
     personal_interview: "Entrevista personal",
     technical_interview: "Entrevista técnica",
     offer_presented: "Oferta presentada",
   };
-  return map[stage] ?? stage;
+  return map[stage] ?? "Etapa no definida";
 }
 
 function formatAppliedDate(value: string): string {
