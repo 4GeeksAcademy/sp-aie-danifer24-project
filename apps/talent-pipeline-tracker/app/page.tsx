@@ -1,233 +1,46 @@
 "use client";
 
-import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { createRecord, getRecords } from "@/services/api";
-import { ChevronIcon, PlusIcon, SearchIcon } from "@/components/icons";
-import { LoadingSkeleton } from "@/components/loading-skeleton";
-import { useDebounce } from "@/hooks/useDebounce";
-import { LIST_STAGE_OPTIONS, LIST_STATUS_OPTIONS, RECORDS_LIMIT } from "@/lib/candidate-constants";
-import { getInitials, recordsFromResponse, stageLabel, statusBadgeClass, statusLabel } from "@/lib/candidate-utils";
-import type { CreateFormData, CreateFormErrors, SubmitState } from "@/types/forms";
-import type { RecordCreate, RecordOut } from "@/types/candidates";
+import { PlusIcon } from "@/components/icons";
+import CandidatesFilters from "@/components/CandidatesFilters";
+import CandidatesTable from "@/components/CandidatesTable";
+import CreateCandidateModal from "@/components/CreateCandidateModal";
+import { useCandidatesList } from "@/hooks/useCandidatesList";
+import { useCreateCandidateForm } from "@/hooks/useCreateCandidateForm";
 
 export default function HomePage() {
-  const searchParams = useSearchParams();
-  const pathname = usePathname();
-  const router = useRouter();
-  const searchParamsRef = useRef(searchParams);
-  const listingRef = useRef<HTMLElement | null>(null);
-  const detailQuery = searchParams.toString();
+  const {
+    records,
+    totalRecords,
+    isLoading,
+    error,
+    statusFilter,
+    stageFilter,
+    currentPage,
+    totalPages,
+    pageNumbers,
+    pageStart,
+    pageEnd,
+    hasRecords,
+    detailQuery,
+    inputValue,
+    setInputValue,
+    updateParams,
+    fetchRecords,
+  } = useCandidatesList();
 
-  const [records, setRecords] = useState<RecordOut[]>([]);
-  const [totalRecords, setTotalRecords] = useState(0);
-  const [pageLimit, setPageLimit] = useState(RECORDS_LIMIT);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const statusFilter = searchParams.get("status") ?? "all";
-  const stageFilter = searchParams.get("stage") ?? "all";
-  const pageFromQuery = Number(searchParams.get("page") ?? "1");
-  const currentPage = Number.isFinite(pageFromQuery) && pageFromQuery > 0 ? pageFromQuery : 1;
-  const searchValue = searchParams.get("search") ?? "";
-  const [inputValue, setInputValue] = useState(searchValue);
-  const debouncedInputValue = useDebounce(inputValue, 300);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [createState, setCreateState] = useState<SubmitState>("idle");
-  const [createError, setCreateError] = useState<string | null>(null);
-  const [createFormErrors, setCreateFormErrors] = useState<CreateFormErrors>({});
-  const [createForm, setCreateForm] = useState<CreateFormData>({
-    full_name: "",
-    email: "",
-    phone: "",
-    position: "",
-    linkedin_url: "",
-    cv_url: "",
-    experience_years: "",
+  const {
+    isCreateModalOpen,
+    createState,
+    createError,
+    createFormErrors,
+    createForm,
+    openCreateModal,
+    closeCreateModal,
+    handleFieldChange,
+    handleCreateCandidate,
+  } = useCreateCandidateForm({
+    onCreated: fetchRecords,
   });
-
-  const validateCreateForm = useCallback((values: CreateFormData): CreateFormErrors => {
-    const nextErrors: CreateFormErrors = {};
-
-    if (!values.full_name.trim()) nextErrors.full_name = "El nombre es obligatorio.";
-
-    const email = values.email.trim();
-    if (!email) nextErrors.email = "El email es obligatorio.";
-    else if (!/^\S+@\S+\.\S+$/.test(email)) nextErrors.email = "El email no es válido.";
-
-    if (!values.phone.trim()) nextErrors.phone = "El teléfono es obligatorio.";
-    if (!values.position.trim()) nextErrors.position = "El puesto es obligatorio.";
-
-    if (!values.experience_years.trim()) {
-      nextErrors.experience_years = "Los años de experiencia son obligatorios.";
-    } else {
-      const years = Number(values.experience_years);
-      if (!Number.isFinite(years) || years < 0) {
-        nextErrors.experience_years = "Introduce un número válido (0 o más).";
-      }
-    }
-
-    return nextErrors;
-  }, []);
-
-  const resetCreateForm = useCallback(() => {
-    setCreateForm({
-      full_name: "",
-      email: "",
-      phone: "",
-      position: "",
-      linkedin_url: "",
-      cv_url: "",
-      experience_years: "",
-    });
-    setCreateFormErrors({});
-    setCreateError(null);
-    setCreateState("idle");
-  }, []);
-
-  const fetchRecords = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const response = await getRecords({
-        page: currentPage,
-        limit: RECORDS_LIMIT,
-        status: statusFilter !== "all" ? statusFilter : undefined,
-        stage: stageFilter !== "all" ? stageFilter : undefined,
-        search: searchValue.trim() ? searchValue : undefined,
-      });
-      const parsed = recordsFromResponse(response, currentPage);
-      setRecords(parsed.records);
-      setTotalRecords(parsed.total);
-      setPageLimit(parsed.limit);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo cargar el listado de candidaturas.");
-      setRecords([]);
-      setTotalRecords(0);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [currentPage, searchValue, stageFilter, statusFilter]);
-
-  useEffect(() => {
-    void fetchRecords();
-  }, [fetchRecords]);
-
-  const handleCreateCandidate = useCallback(
-    async (event: React.FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-
-      const validationErrors = validateCreateForm(createForm);
-      setCreateFormErrors(validationErrors);
-
-      if (Object.keys(validationErrors).length > 0) {
-        setCreateState("error");
-        setCreateError("Revisa los campos obligatorios.");
-        return;
-      }
-
-      const payload: RecordCreate = {
-        full_name: createForm.full_name.trim(),
-        email: createForm.email.trim(),
-        phone: createForm.phone.trim(),
-        position: createForm.position.trim(),
-        experience_years: Number(createForm.experience_years),
-        linkedin_url: createForm.linkedin_url.trim() || undefined,
-        cv_url: createForm.cv_url.trim() || undefined,
-      };
-
-      try {
-        setCreateState("loading");
-        setCreateError(null);
-        await createRecord(payload);
-        await fetchRecords();
-        setCreateState("success");
-
-        window.setTimeout(() => {
-          setIsCreateModalOpen(false);
-          resetCreateForm();
-          router.replace("/", { scroll: false });
-        }, 900);
-      } catch (err) {
-        setCreateState("error");
-        setCreateError(err instanceof Error ? err.message : "No se pudo crear la candidatura.");
-      }
-    },
-    [createForm, fetchRecords, resetCreateForm, router, validateCreateForm],
-  );
-
-  useEffect(() => {
-    searchParamsRef.current = searchParams;
-    const nextSearch = searchParams.get("search") ?? "";
-    setInputValue(nextSearch);
-  }, [searchParams]);
-
-  const filteredRecords = useMemo(() => {
-    return records.filter((candidate) => {
-      const matchesStatus = statusFilter === "all" || candidate.status === statusFilter;
-      const matchesStage = stageFilter === "all" || candidate.stage === stageFilter;
-
-      const query = debouncedInputValue.trim().toLowerCase();
-      const matchesSearch =
-        query.length === 0 ||
-        candidate.full_name.toLowerCase().includes(query) ||
-        candidate.email.toLowerCase().includes(query);
-
-      return matchesStatus && matchesStage && matchesSearch;
-    });
-  }, [debouncedInputValue, records, stageFilter, statusFilter]);
-
-  const hasRecords = useMemo(() => filteredRecords.length > 0, [filteredRecords]);
-  const totalPages = useMemo(() => {
-    if (!totalRecords) return 1;
-    return Math.ceil(totalRecords / pageLimit);
-  }, [pageLimit, totalRecords]);
-  const pageNumbers = useMemo(() => {
-    return Array.from({ length: totalPages }, (_, index) => index + 1);
-  }, [totalPages]);
-  const pageStart = useMemo(() => {
-    if (totalRecords === 0 || filteredRecords.length === 0) return 0;
-    return (currentPage - 1) * pageLimit + 1;
-  }, [currentPage, filteredRecords.length, pageLimit, totalRecords]);
-  const pageEnd = useMemo(() => {
-    if (totalRecords === 0 || filteredRecords.length === 0) return 0;
-    return Math.min((currentPage - 1) * pageLimit + filteredRecords.length, totalRecords);
-  }, [currentPage, filteredRecords.length, pageLimit, totalRecords]);
-
-  const updateParams = useCallback(
-    (next: { status?: string; stage?: string; search?: string; page?: number }) => {
-      const params = new URLSearchParams(searchParamsRef.current.toString());
-
-      if (next.status !== undefined) {
-        if (!next.status || next.status === "all") params.delete("status");
-        else params.set("status", next.status);
-      }
-
-      if (next.stage !== undefined) {
-        if (!next.stage || next.stage === "all") params.delete("stage");
-        else params.set("stage", next.stage);
-      }
-
-      if (next.search !== undefined) {
-        if (!next.search.trim()) params.delete("search");
-        else params.set("search", next.search);
-      }
-
-      if (next.page !== undefined) {
-        if (!next.page || next.page <= 1) params.delete("page");
-        else params.set("page", String(next.page));
-      }
-
-      const query = params.toString();
-      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
-    },
-    [pathname, router],
-  );
-
-  useEffect(() => {
-    updateParams({ search: debouncedInputValue, page: 1 });
-  }, [debouncedInputValue, updateParams]);
 
   return (
     <main className="mx-auto w-full max-w-[1240px] px-6 py-8">
@@ -239,10 +52,7 @@ export default function HomePage() {
         </div>
         <button
           type="button"
-          onClick={() => {
-            resetCreateForm();
-            setIsCreateModalOpen(true);
-          }}
+          onClick={openCreateModal}
           className="inline-flex items-center gap-2 rounded-lg bg-[#0037D0] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#1B4DFF]"
         >
           <PlusIcon />
@@ -250,316 +60,43 @@ export default function HomePage() {
         </button>
       </header>
 
-      <section className="mb-3 rounded-xl border border-[#C4C5D9] bg-white p-4">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center">
-          <div className="relative flex-1">
-            <input
-              placeholder="Buscar por nombre o puesto..."
-              value={inputValue}
-              onChange={(event) => setInputValue(event.target.value)}
-              className="w-full rounded-lg border border-[#C4C5D9] bg-[#F3F2FF] py-3 pl-11 pr-4 text-sm text-[#191B25] placeholder:text-[#747688]"
-            />
-            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#747688]">
-              <SearchIcon />
-            </span>
-          </div>
+      <CandidatesFilters
+        inputValue={inputValue}
+        onSearchChange={setInputValue}
+        statusFilter={statusFilter}
+        stageFilter={stageFilter}
+        onStatusChange={(value) => updateParams({ status: value, page: 1 })}
+        onStageChange={(value) => updateParams({ stage: value, page: 1 })}
+      />
 
-          <div className="flex w-full gap-3 md:w-auto">
-            <div className="relative w-full md:w-[146px]"
-            >
-              <select
-                value={statusFilter}
-                onChange={(event) => updateParams({ status: event.target.value, page: 1 })}
-                className="w-full appearance-none rounded-lg border border-[#C4C5D9] bg-[#F3F2FF] px-4 py-3 pr-8 text-sm text-[#434656]"
-              >
-                {LIST_STATUS_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#434656]">
-                <ChevronIcon direction="down" />
-              </span>
-            </div>
-            <div className="relative w-full md:w-[146px]"
-            >
-              <select
-                value={stageFilter}
-                onChange={(event) => updateParams({ stage: event.target.value, page: 1 })}
-                className="w-full appearance-none rounded-lg border border-[#C4C5D9] bg-[#F3F2FF] px-4 py-3 pr-8 text-sm text-[#434656]"
-              >
-                {LIST_STAGE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#434656]">
-                <ChevronIcon direction="down" />
-              </span>
-            </div>
-          </div>
-        </div>
-      </section>
+      <CandidatesTable
+        isLoading={isLoading}
+        error={error}
+        hasRecords={hasRecords}
+        records={records}
+        detailQuery={detailQuery}
+        pageStart={pageStart}
+        pageEnd={pageEnd}
+        totalRecords={totalRecords}
+        currentPage={currentPage}
+        totalPages={totalPages}
+        pageNumbers={pageNumbers}
+        onRetry={() => {
+          void fetchRecords();
+        }}
+        onPageChange={(page) => updateParams({ page })}
+      />
 
-      {isLoading && <LoadingSkeleton />}
-
-      {!isLoading && error && (
-        <section className="rounded-xl border border-rose-200 bg-rose-50 p-6">
-          <p className="font-medium text-rose-900">No se pudo cargar el listado.</p>
-          <p className="mt-1 text-sm text-rose-800">{error}</p>
-          <button
-            type="button"
-            onClick={() => void fetchRecords()}
-            className="mt-4 rounded-lg border border-rose-300 px-4 py-2 text-sm font-medium text-rose-800 hover:bg-rose-100"
-          >
-            Reintentar
-          </button>
-        </section>
-      )}
-
-      {!isLoading && !error && !hasRecords && (
-        <section className="rounded-xl border border-[#C4C5D9] bg-white p-10 text-center">
-          <h2 className="text-xl font-semibold text-[#191B25]">No hay candidaturas</h2>
-          <p className="mt-2 text-[#434656]">Cuando existan registros en la API, aparecerán aquí.</p>
-        </section>
-      )}
-
-      {!isLoading && !error && hasRecords && (
-        <section ref={listingRef} className="overflow-hidden rounded-xl border border-[#C4C5D9] bg-white">
-          <table className="w-full border-collapse text-left">
-            <thead>
-              <tr className="bg-[#F3F2FF] text-[12px] uppercase tracking-[0.05em] text-[#747688]">
-                <th className="px-5 py-4 font-semibold">Nombre</th>
-                <th className="px-5 py-4 font-semibold">Puesto</th>
-                <th className="px-5 py-4 font-semibold">Estado</th>
-                <th className="px-5 py-4 font-semibold">Etapa</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredRecords.map((candidate) => (
-                <tr key={candidate.id} className="relative border-t border-[#E2E1EF] transition-colors hover:bg-[#FBF8FF]">
-                  <td className="px-5 py-4">
-                    <Link
-                      href={detailQuery ? `/candidates/${candidate.id}?${detailQuery}` : `/candidates/${candidate.id}`}
-                      className="absolute inset-0 z-10"
-                      aria-label={`Ver detalle de ${candidate.full_name}`}
-                    />
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#DEE1FF] text-[11px] font-bold text-[#2F4090]">
-                        {getInitials(candidate.full_name)}
-                      </div>
-                      <div>
-                        <p className="font-semibold text-[#191B25]">{candidate.full_name}</p>
-                        <p className="text-[#747688]">{candidate.email}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-5 py-4 text-[#191B25]">{candidate.position}</td>
-                  <td className="px-5 py-4">
-                    <span
-                      className={`inline-flex whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-bold uppercase ${statusBadgeClass(candidate.status)}`}
-                    >
-                      {statusLabel(candidate.status)}
-                    </span>
-                  </td>
-                  <td className="px-5 py-4 text-[#191B25]">{stageLabel(candidate.stage)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <footer className="flex flex-col gap-3 border-t border-[#E2E1EF] bg-[#FBF8FF] px-5 py-3 md:flex-row md:items-center md:justify-between">
-            <span className="text-[#747688]">Mostrando {pageStart}-{pageEnd} de {totalRecords} resultados</span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  updateParams({ page: currentPage - 1 });
-                  listingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-                }}
-                disabled={currentPage <= 1}
-                className="rounded-md border border-[#C4C5D9] bg-white p-2 text-[#747688] hover:bg-[#F3F2FF] disabled:cursor-not-allowed disabled:opacity-50"
-                aria-label="Anterior"
-              >
-                <ChevronIcon direction="left" />
-              </button>
-              {pageNumbers.map((pageNumber) => (
-                <button
-                  key={pageNumber}
-                  type="button"
-                  onClick={() => {
-                    updateParams({ page: pageNumber });
-                    listingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-                  }}
-                  className={
-                    pageNumber === currentPage
-                      ? "rounded-md bg-[#0037D0] px-3 py-2 text-sm font-medium text-white"
-                      : "rounded-md border border-[#C4C5D9] bg-white px-3 py-2 text-sm text-[#434656] hover:bg-[#F3F2FF]"
-                  }
-                  aria-label={`Página ${pageNumber}`}
-                >
-                  {pageNumber}
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => {
-                  updateParams({ page: currentPage + 1 });
-                  listingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-                }}
-                disabled={currentPage >= totalPages}
-                className="rounded-md border border-[#C4C5D9] bg-white p-2 text-[#747688] hover:bg-[#F3F2FF] disabled:cursor-not-allowed disabled:opacity-50"
-                aria-label="Siguiente"
-              >
-                <ChevronIcon direction="right" />
-              </button>
-            </div>
-          </footer>
-        </section>
-      )}
-
-      {isCreateModalOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[#191B25]/45 px-4"
-          onClick={() => {
-            setIsCreateModalOpen(false);
-            resetCreateForm();
-          }}
-        >
-          <div
-            className="w-full max-w-2xl rounded-xl border border-[#C4C5D9] bg-white p-6 shadow-xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="mb-4 flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-2xl font-semibold text-[#191B25]">Nueva candidatura</h2>
-                <p className="mt-1 text-sm text-[#434656]">Completa los datos obligatorios para registrar la candidatura.</p>
-              </div>
-            </div>
-
-            <form onSubmit={handleCreateCandidate} className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-[#191B25]">Nombre completo *</span>
-                  <input
-                    value={createForm.full_name}
-                    onChange={(event) => {
-                      setCreateForm((prev) => ({ ...prev, full_name: event.target.value }));
-                      setCreateFormErrors((prev) => ({ ...prev, full_name: undefined }));
-                    }}
-                    className="w-full rounded-lg border border-[#C4C5D9] bg-[#F3F2FF] px-4 py-3 text-sm text-[#191B25]"
-                  />
-                  {createFormErrors.full_name && <span className="mt-1 block text-xs text-rose-700">{createFormErrors.full_name}</span>}
-                </label>
-
-                <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-[#191B25]">Email *</span>
-                  <input
-                    type="email"
-                    value={createForm.email}
-                    onChange={(event) => {
-                      setCreateForm((prev) => ({ ...prev, email: event.target.value }));
-                      setCreateFormErrors((prev) => ({ ...prev, email: undefined }));
-                    }}
-                    className="w-full rounded-lg border border-[#C4C5D9] bg-[#F3F2FF] px-4 py-3 text-sm text-[#191B25]"
-                  />
-                  {createFormErrors.email && <span className="mt-1 block text-xs text-rose-700">{createFormErrors.email}</span>}
-                </label>
-
-                <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-[#191B25]">Teléfono *</span>
-                  <input
-                    value={createForm.phone}
-                    onChange={(event) => {
-                      setCreateForm((prev) => ({ ...prev, phone: event.target.value }));
-                      setCreateFormErrors((prev) => ({ ...prev, phone: undefined }));
-                    }}
-                    className="w-full rounded-lg border border-[#C4C5D9] bg-[#F3F2FF] px-4 py-3 text-sm text-[#191B25]"
-                  />
-                  {createFormErrors.phone && <span className="mt-1 block text-xs text-rose-700">{createFormErrors.phone}</span>}
-                </label>
-
-                <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-[#191B25]">Puesto *</span>
-                  <input
-                    value={createForm.position}
-                    onChange={(event) => {
-                      setCreateForm((prev) => ({ ...prev, position: event.target.value }));
-                      setCreateFormErrors((prev) => ({ ...prev, position: undefined }));
-                    }}
-                    className="w-full rounded-lg border border-[#C4C5D9] bg-[#F3F2FF] px-4 py-3 text-sm text-[#191B25]"
-                  />
-                  {createFormErrors.position && <span className="mt-1 block text-xs text-rose-700">{createFormErrors.position}</span>}
-                </label>
-
-                <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-[#191B25]">Años de experiencia *</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={createForm.experience_years}
-                    onChange={(event) => {
-                      setCreateForm((prev) => ({ ...prev, experience_years: event.target.value }));
-                      setCreateFormErrors((prev) => ({ ...prev, experience_years: undefined }));
-                    }}
-                    className="w-full rounded-lg border border-[#C4C5D9] bg-[#F3F2FF] px-4 py-3 text-sm text-[#191B25]"
-                  />
-                  {createFormErrors.experience_years && (
-                    <span className="mt-1 block text-xs text-rose-700">{createFormErrors.experience_years}</span>
-                  )}
-                </label>
-
-                <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-[#191B25]">LinkedIn</span>
-                  <input
-                    type="url"
-                    value={createForm.linkedin_url}
-                    onChange={(event) => setCreateForm((prev) => ({ ...prev, linkedin_url: event.target.value }))}
-                    className="w-full rounded-lg border border-[#C4C5D9] bg-[#F3F2FF] px-4 py-3 text-sm text-[#191B25]"
-                  />
-                </label>
-
-                <label className="block md:col-span-2">
-                  <span className="mb-1 block text-sm font-medium text-[#191B25]">URL CV</span>
-                  <input
-                    type="url"
-                    value={createForm.cv_url}
-                    onChange={(event) => setCreateForm((prev) => ({ ...prev, cv_url: event.target.value }))}
-                    className="w-full rounded-lg border border-[#C4C5D9] bg-[#F3F2FF] px-4 py-3 text-sm text-[#191B25]"
-                  />
-                </label>
-              </div>
-
-              <div className="flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsCreateModalOpen(false);
-                    resetCreateForm();
-                  }}
-                  disabled={createState === "loading"}
-                  className="rounded-lg border border-[#C4C5D9] px-4 py-2 text-sm font-medium text-[#434656] hover:bg-[#F3F2FF] disabled:opacity-70"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={createState === "loading"}
-                  className="rounded-lg bg-[#0037D0] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1B4DFF] disabled:opacity-70"
-                >
-                  {createState === "loading" ? "Guardando..." : "Guardar candidatura"}
-                </button>
-              </div>
-
-              {createState === "success" && <p className="text-sm text-emerald-700">Candidatura creada correctamente.</p>}
-              {createState === "error" && createError && <p className="text-sm text-rose-700">{createError}</p>}
-            </form>
-          </div>
-        </div>
-      )}
+      <CreateCandidateModal
+        isOpen={isCreateModalOpen}
+        onClose={closeCreateModal}
+        formData={createForm}
+        formErrors={createFormErrors}
+        submitState={createState}
+        submitError={createError}
+        onFieldChange={handleFieldChange}
+        onSubmit={handleCreateCandidate}
+      />
     </main>
   );
 }
