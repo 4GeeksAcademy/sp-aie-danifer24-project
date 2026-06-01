@@ -15,6 +15,10 @@ const CANDIDATE_STATUSES: CandidateStatus[] = ["Active", "In process", "Hired", 
 const VACANCY_STATUSES: VacancyStatus[] = ["Open", "In progress", "Closed", "On hold"];
 
 function isValidEmail(email: string): boolean {
+	if (typeof email !== "string") {
+		return false;
+	}
+
 	const normalizedEmail = email.trim();
 	const atIndex = normalizedEmail.indexOf("@");
 	const lastDotIndex = normalizedEmail.lastIndexOf(".");
@@ -34,8 +38,15 @@ function isValidEmail(email: string): boolean {
 	return normalizedEmail.indexOf("@", atIndex + 1) === -1;
 }
 
-function validateCandidate(candidate: Candidate): { valid: boolean; errors: string[] } {
+function validateCandidate(candidate: Candidate | null | undefined): { valid: boolean; errors: string[] } {
 	const errors: string[] = [];
+
+	if (!candidate) {
+		return {
+			valid: false,
+			errors: ["El candidato es obligatorio."],
+		};
+	}
 
 	if (!candidate.id?.trim()) {
 		errors.push("El ID del candidato es obligatorio.");
@@ -99,8 +110,15 @@ function validateCandidate(candidate: Candidate): { valid: boolean; errors: stri
 	};
 }
 
-function validateVacancy(vacancy: Vacancy): { valid: boolean; errors: string[] } {
+function validateVacancy(vacancy: Vacancy | null | undefined): { valid: boolean; errors: string[] } {
 	const errors: string[] = [];
+
+	if (!vacancy) {
+		return {
+			valid: false,
+			errors: ["La vacante es obligatoria."],
+		};
+	}
 
 	if (!vacancy.id?.trim()) {
 		errors.push("El ID de la vacante es obligatorio.");

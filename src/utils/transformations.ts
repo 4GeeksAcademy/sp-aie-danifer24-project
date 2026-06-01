@@ -13,9 +13,15 @@ const SENIORITY_ORDER: SeniorityLevel[] = [
 const ENGLISH_LEVEL_ORDER: EnglishLevel[] = ["A1", "A2", "B1", "B2", "C1", "C2", "Native"];
 
 function getSkillsScore(candidate: Candidate, vacancy: Vacancy): number {
-	const normalizedCandidateSkills = candidate.skills.map(skill => skill.toLowerCase());
-	const requiredSkills = vacancy.requiredSkills.map(skill => skill.toLowerCase());
-	const preferredSkills = vacancy.preferredSkills.map(skill => skill.toLowerCase());
+	const normalizedCandidateSkills = Array.isArray(candidate.skills)
+		? candidate.skills.map(skill => skill.toLowerCase())
+		: [];
+	const requiredSkills = Array.isArray(vacancy.requiredSkills)
+		? vacancy.requiredSkills.map(skill => skill.toLowerCase())
+		: [];
+	const preferredSkills = Array.isArray(vacancy.preferredSkills)
+		? vacancy.preferredSkills.map(skill => skill.toLowerCase())
+		: [];
 
 	let score = 0;
 
@@ -34,15 +40,17 @@ function getSkillsScore(candidate: Candidate, vacancy: Vacancy): number {
 }
 
 function getExperienceScore(candidate: Candidate, vacancy: Vacancy): number {
-	const years = candidate.yearsOfExperience;
+	const years = Number.isFinite(candidate.yearsOfExperience) ? candidate.yearsOfExperience : 0;
+	const minYears = Number.isFinite(vacancy.minYearsExperience) ? vacancy.minYearsExperience : 0;
+	const maxYears = Number.isFinite(vacancy.maxYearsExperience) ? vacancy.maxYearsExperience : 0;
 
-	if (years >= vacancy.minYearsExperience && years <= vacancy.maxYearsExperience) {
+	if (years >= minYears && years <= maxYears) {
 		return 20;
 	}
 
-	const distanceToRange = years < vacancy.minYearsExperience
-		? vacancy.minYearsExperience - years
-		: years - vacancy.maxYearsExperience;
+	const distanceToRange = years < minYears
+		? minYears - years
+		: years - maxYears;
 
 	return distanceToRange <= 2 ? 10 : 0;
 }
@@ -66,20 +74,26 @@ function getEnglishScore(candidate: Candidate, vacancy: Vacancy): number {
 }
 
 function getSalaryScore(candidate: Candidate, vacancy: Vacancy): number {
-	const expectedSalary = candidate.expectedSalary;
+	const expectedSalary = Number.isFinite(candidate.expectedSalary) ? candidate.expectedSalary : 0;
+	const salaryMin = Number.isFinite(vacancy.salaryRangeMin) ? vacancy.salaryRangeMin : 0;
+	const salaryMax = Number.isFinite(vacancy.salaryRangeMax) ? vacancy.salaryRangeMax : 0;
 
-	if (expectedSalary >= vacancy.salaryRangeMin && expectedSalary <= vacancy.salaryRangeMax) {
+	if (expectedSalary >= salaryMin && expectedSalary <= salaryMax) {
 		return 10;
 	}
 
-	if (expectedSalary > vacancy.salaryRangeMax && expectedSalary <= vacancy.salaryRangeMax * 1.2) {
+	if (expectedSalary > salaryMax && expectedSalary <= salaryMax * 1.2) {
 		return 5;
 	}
 
 	return 0;
 }
 
-function calculateCandidateScore(candidate: Candidate, vacancy: Vacancy): number {
+function calculateCandidateScore(candidate: Candidate | null | undefined, vacancy: Vacancy | null | undefined): number {
+	if (!candidate || !vacancy) {
+		return 0;
+	}
+
 	const rawScore = getSkillsScore(candidate, vacancy)
 		+ getExperienceScore(candidate, vacancy)
 		+ getSeniorityScore(candidate, vacancy)
@@ -89,7 +103,11 @@ function calculateCandidateScore(candidate: Candidate, vacancy: Vacancy): number
 	return Math.min(100, rawScore);
 }
 
-function rankCandidatesForVacancy(candidates: Candidate[], vacancy: Vacancy): Array<{ candidate: Candidate; score: number }> {
+function rankCandidatesForVacancy(candidates: Candidate[] | null | undefined, vacancy: Vacancy | null | undefined): Array<{ candidate: Candidate; score: number }> {
+	if (!Array.isArray(candidates) || !vacancy) {
+		return [];
+	}
+
 	return candidates
 		.map(candidate => ({
 			candidate,
@@ -98,7 +116,7 @@ function rankCandidatesForVacancy(candidates: Candidate[], vacancy: Vacancy): Ar
 		.sort((a, b) => b.score - a.score);
 }
 
-function groupCandidatesBySeniority(candidates: Candidate[]): Record<SeniorityLevel, Candidate[]> {
+function groupCandidatesBySeniority(candidates: Candidate[] | null | undefined): Record<SeniorityLevel, Candidate[]> {
 	const groupedCandidates: Record<SeniorityLevel, Candidate[]> = {
 		"Junior": [],
 		"Semi-Senior": [],
@@ -106,6 +124,10 @@ function groupCandidatesBySeniority(candidates: Candidate[]): Record<SeniorityLe
 		"Lead": [],
 		"Executive": [],
 	};
+
+	if (!Array.isArray(candidates)) {
+		return groupedCandidates;
+	}
 
 	for (const candidate of candidates) {
 		groupedCandidates[candidate.seniority].push(candidate);
@@ -116,13 +138,17 @@ function groupCandidatesBySeniority(candidates: Candidate[]): Record<SeniorityLe
 
 // Aggregations and Reports
 
-function countCandidatesByStatus(candidates: Candidate[]): Record<CandidateStatus, number> {
+function countCandidatesByStatus(candidates: Candidate[] | null | undefined): Record<CandidateStatus, number> {
 	const countsByStatus: Record<CandidateStatus, number> = {
 		"Active": 0,
 		"In process": 0,
 		"Hired": 0,
 		"Inactive": 0,
 	};
+
+	if (!Array.isArray(candidates)) {
+		return countsByStatus;
+	}
 
 	for (const candidate of candidates) {
 		countsByStatus[candidate.status] += 1;
@@ -131,26 +157,31 @@ function countCandidatesByStatus(candidates: Candidate[]): Record<CandidateStatu
 	return countsByStatus;
 }
 
-function calculateAverageSalary(candidates: Candidate[]): number {
-	if (candidates.length === 0) {
+function calculateAverageSalary(candidates: Candidate[] | null | undefined): number {
+	if (!Array.isArray(candidates) || candidates.length === 0) {
 		return 0;
 	}
 
-	const totalSalary = candidates.reduce((sum, candidate) => sum + candidate.expectedSalary, 0);
+	const totalSalary = candidates.reduce(
+		(sum, candidate) => sum + (Number.isFinite(candidate.expectedSalary) ? candidate.expectedSalary : 0),
+		0
+	);
 	const average = totalSalary / candidates.length;
 
 	return Number(average.toFixed(2));
 }
 
-function findTopSkills(candidates: Candidate[], topN: number): Array<{ skill: string; count: number }> {
-	if (topN <= 0) {
+function findTopSkills(candidates: Candidate[] | null | undefined, topN: number): Array<{ skill: string; count: number }> {
+	if (!Array.isArray(candidates) || topN <= 0) {
 		return [];
 	}
 
 	const skillStats = new Map<string, { skill: string; count: number }>();
 
 	for (const candidate of candidates) {
-		const uniqueCandidateSkills = new Set(candidate.skills.map(skill => skill.trim()).filter(Boolean));
+		const uniqueCandidateSkills = new Set(
+			(Array.isArray(candidate.skills) ? candidate.skills : []).map(skill => skill.trim()).filter(Boolean)
+		);
 
 		for (const rawSkill of uniqueCandidateSkills) {
 			const normalizedSkill = rawSkill.toLowerCase();
@@ -170,8 +201,8 @@ function findTopSkills(candidates: Candidate[], topN: number): Array<{ skill: st
 		.slice(0, topN);
 }
 
-function calculateVacancyFillRate(processes: SelectionProcess[]): number {
-	if (processes.length === 0) {
+function calculateVacancyFillRate(processes: SelectionProcess[] | null | undefined): number {
+	if (!Array.isArray(processes) || processes.length === 0) {
 		return 0;
 	}
 
