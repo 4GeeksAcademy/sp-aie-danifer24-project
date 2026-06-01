@@ -1,4 +1,4 @@
-import { Candidate } from "../types/models.ts";
+import { Candidate } from "../types/models";
 
 /*Realiza búsqueda lineal para encontrar un candidato por ID
 Retorna el candidato si se encuentra, null en caso contrario*/
@@ -48,6 +48,8 @@ function binarySearchCandidateBySalary(sortedCandidates: Candidate[], targetSala
 
     return -1;
 }
+
+export { findCandidateById, findCandidateByEmail, binarySearchCandidateBySalary };
 
 
 

@@ -3,11 +3,13 @@ import { AvailabilityStatus, Candidate, SeniorityLevel } from "../types/models";
 /*Retorna candidatos que tienen TODAS las habilidades requeridas
 El matching de habilidades debe ser case-insensitive*/
 function filterCandidatesBySkills(candidates: Candidate[], requiredSkills: string[]): Candidate[] {
-    return candidates.filter(c =>
-        requiredSkills.every(skill =>
-            c.skills.includes(skill)
-        )
-    )
+    return candidates.filter(c => {
+        const normalizedSkills = c.skills.map(skill => skill.toLowerCase());
+
+        return requiredSkills.every(skill =>
+            normalizedSkills.includes(skill.toLowerCase())
+        );
+    });
 }
 
 //Retorna candidatos con el nivel de seniority especificado
@@ -35,6 +37,14 @@ function sortCandidatesByExperience(candidates: Candidate[], order: "asc" | "des
         order === "asc" ? a.yearsOfExperience - b.yearsOfExperience : b.yearsOfExperience - a.yearsOfExperience
     );
 }
+
+export {
+    filterCandidatesBySkills,
+    filterCandidatesBySeniority,
+    filterCandidatesByAvailability,
+    sortCandidatesBySalary,
+    sortCandidatesByExperience,
+};
 
 
 
