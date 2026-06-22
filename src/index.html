@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Nexova Lab | Pruebas Manuales</title>
+	<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+<body class="min-h-screen bg-[radial-gradient(circle_at_top,_#ffe7d6,_#fff8f0_40%,_#eef8ff_75%)] text-slate-900">
+	<main class="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+		<section class="rounded-3xl border border-orange-200/70 bg-white/85 p-6 shadow-[0_20px_70px_-30px_rgba(225,110,36,0.45)] backdrop-blur">
+			<p class="inline-block rounded-full border border-cyan-300 bg-cyan-100 px-3 py-1 text-xs font-semibold tracking-wide text-cyan-900">Hito 2 · Programacion</p>
+			<h1 class="mt-3 text-3xl font-black leading-tight text-slate-900 sm:text-4xl">Nexova Testing Playground</h1>
+			<p class="mt-3 max-w-3xl text-sm text-slate-600 sm:text-base">
+				Panel manual para probar funciones de filtros, busquedas, scoring, validaciones y reportes.
+			</p>
+		</section>
+
+		<section class="mt-6 grid gap-6 lg:grid-cols-[1.2fr_1fr]">
+			<article class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+				<div class="flex items-center justify-between gap-3">
+					<h2 class="text-xl font-bold">Controles de Prueba</h2>
+					<button id="btnReset" class="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100">Reset salida</button>
+				</div>
+
+				<div class="mt-5 grid gap-4 md:grid-cols-2">
+					<div class="rounded-2xl border border-slate-200 p-4">
+						<h3 class="text-sm font-bold uppercase tracking-wide text-slate-600">Busqueda / Filtros</h3>
+						<div class="mt-3 grid gap-2">
+							<button id="btnFindById" class="rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800">Buscar por ID C-2024-0452</button>
+							<button id="btnFindByEmail" class="rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800">Buscar por email de Carolina</button>
+							<button id="btnFilterSkills" class="rounded-xl bg-amber-500 px-3 py-2 text-sm font-semibold text-amber-950 hover:bg-amber-400">Filtrar skills TypeScript + Node.js</button>
+							<button id="btnFilterSeniority" class="rounded-xl bg-amber-500 px-3 py-2 text-sm font-semibold text-amber-950 hover:bg-amber-400">Filtrar seniority Senior</button>
+							<button id="btnFilterAvailability" class="rounded-xl bg-amber-500 px-3 py-2 text-sm font-semibold text-amber-950 hover:bg-amber-400">Filtrar disponibilidad Immediate/2 weeks</button>
+						</div>
+					</div>
+
+					<div class="rounded-2xl border border-slate-200 p-4">
+						<h3 class="text-sm font-bold uppercase tracking-wide text-slate-600">Ordenamiento</h3>
+						<div class="mt-3 grid gap-2">
+							<button id="btnSortSalaryAsc" class="rounded-xl bg-cyan-600 px-3 py-2 text-sm font-semibold text-white hover:bg-cyan-500">Ordenar salario asc</button>
+							<button id="btnSortSalaryDesc" class="rounded-xl bg-cyan-600 px-3 py-2 text-sm font-semibold text-white hover:bg-cyan-500">Ordenar salario desc</button>
+							<button id="btnSortExperienceDesc" class="rounded-xl bg-cyan-600 px-3 py-2 text-sm font-semibold text-white hover:bg-cyan-500">Ordenar experiencia desc</button>
+						</div>
+					</div>
+
+					<div class="rounded-2xl border border-slate-200 p-4">
+						<h3 class="text-sm font-bold uppercase tracking-wide text-slate-600">Scoring / Matching</h3>
+						<div class="mt-3 grid gap-2">
+							<button id="btnScoreMaria" class="rounded-xl bg-rose-500 px-3 py-2 text-sm font-semibold text-rose-950 hover:bg-rose-400">Score Maria vs vacante</button>
+							<button id="btnRankCandidates" class="rounded-xl bg-rose-500 px-3 py-2 text-sm font-semibold text-rose-950 hover:bg-rose-400">Ranking de candidatos</button>
+							<button id="btnGroupSeniority" class="rounded-xl bg-rose-500 px-3 py-2 text-sm font-semibold text-rose-950 hover:bg-rose-400">Agrupar por seniority</button>
+						</div>
+					</div>
+
+					<div class="rounded-2xl border border-slate-200 p-4">
+						<h3 class="text-sm font-bold uppercase tracking-wide text-slate-600">Validaciones / Reportes</h3>
+						<div class="mt-3 grid gap-2">
+							<button id="btnValidateCandidate" class="rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-500">Validar candidato (ok + error)</button>
+							<button id="btnValidateVacancy" class="rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-500">Validar vacante</button>
+							<button id="btnCandidateStatus" class="rounded-xl bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-500">Conteo por estado</button>
+							<button id="btnAverageSalary" class="rounded-xl bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-500">Salario promedio</button>
+							<button id="btnTopSkills" class="rounded-xl bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-500">Top 3 skills</button>
+							<button id="btnFillRate" class="rounded-xl bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-500">Vacancy fill rate</button>
+						</div>
+					</div>
+				</div>
+			</article>
+
+			<article class="rounded-3xl border border-slate-200 bg-slate-950 p-5 text-slate-100 shadow-xl shadow-slate-900/20">
+				<div class="flex items-center justify-between gap-3">
+					<h2 class="text-lg font-bold">Salida JSON</h2>
+					<span id="resultLabel" class="rounded-full bg-slate-800 px-3 py-1 text-xs font-semibold text-cyan-300">Listo</span>
+				</div>
+				<pre id="result" class="mt-4 max-h-[520px] overflow-auto rounded-2xl border border-slate-800 bg-slate-900 p-4 text-xs leading-5 text-cyan-100"></pre>
+			</article>
+		</section>
+	</main>
+
+	<script>
+		const sampleCandidates = [
+			{
+				id: "C-2024-0451",
+				fullName: "María González",
+				email: "maria.gonzalez@email.com",
+				phone: "+56912345678",
+				yearsOfExperience: 5,
+				skills: ["TypeScript", "React", "Node.js", "PostgreSQL"],
+				englishLevel: "B2",
+				seniority: "Semi-Senior",
+				currentSalary: 3500,
+				expectedSalary: 4200,
+				availability: "1 month",
+				location: "Valencia, España",
+				remoteOnly: false,
+				status: "Active",
+			},
+			{
+				id: "C-2024-0452",
+				fullName: "Juan Pérez",
+				email: "juan.perez@email.com",
+				phone: "+56987654321",
+				yearsOfExperience: 3,
+				skills: ["JavaScript", "React", "CSS", "HTML"],
+				englishLevel: "B1",
+				seniority: "Junior",
+				currentSalary: 2200,
+				expectedSalary: 2800,
+				availability: "Immediate",
+				location: "Miami, Florida, Estados Unidos",
+				remoteOnly: true,
+				status: "Active",
+			},
+			{
+				id: "C-2024-0453",
+				fullName: "Carolina Silva",
+				email: "carolina.silva@email.com",
+				phone: "+56911223344",
+				yearsOfExperience: 8,
+				skills: ["TypeScript", "Node.js", "PostgreSQL", "Docker", "AWS"],
+				englishLevel: "C1",
+				seniority: "Senior",
+				currentSalary: 5500,
+				expectedSalary: 6500,
+				availability: "2 weeks",
+				location: "Valencia, España",
+				remoteOnly: false,
+				status: "Active",
+			},
+		];
+
+		const sampleVacancy = {
+			id: "V-2024-0892",
+			title: "Senior Full-Stack Developer",
+			companyName: "Nexova Client",
+			requiredSkills: ["TypeScript", "Node.js", "PostgreSQL"],
+			preferredSkills: ["Docker", "AWS", "React"],
+			minYearsExperience: 4,
+			maxYearsExperience: 8,
+			requiredEnglishLevel: "B2",
+			requiredSeniority: "Senior",
+			salaryRangeMin: 5000,
+			salaryRangeMax: 6500,
+			isRemote: false,
+			location: "Valencia, Espana",
+			status: "Open",
+		};
+
+		const sampleProcesses = [
+			{ id: "SP-1", candidateId: "C-2024-0451", vacancyId: "V-2024-0892", stage: "Interview", score: 72, notes: "", createdAt: new Date(), updatedAt: new Date() },
+			{ id: "SP-2", candidateId: "C-2024-0452", vacancyId: "V-2024-0892", stage: "Rejected", score: 54, notes: "", createdAt: new Date(), updatedAt: new Date() },
+			{ id: "SP-3", candidateId: "C-2024-0453", vacancyId: "V-2024-0892", stage: "Hired", score: 93, notes: "", createdAt: new Date(), updatedAt: new Date() },
+		];
+
+		const SENIORITY_ORDER = ["Junior", "Semi-Senior", "Senior", "Lead", "Executive"];
+		const ENGLISH_LEVEL_ORDER = ["A1", "A2", "B1", "B2", "C1", "C2", "Native"];
+		const AVAILABILITY = ["Immediate", "2 weeks", "1 month", "Not available"];
+		const CANDIDATE_STATUS = ["Active", "In process", "Hired", "Inactive"];
+		const VACANCY_STATUS = ["Open", "In progress", "Closed", "On hold"];
+
+		function filterCandidatesBySkills(candidates, requiredSkills) {
+			const normalizedRequired = requiredSkills.map(s => s.toLowerCase());
+			return candidates.filter(c => {
+				const candidateSkills = c.skills.map(s => s.toLowerCase());
+				return normalizedRequired.every(skill => candidateSkills.includes(skill));
+			});
+		}
+
+		function filterCandidatesBySeniority(candidates, seniority) {
+			return candidates.filter(c => c.seniority === seniority);
+		}
+
+		function filterCandidatesByAvailability(candidates, availability) {
+			return candidates.filter(c => availability.includes(c.availability));
+		}
+
+		function sortCandidatesBySalary(candidates, order) {
+			return [...candidates].sort((a, b) => order === "asc" ? a.expectedSalary - b.expectedSalary : b.expectedSalary - a.expectedSalary);
+		}
+
+		function sortCandidatesByExperience(candidates, order) {
+			return [...candidates].sort((a, b) => order === "asc" ? a.yearsOfExperience - b.yearsOfExperience : b.yearsOfExperience - a.yearsOfExperience);
+		}
+
+		function findCandidateById(candidates, id) {
+			for (const candidate of candidates) {
+				if (candidate.id === id) {
+					return candidate;
+				}
+			}
+			return null;
+		}
+
+		function findCandidateByEmail(candidates, email) {
+			const normalized = email.toLowerCase();
+			for (const candidate of candidates) {
+				if (candidate.email.toLowerCase() === normalized) {
+					return candidate;
+				}
+			}
+			return null;
+		}
+
+		function getSkillsScore(candidate, vacancy) {
+			const candidateSkills = candidate.skills.map(skill => skill.toLowerCase());
+			const requiredSkills = vacancy.requiredSkills.map(skill => skill.toLowerCase());
+			const preferredSkills = vacancy.preferredSkills.map(skill => skill.toLowerCase());
+			let score = 0;
+
+			const matchedRequiredSkills = requiredSkills.filter(skill => candidateSkills.includes(skill)).length;
+
+			if (requiredSkills.length === 0 || matchedRequiredSkills === requiredSkills.length) {
+				score += 40;
+			} else if (matchedRequiredSkills / requiredSkills.length >= 0.5) {
+				score += 20;
+			}
+
+			const matchedPreferredSkills = preferredSkills.filter(skill => candidateSkills.includes(skill)).length;
+			score += Math.min(matchedPreferredSkills * 10, 20);
+			return score;
+		}
+
+		function getExperienceScore(candidate, vacancy) {
+			const years = candidate.yearsOfExperience;
+			if (years >= vacancy.minYearsExperience && years <= vacancy.maxYearsExperience) {
+				return 20;
+			}
+
+			const distanceToRange = years < vacancy.minYearsExperience
+				? vacancy.minYearsExperience - years
+				: years - vacancy.maxYearsExperience;
+
+			return distanceToRange <= 2 ? 10 : 0;
+		}
+
+		function getSeniorityScore(candidate, vacancy) {
+			const candidateLevel = SENIORITY_ORDER.indexOf(candidate.seniority);
+			const vacancyLevel = SENIORITY_ORDER.indexOf(vacancy.requiredSeniority);
+
+			if (candidateLevel === vacancyLevel) {
+				return 15;
+			}
+			return Math.abs(candidateLevel - vacancyLevel) === 1 ? 7 : 0;
+		}
+
+		function getEnglishScore(candidate, vacancy) {
+			const candidateLevel = ENGLISH_LEVEL_ORDER.indexOf(candidate.englishLevel);
+			const requiredLevel = ENGLISH_LEVEL_ORDER.indexOf(vacancy.requiredEnglishLevel);
+			return candidateLevel >= requiredLevel ? 15 : 0;
+		}
+
+		function getSalaryScore(candidate, vacancy) {
+			const expectedSalary = candidate.expectedSalary;
+			if (expectedSalary >= vacancy.salaryRangeMin && expectedSalary <= vacancy.salaryRangeMax) {
+				return 10;
+			}
+			if (expectedSalary > vacancy.salaryRangeMax && expectedSalary <= vacancy.salaryRangeMax * 1.2) {
+				return 5;
+			}
+			return 0;
+		}
+
+		function calculateCandidateScore(candidate, vacancy) {
+			const rawScore = getSkillsScore(candidate, vacancy)
+				+ getExperienceScore(candidate, vacancy)
+				+ getSeniorityScore(candidate, vacancy)
+				+ getEnglishScore(candidate, vacancy)
+				+ getSalaryScore(candidate, vacancy);
+
+			return Math.min(100, rawScore);
+		}
+
+		function rankCandidatesForVacancy(candidates, vacancy) {
+			return candidates
+				.map(candidate => ({ candidate, score: calculateCandidateScore(candidate, vacancy) }))
+				.sort((a, b) => b.score - a.score);
+		}
+
+		function groupCandidatesBySeniority(candidates) {
+			const grouped = {
+				"Junior": [],
+				"Semi-Senior": [],
+				"Senior": [],
+				"Lead": [],
+				"Executive": [],
+			};
+
+			for (const candidate of candidates) {
+				grouped[candidate.seniority].push(candidate);
+			}
+
+			return grouped;
+		}
+
+		function countCandidatesByStatus(candidates) {
+			const countsByStatus = {
+				"Active": 0,
+				"In process": 0,
+				"Hired": 0,
+				"Inactive": 0,
+			};
+
+			for (const candidate of candidates) {
+				countsByStatus[candidate.status] += 1;
+			}
+
+			return countsByStatus;
+		}
+
+		function calculateAverageSalary(candidates) {
+			if (candidates.length === 0) {
+				return 0;
+			}
+
+			const totalSalary = candidates.reduce((sum, candidate) => sum + candidate.expectedSalary, 0);
+			return Number((totalSalary / candidates.length).toFixed(2));
+		}
+
+		function findTopSkills(candidates, topN) {
+			if (topN <= 0) {
+				return [];
+			}
+
+			const skillStats = new Map();
+
+			for (const candidate of candidates) {
+				const uniqueSkills = new Set(candidate.skills.map(skill => skill.trim()).filter(Boolean));
+				for (const rawSkill of uniqueSkills) {
+					const normalizedSkill = rawSkill.toLowerCase();
+					const current = skillStats.get(normalizedSkill);
+					if (!current) {
+						skillStats.set(normalizedSkill, { skill: rawSkill, count: 1 });
+					} else {
+						current.count += 1;
+					}
+				}
+			}
+
+			return Array.from(skillStats.values())
+				.sort((a, b) => b.count - a.count || a.skill.localeCompare(b.skill))
+				.slice(0, topN);
+		}
+
+		function calculateVacancyFillRate(processes) {
+			if (processes.length === 0) {
+				return 0;
+			}
+
+			const hiredCount = processes.filter(process => process.stage === "Hired").length;
+			return Number(((hiredCount / processes.length) * 100).toFixed(2));
+		}
+
+		function isValidEmail(email) {
+			const normalizedEmail = email.trim();
+			const atIndex = normalizedEmail.indexOf("@");
+			const lastDotIndex = normalizedEmail.lastIndexOf(".");
+
+			if (atIndex <= 0) {
+				return false;
+			}
+			if (lastDotIndex <= atIndex + 1) {
+				return false;
+			}
+			if (lastDotIndex === normalizedEmail.length - 1) {
+				return false;
+			}
+
+			return normalizedEmail.indexOf("@", atIndex + 1) === -1;
+		}
+
+		function validateCandidate(candidate) {
+			const errors = [];
+
+			if (!candidate.id || !candidate.id.trim()) errors.push("ID obligatorio.");
+			if (!candidate.fullName || !candidate.fullName.trim()) errors.push("Nombre obligatorio.");
+			if (!candidate.email || !isValidEmail(candidate.email)) errors.push("Email invalido.");
+			if (!candidate.phone || !candidate.phone.trim()) errors.push("Telefono obligatorio.");
+			if (!Number.isFinite(candidate.yearsOfExperience) || candidate.yearsOfExperience < 0) errors.push("Experiencia invalida.");
+			if (!Array.isArray(candidate.skills) || candidate.skills.length === 0) errors.push("Debe tener skills.");
+			if (!ENGLISH_LEVEL_ORDER.includes(candidate.englishLevel)) errors.push("English level invalido.");
+			if (!SENIORITY_ORDER.includes(candidate.seniority)) errors.push("Seniority invalido.");
+			if (!Number.isFinite(candidate.currentSalary) || candidate.currentSalary < 0) errors.push("Current salary invalido.");
+			if (!Number.isFinite(candidate.expectedSalary) || candidate.expectedSalary < 0) errors.push("Expected salary invalido.");
+			if (candidate.expectedSalary < candidate.currentSalary) errors.push("Expected salary no puede ser menor al actual.");
+			if (!AVAILABILITY.includes(candidate.availability)) errors.push("Disponibilidad invalida.");
+			if (!candidate.location || !candidate.location.trim()) errors.push("Ubicacion obligatoria.");
+			if (!CANDIDATE_STATUS.includes(candidate.status)) errors.push("Status invalido.");
+
+			return { valid: errors.length === 0, errors };
+		}
+
+		function validateVacancy(vacancy) {
+			const errors = [];
+
+			if (!vacancy.id || !vacancy.id.trim()) errors.push("ID de vacante obligatorio.");
+			if (!vacancy.title || !vacancy.title.trim()) errors.push("Titulo obligatorio.");
+			if (!vacancy.companyName || !vacancy.companyName.trim()) errors.push("Empresa obligatoria.");
+			if (!Array.isArray(vacancy.requiredSkills) || vacancy.requiredSkills.length === 0) errors.push("requiredSkills obligatorio.");
+			if (!Array.isArray(vacancy.preferredSkills)) errors.push("preferredSkills debe ser array.");
+			if (!Number.isFinite(vacancy.minYearsExperience) || vacancy.minYearsExperience < 0) errors.push("minYearsExperience invalido.");
+			if (!Number.isFinite(vacancy.maxYearsExperience) || vacancy.maxYearsExperience < 0) errors.push("maxYearsExperience invalido.");
+			if (vacancy.maxYearsExperience < vacancy.minYearsExperience) errors.push("maxYearsExperience no puede ser menor a minYearsExperience.");
+			if (!ENGLISH_LEVEL_ORDER.includes(vacancy.requiredEnglishLevel)) errors.push("requiredEnglishLevel invalido.");
+			if (!SENIORITY_ORDER.includes(vacancy.requiredSeniority)) errors.push("requiredSeniority invalido.");
+			if (!Number.isFinite(vacancy.salaryRangeMin) || vacancy.salaryRangeMin < 0) errors.push("salaryRangeMin invalido.");
+			if (!Number.isFinite(vacancy.salaryRangeMax) || vacancy.salaryRangeMax < 0) errors.push("salaryRangeMax invalido.");
+			if (vacancy.salaryRangeMax < vacancy.salaryRangeMin) errors.push("salaryRangeMax no puede ser menor a salaryRangeMin.");
+			if (!vacancy.isRemote && (!vacancy.location || !vacancy.location.trim())) errors.push("Location obligatorio para vacante no remota.");
+			if (!VACANCY_STATUS.includes(vacancy.status)) errors.push("Status de vacante invalido.");
+
+			return { valid: errors.length === 0, errors };
+		}
+
+		const resultEl = document.getElementById("result");
+		const resultLabelEl = document.getElementById("resultLabel");
+
+		function showResult(label, data) {
+			resultLabelEl.textContent = label;
+			resultEl.textContent = JSON.stringify(data, null, 2);
+		}
+
+		document.getElementById("btnReset").addEventListener("click", () => showResult("Listo", { message: "Salida limpia" }));
+		document.getElementById("btnFindById").addEventListener("click", () => showResult("findCandidateById", findCandidateById(sampleCandidates, "C-2024-0452")));
+		document.getElementById("btnFindByEmail").addEventListener("click", () => showResult("findCandidateByEmail", findCandidateByEmail(sampleCandidates, "carolina.silva@email.com")));
+		document.getElementById("btnFilterSkills").addEventListener("click", () => showResult("filterCandidatesBySkills", filterCandidatesBySkills(sampleCandidates, ["TypeScript", "Node.js"])));
+		document.getElementById("btnFilterSeniority").addEventListener("click", () => showResult("filterCandidatesBySeniority", filterCandidatesBySeniority(sampleCandidates, "Senior")));
+		document.getElementById("btnFilterAvailability").addEventListener("click", () => showResult("filterCandidatesByAvailability", filterCandidatesByAvailability(sampleCandidates, ["Immediate", "2 weeks"])));
+		document.getElementById("btnSortSalaryAsc").addEventListener("click", () => showResult("sortCandidatesBySalary asc", sortCandidatesBySalary(sampleCandidates, "asc")));
+		document.getElementById("btnSortSalaryDesc").addEventListener("click", () => showResult("sortCandidatesBySalary desc", sortCandidatesBySalary(sampleCandidates, "desc")));
+		document.getElementById("btnSortExperienceDesc").addEventListener("click", () => showResult("sortCandidatesByExperience desc", sortCandidatesByExperience(sampleCandidates, "desc")));
+		document.getElementById("btnScoreMaria").addEventListener("click", () => showResult("calculateCandidateScore", {
+			candidate: sampleCandidates[0].fullName,
+			vacancy: sampleVacancy.title,
+			score: calculateCandidateScore(sampleCandidates[0], sampleVacancy),
+		}));
+		document.getElementById("btnRankCandidates").addEventListener("click", () => showResult("rankCandidatesForVacancy", rankCandidatesForVacancy(sampleCandidates, sampleVacancy)));
+		document.getElementById("btnGroupSeniority").addEventListener("click", () => showResult("groupCandidatesBySeniority", groupCandidatesBySeniority(sampleCandidates)));
+
+		document.getElementById("btnValidateCandidate").addEventListener("click", () => {
+			const invalidCandidate = {
+				...sampleCandidates[0],
+				email: "maria.email.com",
+				expectedSalary: -1,
+			};
+			showResult("validateCandidate", {
+				validCandidate: validateCandidate(sampleCandidates[0]),
+				invalidCandidate: validateCandidate(invalidCandidate),
+			});
+		});
+
+		document.getElementById("btnValidateVacancy").addEventListener("click", () => {
+			const invalidVacancy = {
+				...sampleVacancy,
+				salaryRangeMin: 7000,
+				salaryRangeMax: 6500,
+			};
+			showResult("validateVacancy", {
+				validVacancy: validateVacancy(sampleVacancy),
+				invalidVacancy: validateVacancy(invalidVacancy),
+			});
+		});
+
+		document.getElementById("btnCandidateStatus").addEventListener("click", () => showResult("countCandidatesByStatus", countCandidatesByStatus(sampleCandidates)));
+		document.getElementById("btnAverageSalary").addEventListener("click", () => showResult("calculateAverageSalary", calculateAverageSalary(sampleCandidates)));
+		document.getElementById("btnTopSkills").addEventListener("click", () => showResult("findTopSkills", findTopSkills(sampleCandidates, 3)));
+		document.getElementById("btnFillRate").addEventListener("click", () => showResult("calculateVacancyFillRate", calculateVacancyFillRate(sampleProcesses)));
+
+		showResult("Datos iniciales", { sampleCandidates, sampleVacancy, sampleProcesses });
+	</script>
+</body>
+</html>

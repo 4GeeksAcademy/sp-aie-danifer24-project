@@ -1,0 +1,7 @@
+{
+  "name": "sp-aie-danifer24-project",
+  "private": true,
+  "scripts": {
+    "typecheck": "npx -p typescript tsc --noEmit --target ES2020 --module ES2020 --moduleResolution bundler src/types/models.ts src/utils/search.ts src/utils/collections.ts src/utils/transformations.ts src/utils/validations.ts"
+  }
+}

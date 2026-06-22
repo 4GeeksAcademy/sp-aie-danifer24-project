@@ -64,6 +64,18 @@ ai-engineering-company-project-monorepo/
 
 ---
 
+## Validación de TypeScript
+
+Durante el desarrollo puedes validar tipos con:
+
+```bash
+npm run typecheck
+```
+
+Este comando ejecuta `tsc --noEmit` sobre los utilitarios del hito de programación.
+
+---
+
 ## Hitos (referencia)
 
 | Hito | Enfoque       | Entregables típicos                              |
