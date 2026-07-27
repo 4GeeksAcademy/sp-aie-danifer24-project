@@ -10,4 +10,4 @@ Cada subcarpeta dentro de `uis/` debe corresponder a **una interfaz de usuario c
 ## Interfaces actuales
 
 - `website`: web corporativa de Nexova (Hito 1), migrada a Next.js + TypeScript.
-- `backoffice`: reservado para la app interna del Hito 2 (migracion pendiente).
+- `backoffice`: app interna de Nexova (Hito 2), migrada a Next.js + TypeScript.
