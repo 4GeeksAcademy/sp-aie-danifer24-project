@@ -7,4 +7,8 @@ Each subfolder inside `services/` must correspond to **one specific service** (f
 - **Main purpose**: to centralize all the backend logic, APIs, and queue consumers that support the company's use cases.
 - **Recommendation**: document in this file (or in sub-READMEs) the services you add, their objective, the technology used, and how to run them.
 
+## Available services
+
+- [`api/`](./api/README.md): FastAPI service for validating and analyzing incident CSV files, downloading the latest report, and serving the static backoffice.
+
 > _Spanish version: [README.es.md](./README.es.md)._
