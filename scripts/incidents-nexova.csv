@@ -1,0 +1,101 @@
+ticket_id,date,client_company,category,description,agent_id,status,customer_email,satisfaction_score
+NXV-000001,2026-07-01,Acme Retail,TECHNICAL,Incident report 001 for technical follow-up,AGT-01,CLOSED,user001@example.com,1
+NXV-000002,2026-07-02,FinCore Bank,TECHNICAL,Incident report 002 for technical follow-up,AGT-02,CLOSED,user002@example.com,1
+NXV-000003,2026-07-03,NovaTel,TECHNICAL,Incident report 003 for technical follow-up,AGT-03,CLOSED,user003@example.com,2
+NXV-000004,2026-07-04,GreenCart,TECHNICAL,Incident report 004 for technical follow-up,AGT-04,CLOSED,user004@example.com,2
+NXV-000005,2026-07-05,OrbitSoft,TECHNICAL,Incident report 005 for technical follow-up,AGT-05,CLOSED,user005@example.com,2
+NXV-000006,2026-07-06,BlueLane HR,TECHNICAL,Incident report 006 for technical follow-up,AGT-06,CLOSED,user006@example.com,2
+NXV-000007,2026-07-07,MediTrade,TECHNICAL,Incident report 007 for technical follow-up,AGT-07,CLOSED,user007@example.com,2
+NXV-000008,2026-07-08,CloudVista,TECHNICAL,Incident report 008 for technical follow-up,AGT-08,CLOSED,user008@example.com,3
+NXV-000009,2026-07-09,Acme Retail,TECHNICAL,Incident report 009 for technical follow-up,AGT-09,CLOSED,user009@example.com,3
+NXV-000010,2026-07-10,FinCore Bank,TECHNICAL,Incident report 010 for technical follow-up,AGT-10,CLOSED,user010@example.com,3
+NXV-000011,2026-07-11,NovaTel,TECHNICAL,Incident report 011 for technical follow-up,AGT-11,CLOSED,user011@example.com,3
+NXV-000012,2026-07-12,GreenCart,TECHNICAL,Incident report 012 for technical follow-up,AGT-12,CLOSED,user012@example.com,3
+NXV-000013,2026-07-13,OrbitSoft,TECHNICAL,Incident report 013 for technical follow-up,AGT-13,CLOSED,user013@example.com,3
+NXV-000014,2026-07-14,BlueLane HR,TECHNICAL,Incident report 014 for technical follow-up,AGT-14,CLOSED,user014@example.com,3
+NXV-000015,2026-07-15,MediTrade,TECHNICAL,Incident report 015 for technical follow-up,AGT-15,CLOSED,user015@example.com,3
+NXV-000016,2026-07-16,CloudVista,TECHNICAL,Incident report 016 for technical follow-up,AGT-16,CLOSED,user016@example.com,3
+NXV-000017,2026-07-17,Acme Retail,TECHNICAL,Incident report 017 for technical follow-up,AGT-17,CLOSED,user017@example.com,3
+NXV-000018,2026-07-18,FinCore Bank,TECHNICAL,Incident report 018 for technical follow-up,AGT-18,CLOSED,user018@example.com,4
+NXV-000019,2026-07-19,NovaTel,TECHNICAL,Incident report 019 for technical follow-up,AGT-19,CLOSED,user019@example.com,4
+NXV-000020,2026-07-20,GreenCart,TECHNICAL,Incident report 020 for technical follow-up,AGT-20,CLOSED,user020@example.com,4
+NXV-000021,2026-07-21,OrbitSoft,TECHNICAL,Incident report 021 for technical follow-up,AGT-21,CLOSED,user021@example.com,4
+NXV-000022,2026-07-22,BlueLane HR,TECHNICAL,Incident report 022 for technical follow-up,AGT-22,CLOSED,user022@example.com,4
+NXV-000023,2026-07-23,MediTrade,TECHNICAL,Incident report 023 for technical follow-up,AGT-23,CLOSED,user023@example.com,4
+NXV-000024,2026-07-24,CloudVista,TECHNICAL,Incident report 024 for technical follow-up,AGT-24,CLOSED,user024@example.com,4
+NXV-000025,2026-07-25,Acme Retail,TECHNICAL,Incident report 025 for technical follow-up,AGT-25,CLOSED,user025@example.com,4
+NXV-000026,2026-07-26,FinCore Bank,TECHNICAL,Incident report 026 for technical follow-up,AGT-26,CLOSED,user026@example.com,4
+NXV-000027,2026-07-27,NovaTel,TECHNICAL,Incident report 027 for technical follow-up,AGT-27,CLOSED,user027@example.com,4
+NXV-000028,2026-07-28,GreenCart,TECHNICAL,Incident report 028 for technical follow-up,AGT-28,CLOSED,user028@example.com,4
+NXV-000029,2026-07-01,OrbitSoft,BILLING,Incident report 029 for billing follow-up,AGT-29,CLOSED,user029@example.com,4
+NXV-000030,2026-07-02,BlueLane HR,BILLING,Incident report 030 for billing follow-up,AGT-30,CLOSED,user030@example.com,4
+NXV-000031,2026-07-03,MediTrade,BILLING,Incident report 031 for billing follow-up,AGT-01,CLOSED,user031@example.com,4
+NXV-000032,2026-07-04,CloudVista,BILLING,Incident report 032 for billing follow-up,AGT-02,CLOSED,user032@example.com,4
+NXV-000033,2026-07-05,Acme Retail,BILLING,Incident report 033 for billing follow-up,AGT-03,CLOSED,user033@example.com,4
+NXV-000034,2026-07-06,FinCore Bank,BILLING,Incident report 034 for billing follow-up,AGT-04,CLOSED,user034@example.com,4
+NXV-000035,2026-07-07,NovaTel,BILLING,Incident report 035 for billing follow-up,AGT-05,CLOSED,user035@example.com,4
+NXV-000036,2026-07-08,GreenCart,BILLING,Incident report 036 for billing follow-up,AGT-06,CLOSED,user036@example.com,4
+NXV-000037,2026-07-09,OrbitSoft,BILLING,Incident report 037 for billing follow-up,AGT-07,CLOSED,user037@example.com,4
+NXV-000038,2026-07-10,BlueLane HR,BILLING,Incident report 038 for billing follow-up,AGT-08,CLOSED,user038@example.com,4
+NXV-000039,2026-07-11,MediTrade,BILLING,Incident report 039 for billing follow-up,AGT-09,CLOSED,user039@example.com,4
+NXV-000040,2026-07-12,CloudVista,BILLING,Incident report 040 for billing follow-up,AGT-10,CLOSED,user040@example.com,5
+NXV-000041,2026-07-13,Acme Retail,BILLING,Incident report 041 for billing follow-up,AGT-11,CLOSED,user041@example.com,5
+NXV-000042,2026-07-14,FinCore Bank,BILLING,Incident report 042 for billing follow-up,AGT-12,CLOSED,user042@example.com,5
+NXV-000043,2026-07-15,NovaTel,BILLING,Incident report 043 for billing follow-up,AGT-13,CLOSED,user043@example.com,5
+NXV-000044,2026-07-16,GreenCart,BILLING,Incident report 044 for billing follow-up,AGT-14,CLOSED,user044@example.com,5
+NXV-000045,2026-07-17,OrbitSoft,BILLING,Incident report 045 for billing follow-up,AGT-15,CLOSED,user045@example.com,5
+NXV-000046,2026-07-18,BlueLane HR,BILLING,Incident report 046 for billing follow-up,AGT-16,CLOSED,user046@example.com,5
+NXV-000047,2026-07-19,MediTrade,ACCESS,Incident report 047 for access follow-up,AGT-17,CLOSED,user047@example.com,5
+NXV-000048,2026-07-20,CloudVista,ACCESS,Incident report 048 for access follow-up,AGT-18,CLOSED,user048@example.com,5
+NXV-000049,2026-07-21,Acme Retail,ACCESS,Incident report 049 for access follow-up,AGT-19,CLOSED,user049@example.com,5
+NXV-000050,2026-07-22,FinCore Bank,ACCESS,Incident report 050 for access follow-up,AGT-20,CLOSED,user050@example.com,5
+NXV-000051,2026-07-23,NovaTel,ACCESS,Incident report 051 for access follow-up,AGT-21,CLOSED,user051@example.com,5
+NXV-000052,2026-07-24,GreenCart,ACCESS,Incident report 052 for access follow-up,AGT-22,CLOSED,user052@example.com,5
+NXV-000053,2026-07-25,OrbitSoft,ACCESS,Incident report 053 for access follow-up,AGT-23,CLOSED,user053@example.com,5
+NXV-000054,2026-07-26,BlueLane HR,ACCESS,Incident report 054 for access follow-up,AGT-24,CLOSED,user054@example.com,5
+NXV-000055,2026-07-27,MediTrade,ACCESS,Incident report 055 for access follow-up,AGT-25,CLOSED,user055@example.com,5
+NXV-000056,2026-07-28,CloudVista,ACCESS,Incident report 056 for access follow-up,AGT-26,CLOSED,user056@example.com,5
+NXV-000057,2026-07-01,Acme Retail,ACCESS,Incident report 057 for access follow-up,AGT-27,OPEN,user057@example.com,
+NXV-000058,2026-07-02,FinCore Bank,ACCESS,Incident report 058 for access follow-up,AGT-28,OPEN,user058@example.com,
+NXV-000059,2026-07-03,NovaTel,ACCESS,Incident report 059 for access follow-up,AGT-29,OPEN,user059@example.com,
+NXV-000060,2026-07-04,GreenCart,ACCESS,Incident report 060 for access follow-up,AGT-30,OPEN,user060@example.com,
+NXV-000061,2026-07-05,OrbitSoft,ACCESS,Incident report 061 for access follow-up,AGT-01,OPEN,user061@example.com,
+NXV-000062,2026-07-06,BlueLane HR,ACCESS,Incident report 062 for access follow-up,AGT-02,OPEN,user062@example.com,
+NXV-000063,2026-07-07,MediTrade,ACCESS,Incident report 063 for access follow-up,AGT-03,OPEN,user063@example.com,
+NXV-000064,2026-07-08,CloudVista,ACCESS,Incident report 064 for access follow-up,AGT-04,OPEN,user064@example.com,
+NXV-000065,2026-07-09,Acme Retail,ACCESS,Incident report 065 for access follow-up,AGT-05,OPEN,user065@example.com,
+NXV-000066,2026-07-10,FinCore Bank,ACCESS,Incident report 066 for access follow-up,AGT-06,OPEN,user066@example.com,
+NXV-000067,2026-07-11,NovaTel,ACCESS,Incident report 067 for access follow-up,AGT-07,OPEN,user067@example.com,
+NXV-000068,2026-07-12,GreenCart,HR_QUERY,Incident report 068 for hr_query follow-up,AGT-08,OPEN,user068@example.com,
+NXV-000069,2026-07-13,OrbitSoft,HR_QUERY,Incident report 069 for hr_query follow-up,AGT-09,OPEN,user069@example.com,
+NXV-000070,2026-07-14,BlueLane HR,HR_QUERY,Incident report 070 for hr_query follow-up,AGT-10,OPEN,user070@example.com,
+NXV-000071,2026-07-15,MediTrade,HR_QUERY,Incident report 071 for hr_query follow-up,AGT-11,OPEN,user071@example.com,
+NXV-000072,2026-07-16,CloudVista,HR_QUERY,Incident report 072 for hr_query follow-up,AGT-12,OPEN,user072@example.com,
+NXV-000073,2026-07-17,Acme Retail,HR_QUERY,Incident report 073 for hr_query follow-up,AGT-13,OPEN,user073@example.com,
+NXV-000074,2026-07-18,FinCore Bank,HR_QUERY,Incident report 074 for hr_query follow-up,AGT-14,OPEN,user074@example.com,
+NXV-000075,2026-07-19,NovaTel,HR_QUERY,Incident report 075 for hr_query follow-up,AGT-15,OPEN,user075@example.com,
+NXV-000076,2026-07-20,GreenCart,HR_QUERY,Incident report 076 for hr_query follow-up,AGT-16,OPEN,user076@example.com,
+NXV-000077,2026-07-21,OrbitSoft,HR_QUERY,Incident report 077 for hr_query follow-up,AGT-17,OPEN,user077@example.com,
+NXV-000078,2026-07-22,BlueLane HR,HR_QUERY,Incident report 078 for hr_query follow-up,AGT-18,OPEN,user078@example.com,
+NXV-000079,2026-07-23,MediTrade,HR_QUERY,Incident report 079 for hr_query follow-up,AGT-19,OPEN,user079@example.com,
+NXV-000080,2026-07-24,CloudVista,HR_QUERY,Incident report 080 for hr_query follow-up,AGT-20,OPEN,user080@example.com,
+NXV-000081,2026-07-25,Acme Retail,HR_QUERY,Incident report 081 for hr_query follow-up,AGT-21,OPEN,user081@example.com,
+NXV-000082,2026-07-26,FinCore Bank,HR_QUERY,Incident report 082 for hr_query follow-up,AGT-22,OPEN,user082@example.com,
+NXV-000083,2026-07-27,NovaTel,HR_QUERY,Incident report 083 for hr_query follow-up,AGT-23,OPEN,user083@example.com,
+NXV-000084,2026-07-28,GreenCart,HR_QUERY,Incident report 084 for hr_query follow-up,AGT-24,DISCARDED,user084@example.com,
+NXV-000085,2026-07-01,OrbitSoft,COMPLAINT,Incident report 085 for complaint follow-up,AGT-25,DISCARDED,user085@example.com,
+NXV-000086,2026-07-02,BlueLane HR,COMPLAINT,Incident report 086 for complaint follow-up,AGT-26,DISCARDED,user086@example.com,
+NXV-000087,2026-07-03,MediTrade,COMPLAINT,Incident report 087 for complaint follow-up,AGT-27,DISCARDED,user087@example.com,
+NXV-000088,2026-07-04,CloudVista,COMPLAINT,Incident report 088 for complaint follow-up,AGT-28,DISCARDED,user088@example.com,
+NXV-000089,2026-07-05,Acme Retail,COMPLAINT,Incident report 089 for complaint follow-up,AGT-29,DISCARDED,user089@example.com,
+NXV-000090,2026-07-06,FinCore Bank,COMPLAINT,Incident report 090 for complaint follow-up,AGT-30,DISCARDED,user090@example.com,
+NXV-000091,2026-07-07,NovaTel,COMPLAINT,Incident report 091 for complaint follow-up,AGT-01,DISCARDED,user091@example.com,
+NXV-000092,2026-07-08,GreenCart,COMPLAINT,Incident report 092 for complaint follow-up,AGT-02,DISCARDED,user092@example.com,
+NXV-000093,2026-07-09,OrbitSoft,COMPLAINT,Incident report 093 for complaint follow-up,AGT-03,DISCARDED,user093@example.com,
+NXV-000094,2026-07-10,BlueLane HR,COMPLAINT,Incident report 094 for complaint follow-up,AGT-04,DISCARDED,user094@example.com,
+NXV-000095,2026-07-11,MediTrade,COMPLAINT,Incident report 095 for complaint follow-up,AGT-05,DISCARDED,user095@example.com,
+NXV-000096,2026-07-12,CloudVista,COMPLAINT,Incident report 096 for complaint follow-up,AGT-06,DISCARDED,user096@example.com,
+NXV-000097,2026-07-15,,TECHNICAL,Valid description for missing company case,AGT-11,OPEN,user097@example.com,
+NXV-000098,2026-07-16,Acme Retail,UNKNOWN,Valid description for invalid category case,AGT-12,OPEN,user098@example.com,
+NXV-000099,2026-07-17,FinCore Bank,ACCESS,Valid description for invalid email case,AGT-13,OPEN,invalid-email-without-at,
+NXV-000100,2026-07-18,NovaTel,BILLING,Valid description for closed without score case,AGT-14,CLOSED,user100@example.com,
