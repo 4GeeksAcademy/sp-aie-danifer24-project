@@ -20,6 +20,26 @@ Open `http://127.0.0.1:8000/`. The API documentation is available at `http://127
 
 The latest aggregate report is held in process memory. Raw rows, descriptions, and customer emails are not retained or returned.
 
+## Supplier Endpoints
+
+The API and seeder share the `suppliers` table in TinyDB. Supplier responses
+include `id` from TinyDB's `doc_id` and a system-generated UTC `updated_at`.
+Neither system field is accepted in creation or update requests.
+
+- `POST /suppliers`: create a supplier with the required context fields; returns `201` and the created record. Invalid input returns `422`.
+- `GET /suppliers`: list all suppliers, optionally filtering by `country` (`Spain` or `USA`) and `category` (one valid category). Both filters can be combined, for example `/suppliers?country=Spain&category=ats_software`.
+- `GET /suppliers/{id}`: retrieve one supplier; returns `404` if it does not exist.
+- `PATCH /suppliers/{id}/rate`: accept `{"monthly_rate": 350.0}`. The rate must be positive and finite. A changed rate receives a new `updated_at`; an unchanged rate preserves its timestamp.
+- `PATCH /suppliers/{id}/status`: accept `{"status": "active"}` or `{"status": "suspended"}`. This does not change the rate timestamp or remove the record.
+- `DELETE /suppliers/{id}`: permanently remove a supplier; returns `204` without a body. Use suspension instead to retain commercial history.
+
+Both PATCH routes and DELETE return `404` for missing suppliers. Invalid PATCH
+input or query filter values return `422`. IDs must be positive integers.
+
+Run a single API worker: access is serialized within that process, but TinyDB
+does not provide cross-process write locking. Run the seeder before starting
+the API, not concurrently with writes.
+
 ## Supplier Seeder
 
 With uv installed, run from the repository root:
