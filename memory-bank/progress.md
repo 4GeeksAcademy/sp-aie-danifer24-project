@@ -15,9 +15,11 @@ En terminos de impacto, el proyecto ya reduce friccion en la operacion de selecc
 
 - Implementados SupplierCreate (entrada sin updated_at) y Supplier (respuesta con timestamp UTC generado por el sistema) en services/api/models.py.
 - Validados campos requeridos, estados active/suspended, categorias permitidas, tarifa positiva finita, moneda por pais y fecha opcional de renovacion.
-- Pydantic 2 declarado como dependencia directa de la API.
-- Verificacion: 7 pruebas unitarias correctas con `python -m unittest discover -s services/api/tests -p 'test_models.py' -v`.
-- Pendiente: integrar los modelos con las rutas y TinyDB; actualizar updated_at en cada cambio de tarifa desde la capa de persistencia.
+- Pydantic 2 y TinyDB 4 declarados como dependencias directas de la API.
+- Seeder implementado con los 15 proveedores exactos del contexto; valida con Pydantic y evita duplicados por nombre y pais sin sobrescribir registros existentes.
+- Comando `uv run seed` configurado mediante pyproject.toml. Almacenamiento por defecto en data/suppliers.json, configurable con SUPPLIERS_DB_PATH.
+- Verificacion previa: 11 pruebas correctas; archivos de pruebas retirados despues por peticion del desarrollador. Comando real ejecutado dos veces en una base temporal: 15 insertados y luego 0.
+- Pendiente: integrar los modelos y TinyDB con las rutas; actualizar updated_at en cada cambio de tarifa desde la capa de persistencia.
 
 ## Proximos pasos del tracker
 

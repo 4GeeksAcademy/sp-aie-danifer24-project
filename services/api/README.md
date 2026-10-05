@@ -19,3 +19,23 @@ Open `http://127.0.0.1:8000/`. The API documentation is available at `http://127
 - `GET /api/incidents/results/report`: download the most recent aggregate report as `results.csv`.
 
 The latest aggregate report is held in process memory. Raw rows, descriptions, and customer emails are not retained or returned.
+
+## Supplier Seeder
+
+With uv installed, run from the repository root:
+
+```bash
+uv run seed
+```
+
+This loads the 15 suppliers defined in `09-lightweight-storage/CONTEXT-nexova.md`
+into the `suppliers` table in `data/suppliers.json`. Each record is validated with
+Pydantic and receives a system-generated UTC `updated_at`. Existing suppliers
+are matched by name and country and are neither duplicated nor overwritten.
+The command prints the number of inserted records, including zero on a repeat run.
+
+To use a different database file without changing code:
+
+```bash
+SUPPLIERS_DB_PATH=/tmp/nexova-suppliers.json uv run seed
+```
