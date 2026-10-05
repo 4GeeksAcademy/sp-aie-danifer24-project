@@ -11,7 +11,15 @@ El desarrollo del Talent Pipeline Tracker se encuentra en una fase avanzada y ya
 
 En terminos de impacto, el proyecto ya reduce friccion en la operacion de seleccion y mejora la visibilidad del pipeline para el equipo.
 
-## Proximos pasos previstos
+## Hito 09: modelo de proveedores
+
+- Implementados SupplierCreate (entrada sin updated_at) y Supplier (respuesta con timestamp UTC generado por el sistema) en services/api/models.py.
+- Validados campos requeridos, estados active/suspended, categorias permitidas, tarifa positiva finita, moneda por pais y fecha opcional de renovacion.
+- Pydantic 2 declarado como dependencia directa de la API.
+- Verificacion: 7 pruebas unitarias correctas con `python -m unittest discover -s services/api/tests -p 'test_models.py' -v`.
+- Pendiente: integrar los modelos con las rutas y TinyDB; actualizar updated_at en cada cambio de tarifa desde la capa de persistencia.
+
+## Proximos pasos del tracker
 
 1. Cerrar ajustes de presentacion y coherencia de marca para la entrega del hito.
 2. Ejecutar validacion funcional integral del flujo completo de candidaturas.
