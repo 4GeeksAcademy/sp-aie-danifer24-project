@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f3f6f2" />
+    <title>Análisis de incidencias | Nexova</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Nexova, inicio">
+        <span class="brand-mark" aria-hidden="true">N</span>
+        <span>NEXOVA</span>
+      </a>
+      <nav aria-label="Navegación principal">
+        <a href="#analisis" aria-current="page">Análisis de incidencias</a>
+      </nav>
+      <span class="topbar-context">OPERACIONES · SOPORTE</span>
+    </header>
+
+    <main id="analisis" class="workspace">
+      <section class="page-heading" aria-labelledby="page-title">
+        <div>
+          <p class="eyebrow">CENTRO DE OPERACIONES <span> / </span> DATOS</p>
+          <h1 id="page-title">Análisis de incidencias</h1>
+          <p class="lede">Resumen de calidad, volumen y satisfacción de tickets de soporte.</p>
+        </div>
+        <button class="button button-secondary" id="download-button" type="button" disabled>
+          <span aria-hidden="true">↓</span>
+          Descargar CSV
+        </button>
+      </section>
+
+      <section class="upload-panel" aria-labelledby="upload-title">
+        <div class="upload-copy">
+          <p class="eyebrow">NUEVO ANÁLISIS</p>
+          <h2 id="upload-title">Carga un archivo de incidencias</h2>
+          <p>Selecciona un CSV con los encabezados del informe de soporte.</p>
+        </div>
+        <form id="upload-form">
+          <label class="dropzone" id="dropzone" for="csv-file">
+            <span class="upload-icon" aria-hidden="true">↑</span>
+            <span class="dropzone-title" id="file-label">Arrastra el CSV aquí</span>
+            <span class="dropzone-subtitle">o selecciona un archivo desde tu equipo</span>
+            <span class="button button-dark">Elegir archivo</span>
+            <input id="csv-file" name="file" type="file" accept=".csv,text/csv" required />
+          </label>
+          <button class="button button-primary analyze-button" id="analyze-button" type="submit" disabled>
+            Analizar archivo
+          </button>
+        </form>
+      </section>
+
+      <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+
+      <section id="results" class="results" aria-live="polite" hidden>
+        <div class="results-heading">
+          <div>
+            <p class="eyebrow">INFORME PROCESADO</p>
+            <h2 id="report-title">Resultados</h2>
+          </div>
+          <span class="report-date" id="report-count"></span>
+        </div>
+
+        <section class="metrics-grid" aria-label="Métricas generales">
+          <article class="metric metric-total">
+            <span class="metric-label">Tickets procesados</span>
+            <strong id="total-count">0</strong>
+            <span class="metric-note">Registros del archivo</span>
+          </article>
+          <article class="metric metric-valid">
+            <span class="metric-label">Registros válidos</span>
+            <strong id="valid-count">0</strong>
+            <span class="metric-note">Incluidos en los desgloses</span>
+          </article>
+          <article class="metric metric-invalid">
+            <span class="metric-label">Inválidos o incompletos</span>
+            <strong id="invalid-count">0</strong>
+            <span class="metric-note" id="invalid-note">Requieren revisión</span>
+          </article>
+        </section>
+
+        <section id="invalid-panel" class="invalid-panel" aria-labelledby="invalid-title" hidden>
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">CONTROL DE CALIDAD</p>
+              <h2 id="invalid-title">Registros que requieren revisión</h2>
+            </div>
+            <span class="issue-total" id="invalid-total"></span>
+          </div>
+          <div id="invalid-list" class="invalid-list"></div>
+        </section>
+
+        <div class="detail-grid">
+          <section class="data-panel" aria-labelledby="category-title">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">VOLUMEN</p>
+                <h2 id="category-title">Por categoría</h2>
+              </div>
+              <span class="panel-unit">Tickets válidos</span>
+            </div>
+            <div id="category-list" class="distribution-list"></div>
+          </section>
+
+          <section class="data-panel" aria-labelledby="status-title">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">SEGUIMIENTO</p>
+                <h2 id="status-title">Por estado</h2>
+              </div>
+              <span class="panel-unit">Tickets válidos</span>
+            </div>
+            <div id="status-list" class="distribution-list"></div>
+          </section>
+        </div>
+
+        <section class="satisfaction-panel" aria-labelledby="satisfaction-title">
+          <div class="satisfaction-summary">
+            <p class="eyebrow">EXPERIENCIA DEL CLIENTE</p>
+            <h2 id="satisfaction-title">Índice de satisfacción</h2>
+            <p>Tickets cerrados con puntuación registrada</p>
+          </div>
+          <div class="satisfaction-score">
+            <strong id="average-score">0.00</strong>
+            <span>/ 5</span>
+            <small id="scored-count">0 de 0 tickets puntuados</small>
+          </div>
+          <div id="score-list" class="score-list"></div>
+        </section>
+      </section>
+
+      <footer class="page-footer">
+        <span>NEXOVA · SOPORTE AL CLIENTE</span>
+        <span>Los datos personales no forman parte del informe.</span>
+      </footer>
+    </main>
+  </body>
+</html>
