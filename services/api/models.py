@@ -82,3 +82,19 @@ class SupplierCreate(SupplierBase):
 
 class Supplier(SupplierBase):
 	updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class SupplierResponse(Supplier):
+	id: int = Field(gt=0, strict=True)
+
+
+class SupplierRateUpdate(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	monthly_rate: float = Field(gt=0, allow_inf_nan=False)
+
+
+class SupplierStatusUpdate(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	status: SupplierStatus
