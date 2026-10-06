@@ -1,8 +1,9 @@
 import os
-import secrets
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Annotated
 
+from dotenv import load_dotenv
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
@@ -12,9 +13,20 @@ from services.api.models import User
 from services.api.services.users import get_user_by_id
 
 
-JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY") or secrets.token_urlsafe(32)
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+
+JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY")
+if not JWT_SECRET_KEY:
+	raise RuntimeError("JWT_SECRET_KEY must be configured in .env or the environment")
+
 JWT_ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+try:
+	ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+except ValueError as error:
+	raise RuntimeError("ACCESS_TOKEN_EXPIRE_MINUTES must be a positive integer") from error
+if ACCESS_TOKEN_EXPIRE_MINUTES <= 0:
+	raise RuntimeError("ACCESS_TOKEN_EXPIRE_MINUTES must be a positive integer")
+
 bearer_scheme = HTTPBearer(auto_error=False)
 
 

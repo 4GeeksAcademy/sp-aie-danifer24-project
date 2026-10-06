@@ -15,9 +15,9 @@ Open `http://127.0.0.1:8000/`. The API documentation is available at `http://127
 
 ## Users and authentication
 
-Set `JWT_SECRET_KEY` to a stable secret before starting the API. Without it, a
-random key is generated for the current process and issued tokens stop working
-when the API restarts.
+Copy `.env.example` to `.env`, set `JWT_SECRET_KEY` to a secret generated with
+`openssl rand -hex 32`, and configure `ACCESS_TOKEN_EXPIRE_MINUTES` as a positive
+integer. The application loads `.env` at startup; the file is excluded from Git.
 
 - `POST /users`: public registration. Accepts `email`, `password`, and optional
 	profile fields `name`, `phone`, and `address`. New users always receive the
