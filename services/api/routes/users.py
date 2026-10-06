@@ -39,6 +39,7 @@ def retrieve_users(tables: UserTables, current_user: CurrentUser):
 
 @router.get("/{user_id}", response_model=UserResponse)
 def retrieve_user(user_id: UserId, tables: UserTables, current_user: CurrentUser):
+	_require_owner_or_admin(current_user, user_id)
 	user = get_user_by_id(tables[0], user_id)
 	if user is None:
 		raise HTTPException(status_code=404, detail="Usuario no encontrado")

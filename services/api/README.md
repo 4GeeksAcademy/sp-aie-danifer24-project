@@ -32,6 +32,9 @@ integer. The application loads `.env` at startup; the file is excluded from Git.
 - `PUT /users/{id}` and `DELETE /users/{id}`: require the account owner or an
 	admin. Users may change their own email or password; only admins may change
 	roles or active status.
+- Every `/suppliers` and `/api/incidents` endpoint also requires a bearer JWT.
+- Accessing another user's `/users/{id}` returns `403` unless the caller is an
+	admin; missing or invalid authentication returns `401`.
 
 Use `Authorization: Bearer <access_token>` for protected requests. The first
 admin account must be provisioned out of band; public registration cannot assign
