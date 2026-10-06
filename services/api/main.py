@@ -12,10 +12,14 @@ from services.api.incidents import (
     summary_for_api,
 )
 from services.api.routes.suppliers import router as suppliers_router
+from services.api.routes.auth import router as auth_router
+from services.api.routes.users import router as users_router
 
 
 app = FastAPI(title="Nexova Incidents API", version="1.0.0")
 app.include_router(suppliers_router)
+app.include_router(auth_router)
+app.include_router(users_router)
 latest_report_csv = None
 
 

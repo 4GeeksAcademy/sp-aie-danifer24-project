@@ -2,14 +2,13 @@
 
 from collections.abc import Iterator
 from datetime import datetime, timezone
-from threading import Lock
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Response
 from tinydb import Query
 from tinydb.table import Table
 
-from services.api.database import get_database
+from services.api.database import database_lock, get_database
 from services.api.models import (
 	Supplier,
 	SupplierCategory,
@@ -22,7 +21,6 @@ from services.api.models import (
 
 
 router = APIRouter(prefix="/suppliers", tags=["suppliers"])
-database_lock = Lock()
 
 
 def get_suppliers_table() -> Iterator[Table]:
