@@ -23,7 +23,11 @@ En terminos de impacto, el proyecto ya reduce friccion en la operacion de selecc
 - SupplierResponse expone el doc_id de TinyDB como id; entradas separadas SupplierRateUpdate y SupplierStatusUpdate rechazan campos del sistema. Cada cambio real de tarifa registra updated_at UTC; el cambio de estado no altera esa fecha.
 - Router registrado antes del frontend estatico. Acceso TinyDB serializado dentro de un proceso; ejecutar con un solo worker y sin seeder concurrente.
 - Verificacion de endpoints: 51 comprobaciones HTTP correctas con TestClient y una base temporal, sin crear archivos de pruebas. Sin errores del editor ni de git diff --check.
-- Pendiente: conectar el frontend del directorio con estos endpoints.
+- Frontend Next y React creado en uis/application con autorizacion para su configuracion independiente. Directorio /suppliers accesible desde el menu y apertura directa desde /.
+- Implementados listado responsive, busqueda y filtros locales, formulario de alta, errores de API, edicion de tarifa inmediata, controles de activacion/suspension y estados diferenciados. Renovaciones proximas a 60 dias destacadas y totales separados por moneda.
+- Proxy Next /api/suppliers hacia FastAPI, configurable con SUPPLIERS_API_URL (por defecto http://127.0.0.1:8000).
+- Verificacion frontend: typecheck, lint y build correctos; flujos HTTP comprobados mediante proxy sobre una base temporal sin tocar datos reales ni crear archivos de pruebas.
+- Pendiente: revision visual/interactiva en navegador de escritorio y movil. Chromium bloqueado por bibliotecas graficas ausentes; alternativa DOM interrumpida sin resultado. Cinco avisos altos de auditoria quedan en dependencias de ESLint (braces sin version corregida publicada); Next actualizado a 16.3.8.
 
 ## Proximos pasos del tracker
 
