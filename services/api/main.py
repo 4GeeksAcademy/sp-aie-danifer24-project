@@ -11,9 +11,11 @@ from services.api.incidents import (
     results_csv_bytes,
     summary_for_api,
 )
+from services.api.routes.suppliers import router as suppliers_router
 
 
 app = FastAPI(title="Nexova Incidents API", version="1.0.0")
+app.include_router(suppliers_router)
 latest_report_csv = None
 
 

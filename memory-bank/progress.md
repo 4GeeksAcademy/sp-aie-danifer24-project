@@ -11,7 +11,25 @@ El desarrollo del Talent Pipeline Tracker se encuentra en una fase avanzada y ya
 
 En terminos de impacto, el proyecto ya reduce friccion en la operacion de seleccion y mejora la visibilidad del pipeline para el equipo.
 
-## Proximos pasos previstos
+## Hito 09: modelo de proveedores
+
+- Implementados SupplierCreate (entrada sin updated_at) y Supplier (respuesta con timestamp UTC generado por el sistema) en services/api/models.py.
+- Validados campos requeridos, estados active/suspended, categorias permitidas, tarifa positiva finita, moneda por pais y fecha opcional de renovacion.
+- Pydantic 2 y TinyDB 4 declarados como dependencias directas de la API.
+- Seeder implementado con los 15 proveedores exactos del contexto; valida con Pydantic y evita duplicados por nombre y pais sin sobrescribir registros existentes.
+- Comando `uv run seed` configurado mediante pyproject.toml. Almacenamiento por defecto en data/suppliers.json, configurable con SUPPLIERS_DB_PATH.
+- Verificacion previa: 11 pruebas correctas; archivos de pruebas retirados despues por peticion del desarrollador. Comando real ejecutado dos veces en una base temporal: 15 insertados y luego 0.
+- Implementados los seis endpoints /suppliers: alta (201), listado con filtros country/category, detalle, cambio de tarifa, cambio de estado y borrado fisico (204), con 404 para IDs inexistentes y 422 para entradas invalidas.
+- SupplierResponse expone el doc_id de TinyDB como id; entradas separadas SupplierRateUpdate y SupplierStatusUpdate rechazan campos del sistema. Cada cambio real de tarifa registra updated_at UTC; el cambio de estado no altera esa fecha.
+- Router registrado antes del frontend estatico. Acceso TinyDB serializado dentro de un proceso; ejecutar con un solo worker y sin seeder concurrente.
+- Verificacion de endpoints: 51 comprobaciones HTTP correctas con TestClient y una base temporal, sin crear archivos de pruebas. Sin errores del editor ni de git diff --check.
+- Frontend Next y React creado en uis/application con autorizacion para su configuracion independiente. Directorio /suppliers accesible desde el menu y apertura directa desde /.
+- Implementados listado responsive, busqueda y filtros locales, formulario de alta, errores de API, edicion de tarifa inmediata, controles de activacion/suspension y estados diferenciados. Renovaciones proximas a 60 dias destacadas y totales separados por moneda.
+- Proxy Next /api/suppliers hacia FastAPI, configurable con SUPPLIERS_API_URL (por defecto http://127.0.0.1:8000).
+- Verificacion frontend: typecheck, lint y build correctos; flujos HTTP comprobados mediante proxy sobre una base temporal sin tocar datos reales ni crear archivos de pruebas.
+- Pendiente: revision visual/interactiva en navegador de escritorio y movil. Chromium bloqueado por bibliotecas graficas ausentes; alternativa DOM interrumpida sin resultado. Cinco avisos altos de auditoria quedan en dependencias de ESLint (braces sin version corregida publicada); Next actualizado a 16.3.8.
+
+## Proximos pasos del tracker
 
 1. Cerrar ajustes de presentacion y coherencia de marca para la entrega del hito.
 2. Ejecutar validacion funcional integral del flujo completo de candidaturas.
