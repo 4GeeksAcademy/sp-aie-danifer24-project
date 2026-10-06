@@ -35,14 +35,22 @@ def create_user(
 	profile_id = None
 	try:
 		users.update({"id": user_id}, doc_ids=[user_id])
+		profile_id = profiles.insert(
+			{
+				"user_id": user_id,
+				"name": request.name,
+				"phone": request.phone,
+				"address": request.address,
+			}
+		)
 		profile = Profile(
+			id=profile_id,
 			user_id=user_id,
 			name=request.name,
 			phone=request.phone,
 			address=request.address,
 		)
-		profile_document = profile.model_dump(mode="json")
-		profile_id = profiles.insert(profile_document)
+		profiles.update(profile.model_dump(mode="json"), doc_ids=[profile_id])
 	except Exception:
 		if profile_id is not None:
 			profiles.remove(doc_ids=[profile_id])

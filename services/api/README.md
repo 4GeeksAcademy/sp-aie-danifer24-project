@@ -24,6 +24,9 @@ when the API restarts.
 	`user` role, and profile data is stored separately from credentials.
 - `POST /auth/token`: exchange form fields `username` (the email) and `password`
 	for a bearer token.
+- `GET /profiles/me`: return the authenticated user's profile.
+- `PUT /profiles/me`: update the authenticated user's `name`, `phone`, and
+	`address`; omitted fields remain unchanged and explicit `null` clears a field.
 - `GET /users` and `GET /users/{id}`: require a bearer token.
 - `PUT /users/{id}` and `DELETE /users/{id}`: require the account owner or an
 	admin. Users may change their own email or password; only admins may change

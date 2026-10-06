@@ -121,10 +121,25 @@ class User(BaseModel):
 class Profile(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
+	id: int = Field(gt=0, strict=True)
 	user_id: int = Field(gt=0, strict=True)
 	name: str | None = None
 	phone: str | None = None
 	address: str | None = None
+
+
+class ProfileUpdate(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	name: str | None = None
+	phone: str | None = None
+	address: str | None = None
+
+	@model_validator(mode="after")
+	def validate_changes(self) -> "ProfileUpdate":
+		if not self.model_fields_set:
+			raise ValueError("provide at least one profile field to update")
+		return self
 
 
 class UserCreate(BaseModel):
