@@ -213,3 +213,24 @@ class UserResponse(BaseModel):
 class TokenResponse(BaseModel):
 	access_token: str
 	token_type: str = "bearer"
+
+
+class LoginRequest(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	email: str
+	password: str
+
+	@field_validator("email")
+	@classmethod
+	def normalize_email(cls, value: str) -> str:
+		value = value.strip().lower()
+		if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", value):
+			raise ValueError("email must be a valid email address")
+		return value
+
+
+class AuthMeResponse(BaseModel):
+	email: str
+	role: UserRole
+	profile: Profile

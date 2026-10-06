@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 
 from services.api.dependencies import UserTables
@@ -15,7 +15,7 @@ from services.api.services.users import get_user_by_id
 JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY") or secrets.token_urlsafe(32)
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def create_access_token(user_id: int) -> str:
@@ -30,7 +30,10 @@ def create_access_token(user_id: int) -> str:
 
 
 def get_current_user(
-	token: Annotated[str, Depends(oauth2_scheme)],
+	credentials: Annotated[
+		HTTPAuthorizationCredentials | None,
+		Depends(bearer_scheme),
+	],
 	tables: UserTables,
 ) -> User:
 	unauthorized = HTTPException(
@@ -38,8 +41,14 @@ def get_current_user(
 		detail="Credenciales no válidas",
 		headers={"WWW-Authenticate": "Bearer"},
 	)
+	if credentials is None:
+		raise unauthorized
 	try:
-		payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+		payload = jwt.decode(
+			credentials.credentials,
+			JWT_SECRET_KEY,
+			algorithms=[JWT_ALGORITHM],
+		)
 		user_id = int(payload.get("sub", ""))
 	except (JWTError, TypeError, ValueError) as error:
 		raise unauthorized from error

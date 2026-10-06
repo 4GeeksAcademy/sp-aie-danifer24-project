@@ -22,8 +22,9 @@ when the API restarts.
 - `POST /users`: public registration. Accepts `email`, `password`, and optional
 	profile fields `name`, `phone`, and `address`. New users always receive the
 	`user` role, and profile data is stored separately from credentials.
-- `POST /auth/token`: exchange form fields `username` (the email) and `password`
-	for a bearer token.
+- `POST /auth/login`: accept JSON `email` and `password`, returning a bearer JWT.
+- `GET /auth/me`: return the authenticated user's email, role, and linked
+	profile; requires a bearer JWT.
 - `GET /profiles/me`: return the authenticated user's profile.
 - `PUT /profiles/me`: update the authenticated user's `name`, `phone`, and
 	`address`; omitted fields remain unchanged and explicit `null` clears a field.
