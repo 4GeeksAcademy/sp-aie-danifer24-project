@@ -1,10 +1,12 @@
 import os
 from pathlib import Path
+from threading import Lock
 
 from tinydb import TinyDB
 
 
 DEFAULT_DATABASE_PATH = Path(__file__).resolve().parents[2] / "data" / "suppliers.json"
+database_lock = Lock()
 
 
 def get_database() -> TinyDB:

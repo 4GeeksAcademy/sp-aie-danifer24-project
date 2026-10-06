@@ -1,15 +1,13 @@
 """Endpoints del directorio de proveedores."""
 
-from collections.abc import Iterator
 from datetime import datetime, timezone
-from threading import Lock
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Response
 from tinydb import Query
 from tinydb.table import Table
 
-from services.api.database import get_database
+from services.api.dependencies import RequestTables
 from services.api.models import (
 	Supplier,
 	SupplierCategory,
@@ -19,16 +17,18 @@ from services.api.models import (
 	SupplierResponse,
 	SupplierStatusUpdate,
 )
+from services.api.security import get_current_user
 
 
-router = APIRouter(prefix="/suppliers", tags=["suppliers"])
-database_lock = Lock()
+router = APIRouter(
+	prefix="/suppliers",
+	tags=["suppliers"],
+	dependencies=[Depends(get_current_user)],
+)
 
 
-def get_suppliers_table() -> Iterator[Table]:
-	with database_lock:
-		with get_database() as database:
-			yield database.table("suppliers")
+def get_suppliers_table(tables: RequestTables) -> Table:
+	return tables[2]
 
 
 SuppliersTable = Annotated[Table, Depends(get_suppliers_table)]

@@ -12,15 +12,25 @@ from services.api.incidents import (
     summary_for_api,
 )
 from services.api.routes.suppliers import router as suppliers_router
+from services.api.routes.auth import router as auth_router
+from services.api.routes.profiles import router as profiles_router
+from services.api.routes.users import router as users_router
+from services.api.security import CurrentUser
 
 
 app = FastAPI(title="Nexova Incidents API", version="1.0.0")
 app.include_router(suppliers_router)
+app.include_router(auth_router)
+app.include_router(profiles_router)
+app.include_router(users_router)
 latest_report_csv = None
 
 
 @app.post("/api/incidents/analyze")
-async def analyze_incidents(file: UploadFile = File(...)):
+async def analyze_incidents(
+    current_user: CurrentUser,
+    file: UploadFile = File(...),
+):
     global latest_report_csv
 
     filename = Path(file.filename or "").name
@@ -44,7 +54,7 @@ async def analyze_incidents(file: UploadFile = File(...)):
 
 
 @app.get("/api/incidents/results/report")
-async def download_latest_report():
+async def download_latest_report(current_user: CurrentUser):
     if latest_report_csv is None:
         raise HTTPException(
             status_code=404,
