@@ -13,6 +13,26 @@ uvicorn services.api.main:app --reload
 
 Open `http://127.0.0.1:8000/`. The API documentation is available at `http://127.0.0.1:8000/docs`.
 
+## Users and authentication
+
+Set `JWT_SECRET_KEY` to a stable secret before starting the API. Without it, a
+random key is generated for the current process and issued tokens stop working
+when the API restarts.
+
+- `POST /users`: public registration. Accepts `email`, `password`, and optional
+	profile fields `name`, `phone`, and `address`. New users always receive the
+	`user` role, and profile data is stored separately from credentials.
+- `POST /auth/token`: exchange form fields `username` (the email) and `password`
+	for a bearer token.
+- `GET /users` and `GET /users/{id}`: require a bearer token.
+- `PUT /users/{id}` and `DELETE /users/{id}`: require the account owner or an
+	admin. Users may change their own email or password; only admins may change
+	roles or active status.
+
+Use `Authorization: Bearer <access_token>` for protected requests. The first
+admin account must be provisioned out of band; public registration cannot assign
+privileged roles.
+
 ## Endpoints
 
 - `POST /api/incidents/analyze`: upload a `.csv` file using the multipart field `file`; returns aggregate JSON only.
