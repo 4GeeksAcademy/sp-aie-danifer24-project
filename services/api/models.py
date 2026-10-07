@@ -234,3 +234,28 @@ class AuthMeResponse(BaseModel):
 	email: str
 	role: UserRole
 	profile: Profile
+
+
+class ForgotPasswordRequest(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+	email: str
+
+
+class NewPasswordRequest(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+	new_password: Annotated[str, StringConstraints(min_length=8)]
+
+	@field_validator("new_password")
+	@classmethod
+	def validate_new_password(cls, value: str) -> str:
+		if len(value.encode("utf-8")) > 72:
+			raise ValueError("password must not exceed 72 UTF-8 bytes")
+		return value
+
+
+class ResetPasswordRequest(NewPasswordRequest):
+	token: str
+
+
+class ChangePasswordRequest(NewPasswordRequest):
+	current_password: str
