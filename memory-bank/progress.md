@@ -29,6 +29,17 @@ En terminos de impacto, el proyecto ya reduce friccion en la operacion de selecc
 - Verificacion frontend: typecheck, lint y build correctos; flujos HTTP comprobados mediante proxy sobre una base temporal sin tocar datos reales ni crear archivos de pruebas.
 - Pendiente: revision visual/interactiva en navegador de escritorio y movil. Chromium bloqueado por bibliotecas graficas ausentes; alternativa DOM interrumpida sin resultado. Cinco avisos altos de auditoria quedan en dependencias de ESLint (braces sin version corregida publicada); Next actualizado a 16.3.8.
 
+## Autenticacion y cuenta: frontend (2026-10-07)
+
+- Implementado /login con email y password, POST /auth/login mediante proxy Next, JWT en localStorage bajo nexova_access_token y redireccion a /suppliers.
+- El directorio adjunta Authorization: Bearer en sus solicitudes; sin token o con respuesta 401 vuelve a /login y elimina el token rechazado.
+- Implementado /register con nombre, telefono y direccion opcionales, POST /users seguido de login automatico. Errores 422 por campo y correo duplicado (409); mensaje diferenciado si se crea la cuenta pero falla el login.
+- Implementado /account/profile: carga email y perfil con GET /auth/me, email de solo lectura y actualizacion de nombre, telefono y direccion con PUT /profiles/me autenticado. Campos vacios enviados como null, confirmacion de guardado, reintento de carga y enlace Mi cuenta.
+- Verificacion actual: lint y typecheck correctos; comprobaciones en memoria de registro, login, almacenamiento JWT y errores 422/409/401 correctas. Servicio de cuenta previamente comprobado en memoria para GET, PUT, bearer token, null y sesion ausente/caducada.
+- Rutas /login, /register y /account/profile comprobadas con HTTP 200; proxies comprobados con respuestas reales 422 y 401 de FastAPI, sin crear cuentas de prueba.
+- El paquete frontend no dispone de script de pruebas automatizadas. Pendiente: validacion visual y flujos completos de registro, login y guardado de perfil en navegador con una cuenta valida.
+- Commits funcionales creados con confirmacion del desarrollador: 62f1eba (login y proteccion del directorio), dbcb943 (registro) y a077972 (perfil de cuenta). Cada snapshot del indice paso TypeScript y ESLint de forma independiente; documentacion de progreso separada en el cuarto commit.
+
 ## Proximos pasos del tracker
 
 1. Cerrar ajustes de presentacion y coherencia de marca para la entrega del hito.
