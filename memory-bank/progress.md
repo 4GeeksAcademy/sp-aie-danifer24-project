@@ -1,5 +1,13 @@
 # Progreso del proyecto
 
+## Gestor centralizado de incidencias
+
+- Definidos modelos Pydantic y enums de incidencia, con validacion de campos, estado y timestamps UTC de sistema.
+- Centralizados parser y validador de CSV; implementado `scripts/seed_incidents.py` con transformaciones del legado, reporte de filas invalidas e idempotencia por ticket o fallback titulo/fecha. Verificado con 96 altas, 4 filas invalidas y 0 altas en la segunda ejecucion; conteos de estados y categorias coinciden con el contexto.
+- Implementados endpoints autenticados para alta, listado con filtros, detalle, cambio de estado y resumen por estado/categoria/origen/sucursal. Se validan transiciones y estados finales; listas y resumen funcionan con la base vacia.
+- Errores de validacion de incidencias se presentan como HTTP 400 con campos; se preserva HTTP 422 en endpoints existentes. Excepciones inesperadas devuelven un mensaje 500 generico.
+- Documentados API y seed en `services/api/README.md`. Verificacion: pruebas aisladas de endpoints con TinyDB en memoria, `compileall`, `git diff --check` y 12 pruebas de restablecimiento de contrasena correctas.
+
 ## Estado actual (resumen ejecutivo)
 
 El desarrollo del Talent Pipeline Tracker se encuentra en una fase avanzada y ya cubre el flujo operativo principal de gestion de candidaturas en Nexova.

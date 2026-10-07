@@ -93,6 +93,15 @@ python3 -m unittest discover -s services/api/tests -p 'test_password_reset.py' -
 
 - `POST /api/incidents/analyze`: upload a `.csv` file using the multipart field `file`; returns aggregate JSON only.
 - `GET /api/incidents/results/report`: download the most recent aggregate report as `results.csv`.
+- `POST /api/incidents`: create an incident. Required fields: `title`, `description`, `category`, `status`, `origin`, and `branch`.
+- `GET /api/incidents`: list incidents; optional filters are `status`, `origin`, `branch`, and `category`.
+- `GET /api/incidents/{id}`: retrieve one incident; returns `404` when missing.
+- `PATCH /api/incidents/{id}/status`: change only the status and `updated_at`. Valid transitions are `open → in_progress/discarded` and `in_progress → resolved/discarded`; `resolved` and `discarded` are final.
+- `GET /api/incidents/summary`: return the total and counts by status, category, origin, and branch, including zero-count values.
+
+Invalid incident payloads return HTTP `400` with field-level details. Unexpected server errors return a generic HTTP `500` message without internal exception details.
+
+Import the historical dataset from the repository root with `python scripts/seed_incidents.py`. The seed validates `scripts/incidents-nexova.csv`, reports inserted, duplicate, and invalid rows, and is safe to rerun using ticket IDs (or the title/date fallback) as idempotency keys.
 
 The latest aggregate report is held in process memory. Raw rows, descriptions, and customer emails are not retained or returned.
 
