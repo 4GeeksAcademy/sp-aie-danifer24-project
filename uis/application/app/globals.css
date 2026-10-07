@@ -129,6 +129,13 @@ tr:hover td { background: #fafcfb; }
 .register-fields input[aria-invalid="true"] { border-color: #bf5247; }
 .auth-switch { margin: 22px 0 0; color: var(--muted); font-size: 13px; text-align: center; }
 .auth-switch a { color: var(--accent); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.app-header nav { display: flex; flex-wrap: wrap; gap: 16px; }
+.app-header nav a { white-space: nowrap; }
+.account-profile { max-width: 600px; animation: enter .3s ease-out; }
+.profile-form { padding-top: 24px; border-top: 1px solid var(--border); margin-top: 20px; }
+.profile-form label { display: grid; gap: 7px; font-size: 13px; font-weight: 600; }
+.profile-form input[readonly] { background: #eef2ef; color: var(--muted); }
+.profile-actions { display: flex; justify-content: flex-end; padding-top: 16px; border-top: 1px solid var(--border); }
 .spinning { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes enter { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
