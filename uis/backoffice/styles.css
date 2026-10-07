@@ -95,6 +95,56 @@ input {
   padding: 46px 0 28px;
 }
 
+.session-checking body {
+  visibility: hidden;
+}
+
+.auth-workspace {
+  width: min(480px, calc(100% - 40px));
+  margin: 72px auto;
+}
+
+.auth-panel {
+  padding: 32px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.auth-panel h1 {
+  margin: 0 0 8px;
+  font-size: 30px;
+}
+
+.auth-form {
+  display: grid;
+  gap: 16px;
+  margin-top: 28px;
+}
+
+.auth-form label {
+  display: grid;
+  gap: 7px;
+  font-weight: 650;
+}
+
+.auth-form input {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: white;
+}
+
+.auth-error {
+  margin: 0;
+  color: var(--red);
+}
+
+.topbar > .button {
+  flex-shrink: 0;
+}
+
 .page-heading,
 .section-heading,
 .results-heading {

@@ -29,6 +29,26 @@ En terminos de impacto, el proyecto ya reduce friccion en la operacion de selecc
 - Verificacion frontend: typecheck, lint y build correctos; flujos HTTP comprobados mediante proxy sobre una base temporal sin tocar datos reales ni crear archivos de pruebas.
 - Pendiente: revision visual/interactiva en navegador de escritorio y movil. Chromium bloqueado por bibliotecas graficas ausentes; alternativa DOM interrumpida sin resultado. Cinco avisos altos de auditoria quedan en dependencias de ESLint (braces sin version corregida publicada); Next actualizado a 16.3.8.
 
+## Autenticacion y cuenta: frontend (2026-10-07)
+
+- Implementado /login con email y password, POST /auth/login mediante proxy Next, JWT en localStorage bajo nexova_access_token y redireccion a /suppliers.
+- El directorio adjunta Authorization: Bearer en sus solicitudes; sin token o con respuesta 401 vuelve a /login y elimina el token rechazado.
+- Implementado /register con nombre, telefono y direccion opcionales, POST /users seguido de login automatico. Errores 422 por campo y correo duplicado (409); mensaje diferenciado si se crea la cuenta pero falla el login.
+- Implementado /account/profile: carga email y perfil con GET /auth/me, email de solo lectura y actualizacion de nombre, telefono y direccion con PUT /profiles/me autenticado. Campos vacios enviados como null, confirmacion de guardado, reintento de carga y enlace Mi cuenta.
+- Verificacion actual: lint y typecheck correctos; comprobaciones en memoria de registro, login, almacenamiento JWT y errores 422/409/401 correctas. Servicio de cuenta previamente comprobado en memoria para GET, PUT, bearer token, null y sesion ausente/caducada.
+- Rutas /login, /register y /account/profile comprobadas con HTTP 200; proxies comprobados con respuestas reales 422 y 401 de FastAPI, sin crear cuentas de prueba.
+- El paquete frontend no dispone de script de pruebas automatizadas. Pendiente: validacion visual y flujos completos de registro, login y guardado de perfil en navegador con una cuenta valida.
+- Commits funcionales creados con confirmacion del desarrollador: 62f1eba (login y proteccion del directorio), dbcb943 (registro) y a077972 (perfil de cuenta). Cada snapshot del indice paso TypeScript y ESLint de forma independiente; documentacion de progreso separada en el cuarto commit.
+
+## Proteccion de rutas internas (2026-10-07)
+
+- Aniadido SessionGuard cliente compartido: valida el JWT de localStorage consultando /api/auth/me, bloquea la vista durante la comprobacion y redirige a /login si falta o no es valido. Revalida al cambiar ruta, recuperar foco, recibir cambios de almacenamiento y cada minuto; muestra reintento ante errores de conexion.
+- Integrado en los layouts de uis/application, uis/backoffice y apps/talent-pipeline-tracker. Las rutas publicas /login y /register de application quedan excluidas; el website publico no tiene cambios.
+- Aniadidos login y proxies /api/auth/me y /api/auth/login en backoffice y tracker, usando la API FastAPI y el almacenamiento JWT compartidos. Eliminada la proteccion duplicada del listado de proveedores, ahora cubierta por el guard del layout.
+- Validacion: lint y typecheck correctos en application y backoffice. En tracker los archivos modificados pasan ESLint; lint completo conserva cuatro errores preexistentes en app/candidates/[id]/page.tsx y hooks/useCandidatesList.ts, y typecheck completo un error preexistente en services/api.ts:76 (GetRecordsParams no asignable al tipo query). No se modificaron esos archivos.
+- Endpoints locales de login con credenciales invalidas y de sesion sin token devuelven 401 en backoffice (3001) y tracker (3002). Sin pruebas visuales con Chromium porque falta libatk-1.0.so.0 en el contenedor.
+- Commits creados con confirmacion del desarrollador: 1dac059 (utilidades compartidas), 0f7d709 (application), e0d1a35 (backoffice) y 54ab31b (tracker). La documentacion de progreso se registra en un commit separado.
+
 ## Proximos pasos del tracker
 
 1. Cerrar ajustes de presentacion y coherencia de marca para la entrega del hito.

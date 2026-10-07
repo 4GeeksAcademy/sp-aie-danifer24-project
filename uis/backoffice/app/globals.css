@@ -24,6 +24,18 @@ body {
   padding: 2rem 0 3rem;
 }
 
+.auth-page { width: min(440px, calc(100% - 40px)); margin: 48px auto; }
+.auth-page h1 { font-size: 28px; font-weight: 700; }
+.auth-page h2 { font-size: 22px; margin: 16px 0 24px; }
+.auth-form, .auth-form fieldset, .auth-form label { display: grid; gap: 12px; }
+.auth-form fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
+.auth-form input { width: 100%; min-width: 0; padding: 12px; border: 1px solid #a5aaa7; border-radius: 5px; background: white; font: inherit; }
+.auth-page button { min-height: 44px; padding: 10px 18px; border: 0; border-radius: 5px; background: #14745d; color: white; cursor: pointer; font: inherit; }
+.auth-page button:disabled { opacity: .6; cursor: wait; }
+.auth-form [role="alert"] { color: #9b352d; }
+.session-actions { position: fixed; top: 16px; right: 20px; z-index: 50; }
+.session-actions button { min-height: 38px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 5px; background: white; color: var(--green-dark); cursor: pointer; font: inherit; }
+
 .hero {
   border: 1px solid #fcc8aa;
   background: color-mix(in srgb, #fff 85%, transparent);

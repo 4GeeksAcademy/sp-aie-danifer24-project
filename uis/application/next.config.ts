@@ -4,7 +4,11 @@ const apiUrl = (process.env.SUPPLIERS_API_URL ?? "http://127.0.0.1:8000").replac
 
 const nextConfig: NextConfig = {
   async rewrites() {
-    return [{ source: "/api/suppliers/:path*", destination: `${apiUrl}/suppliers/:path*` }];
+    return [
+      { source: "/api/auth/:path*", destination: `${apiUrl}/auth/:path*` },
+      { source: "/api/users/:path*", destination: `${apiUrl}/users/:path*` },
+      { source: "/api/suppliers/:path*", destination: `${apiUrl}/suppliers/:path*` },
+    ];
   },
 };
 

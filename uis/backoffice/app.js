@@ -6,6 +6,38 @@ const analyzeButton = document.querySelector("#analyze-button");
 const downloadButton = document.querySelector("#download-button");
 const notice = document.querySelector("#notice");
 const results = document.querySelector("#results");
+const tokenStorageKey = "nexova_access_token";
+
+function getAccessToken() {
+  try {
+    return window.localStorage.getItem(tokenStorageKey);
+  } catch {
+    return null;
+  }
+}
+
+function endSession() {
+  try {
+    window.localStorage.removeItem(tokenStorageKey);
+  } finally {
+    window.location.replace("/login");
+  }
+}
+
+function authHeaders() {
+  const token = getAccessToken();
+  if (!token) {
+    endSession();
+    return {};
+  }
+  return { Authorization: `Bearer ${token}` };
+}
+
+function handleUnauthorized(response) {
+  if (response.status !== 401 && response.status !== 403) return false;
+  endSession();
+  return true;
+}
 
 const invalidLabels = {
   missing_ticket_id: "Falta ticket_id",
@@ -42,6 +74,24 @@ function showNotice(message, isSuccess = false) {
   notice.textContent = message;
   notice.classList.toggle("is-success", isSuccess);
   notice.hidden = false;
+}
+
+document.querySelector("#logout-button").addEventListener("click", endSession);
+
+const initialToken = getAccessToken();
+if (!initialToken) {
+  endSession();
+} else {
+  fetch("/auth/me", { headers: { Authorization: `Bearer ${initialToken}` }, cache: "no-store" })
+    .then((response) => {
+      if (handleUnauthorized(response)) return;
+      if (!response.ok) showNotice("No se pudo comprobar la sesión. Inténtalo de nuevo.");
+      document.documentElement.classList.remove("session-checking");
+    })
+    .catch(() => {
+      showNotice("No se pudo conectar con el servicio de autenticación.");
+      document.documentElement.classList.remove("session-checking");
+    });
 }
 
 function setSelectedFile(file) {
@@ -201,7 +251,8 @@ form.addEventListener("submit", async (event) => {
   body.append("file", file);
 
   try {
-    const response = await fetch("/api/incidents/analyze", { method: "POST", body });
+    const response = await fetch("/api/incidents/analyze", { method: "POST", headers: authHeaders(), body });
+    if (handleUnauthorized(response)) return;
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.detail || "No se pudo analizar el archivo.");
     renderResults(payload);
@@ -217,7 +268,8 @@ form.addEventListener("submit", async (event) => {
 downloadButton.addEventListener("click", async () => {
   downloadButton.disabled = true;
   try {
-    const response = await fetch("/api/incidents/results/report");
+    const response = await fetch("/api/incidents/results/report", { headers: authHeaders() });
+    if (handleUnauthorized(response)) return;
     if (!response.ok) {
       const payload = await response.json();
       throw new Error(payload.detail || "No hay un informe disponible.");

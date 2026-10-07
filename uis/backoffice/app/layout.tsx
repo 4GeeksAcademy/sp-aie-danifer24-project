@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
+import SessionGuard from "./session-guard";
 
 export const metadata: Metadata = {
   title: "Nexova Backoffice | Panel Interno",
@@ -10,7 +11,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="es">
-      <body>{children}</body>
+      <body><SessionGuard>{children}</SessionGuard></body>
     </html>
   );
 }
