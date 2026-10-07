@@ -40,6 +40,15 @@ En terminos de impacto, el proyecto ya reduce friccion en la operacion de selecc
 - El paquete frontend no dispone de script de pruebas automatizadas. Pendiente: validacion visual y flujos completos de registro, login y guardado de perfil en navegador con una cuenta valida.
 - Commits funcionales creados con confirmacion del desarrollador: 62f1eba (login y proteccion del directorio), dbcb943 (registro) y a077972 (perfil de cuenta). Cada snapshot del indice paso TypeScript y ESLint de forma independiente; documentacion de progreso separada en el cuarto commit.
 
+## Proteccion de rutas internas (2026-10-07)
+
+- Aniadido SessionGuard cliente compartido: valida el JWT de localStorage consultando /api/auth/me, bloquea la vista durante la comprobacion y redirige a /login si falta o no es valido. Revalida al cambiar ruta, recuperar foco, recibir cambios de almacenamiento y cada minuto; muestra reintento ante errores de conexion.
+- Integrado en los layouts de uis/application, uis/backoffice y apps/talent-pipeline-tracker. Las rutas publicas /login y /register de application quedan excluidas; el website publico no tiene cambios.
+- Aniadidos login y proxies /api/auth/me y /api/auth/login en backoffice y tracker, usando la API FastAPI y el almacenamiento JWT compartidos. Eliminada la proteccion duplicada del listado de proveedores, ahora cubierta por el guard del layout.
+- Validacion: lint y typecheck correctos en application y backoffice. En tracker los archivos modificados pasan ESLint; lint completo conserva cuatro errores preexistentes en app/candidates/[id]/page.tsx y hooks/useCandidatesList.ts, y typecheck completo un error preexistente en services/api.ts:76 (GetRecordsParams no asignable al tipo query). No se modificaron esos archivos.
+- Endpoints locales de login con credenciales invalidas y de sesion sin token devuelven 401 en backoffice (3001) y tracker (3002). Sin pruebas visuales con Chromium porque falta libatk-1.0.so.0 en el contenedor.
+- Commits creados con confirmacion del desarrollador: 1dac059 (utilidades compartidas), 0f7d709 (application), e0d1a35 (backoffice) y 54ab31b (tracker). La documentacion de progreso se registra en un commit separado.
+
 ## Proximos pasos del tracker
 
 1. Cerrar ajustes de presentacion y coherencia de marca para la entrega del hito.
