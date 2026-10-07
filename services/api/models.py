@@ -42,6 +42,69 @@ class SupplierCategory(str, Enum):
 	IT_AND_SOFTWARE_LICENSES = "it_and_software_licenses"
 
 
+class IncidentCategory(str, Enum):
+	TECHNICAL_FAILURE = "technical_failure"
+	PROCESS_ERROR = "process_error"
+	CLIENT_COMPLAINT = "client_complaint"
+	CANDIDATE_ISSUE = "candidate_issue"
+	STAFF_ISSUE = "staff_issue"
+	SLA_BREACH = "sla_breach"
+	DATA_QUALITY = "data_quality"
+	OTHER = "other"
+
+
+class IncidentStatus(str, Enum):
+	OPEN = "open"
+	IN_PROGRESS = "in_progress"
+	RESOLVED = "resolved"
+	DISCARDED = "discarded"
+
+
+class IncidentOrigin(str, Enum):
+	CUSTOMER = "customer"
+	BRANCH = "branch"
+	INTERNAL = "internal"
+
+
+class IncidentBranch(str, Enum):
+	CENTRAL = "central"
+	VALENCIA_OPERATIONS = "valencia_operations"
+	MIAMI_OFFICE = "miami_office"
+	REMOTE = "remote"
+
+
+class IncidentCreate(BaseModel):
+	"""Datos de entrada para registrar una incidencia."""
+
+	model_config = ConfigDict(extra="forbid")
+
+	title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+	description: str
+	category: IncidentCategory
+	status: IncidentStatus = IncidentStatus.OPEN
+	origin: IncidentOrigin
+	branch: IncidentBranch
+
+	@field_validator("description")
+	@classmethod
+	def validate_description(cls, value: str) -> str:
+		if not value.strip():
+			raise ValueError("description must not be empty")
+		return value
+
+
+class Incident(IncidentCreate):
+	"""Incidencia persistida; TinyDB genera el ID al insertar el registro."""
+
+	id: int = Field(gt=0, strict=True)
+	created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+	updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+	def mark_updated(self) -> None:
+		"""Actualizar la marca temporal cuando se modifica una incidencia."""
+		self.updated_at = datetime.now(timezone.utc)
+
+
 class SupplierBase(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
