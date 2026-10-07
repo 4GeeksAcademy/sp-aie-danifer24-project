@@ -1,13 +1,18 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { Suspense, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, ArrowRight, LoaderCircle, LockKeyhole } from "lucide-react";
 import { loginRequest, storeAccessToken } from "@/lib/auth";
 
 export default function LoginPage() {
+  return <Suspense fallback={<p className="notice" role="status">Cargando...</p>}><LoginForm /></Suspense>;
+}
+
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -39,6 +44,7 @@ export default function LoginPage() {
         </div>
 
         <form className="login-form" onSubmit={submit}>
+          {searchParams.get("passwordReset") === "success" && <p className="success-message" role="status">Contraseña restablecida. Ya puedes iniciar sesión.</p>}
           <fieldset className="form-fields" disabled={busy}>
             <label htmlFor="login-email">Correo electrónico
               <input id="login-email" name="email" type="email" autoComplete="email" required autoFocus />
@@ -55,6 +61,7 @@ export default function LoginPage() {
             {busy ? "Verificando acceso…" : "Entrar"}
           </button>
         </form>
+        <p className="auth-switch"><Link href="/forgot-password">¿Olvidaste tu contraseña?</Link></p>
         <p className="auth-switch">¿No tienes una cuenta? <Link href="/register">Regístrate</Link></p>
       </div>
     </section>

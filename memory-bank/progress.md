@@ -40,6 +40,15 @@ En terminos de impacto, el proyecto ya reduce friccion en la operacion de selecc
 - El paquete frontend no dispone de script de pruebas automatizadas. Pendiente: validacion visual y flujos completos de registro, login y guardado de perfil en navegador con una cuenta valida.
 - Commits funcionales creados con confirmacion del desarrollador: 62f1eba (login y proteccion del directorio), dbcb943 (registro) y a077972 (perfil de cuenta). Cada snapshot del indice paso TypeScript y ESLint de forma independiente; documentacion de progreso separada en el cuarto commit.
 
+## Restablecimiento de contrasena (2026-10-07)
+
+- Backend: POST /auth/forgot-password responde de forma generica y crea JWT de un solo uso con expiracion de 30 minutos; solo se persiste el digest. POST /auth/reset-password verifica firma, uso, expiracion y vinculo al hash anterior. POST /auth/change-password requiere sesion bearer y contrasena actual valida.
+- Email transaccional con Resend por HTTPS; RESEND_API_KEY, RESEND_FROM_EMAIL y PASSWORD_RESET_URL se leen solo del entorno. El email incluye HTML responsive, texto plano y enlace alternativo; fallos de envio se registran sin secretos ni tokens.
+- Frontend: paginas /forgot-password y /reset-password, cambio autenticado en /account/change-password, validacion de confirmacion, mensajes claros, link desde login y aviso posterior al reset. Las rutas publicas se excluyen del guard.
+- El estado exitoso del boton de solicitud no muestra el efecto de espera aunque el boton permanece deshabilitado para evitar duplicados.
+- Verificacion: 12 pruebas backend pasan; typecheck y lint de application pasan. Pruebas backend simulan Resend; no se verifico entrega real del proveedor ni se enviaron correos.
+- Pendiente crear commits separados de backend/tests, frontend y documentacion. Los mensajes se deben confirmar antes de crear los commits.
+
 ## Proteccion de rutas internas (2026-10-07)
 
 - Aniadido SessionGuard cliente compartido: valida el JWT de localStorage consultando /api/auth/me, bloquea la vista durante la comprobacion y redirige a /login si falta o no es valido. Revalida al cambiar ruta, recuperar foco, recibir cambios de almacenamiento y cada minuto; muestra reintento ante errores de conexion.

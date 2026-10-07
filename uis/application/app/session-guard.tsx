@@ -6,7 +6,7 @@ import { InvalidSessionError, validateSession } from "../../../packages/shared/a
 
 export default function SessionGuard({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  if (pathname === "/login" || pathname === "/register") return children;
+  if (["/login", "/register", "/forgot-password", "/reset-password"].includes(pathname)) return children;
   return <ProtectedSession key={pathname}>{children}</ProtectedSession>;
 }
 

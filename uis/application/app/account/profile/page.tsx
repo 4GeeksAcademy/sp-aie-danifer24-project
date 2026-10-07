@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { AlertCircle, CheckCircle2, LoaderCircle, RefreshCw, Save } from "lucide-react";
 import { AccountSessionError, getCurrentAccount, updateMyProfile, type CurrentAccount, type Profile } from "@/lib/account";
 
@@ -63,6 +64,7 @@ export default function AccountProfilePage() {
     <div className="account-profile">
       <section className="page-heading">
         <div><div className="eyebrow">MI CUENTA / NEXOVA</div><h1>Mi perfil</h1></div>
+        <Link className="secondary-button" href="/account/change-password">Cambiar contraseña</Link>
       </section>
 
       {loading && <p className="notice" role="status"><LoaderCircle size={18} className="spinning" />Cargando perfil...</p>}

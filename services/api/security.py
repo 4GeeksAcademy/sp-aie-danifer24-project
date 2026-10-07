@@ -61,6 +61,8 @@ def get_current_user(
 			JWT_SECRET_KEY,
 			algorithms=[JWT_ALGORITHM],
 		)
+		if payload.get("purpose", "access") != "access":
+			raise unauthorized
 		user_id = int(payload.get("sub", ""))
 	except (JWTError, TypeError, ValueError) as error:
 		raise unauthorized from error
