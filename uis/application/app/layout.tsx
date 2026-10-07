@@ -7,6 +7,7 @@ import "@fontsource/dm-sans/500.css";
 import "@fontsource/dm-sans/600.css";
 import "@fontsource/dm-sans/700.css";
 import "./globals.css";
+import SessionGuard from "./session-guard";
 
 export const metadata: Metadata = {
   title: "Proveedores | Nexova",
@@ -17,6 +18,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="es">
       <body>
+        <SessionGuard>
         <header className="app-header">
           <Link className="brand" href="/">nexova<span>OPERACIONES</span></Link>
           <nav aria-label="Menu de la aplicacion">
@@ -26,6 +28,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <span className="workspace-name">Valencia / Miami</span>
         </header>
         <main>{children}</main>
+        </SessionGuard>
       </body>
     </html>
   );

@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
 import { AlertCircle, ArrowUpRight, Building2, Check, CheckCircle2, Clock3, Pencil, Plus, RefreshCw, Search, X } from "lucide-react";
-import { getStoredAccessToken } from "@/lib/auth";
 import { categories, money, renewalSoon, suppliersRequest, type Category, type Country, type Supplier, type SupplierInput } from "@/lib/suppliers";
 
 function errorMessage(error: unknown): string {
@@ -104,7 +102,6 @@ function EditRate({ supplier, onClose, onUpdated }: { supplier: Supplier; onClos
 }
 
 export default function SuppliersPage() {
-  const router = useRouter();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -117,22 +114,13 @@ export default function SuppliersPage() {
   const [pendingId, setPendingId] = useState<number | null>(null);
 
   useEffect(() => {
-    if (!getStoredAccessToken()) {
-      router.replace("/login");
-      return;
-    }
-    const handleUnauthorized = () => router.replace("/login");
-    window.addEventListener("nexova:unauthorized", handleUnauthorized);
     const controller = new AbortController();
     suppliersRequest<Supplier[]>("", { signal: controller.signal })
       .then((data) => { setSuppliers(data); setError(""); })
       .catch((error) => { if (!controller.signal.aborted) setError(errorMessage(error)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => {
-      controller.abort();
-      window.removeEventListener("nexova:unauthorized", handleUnauthorized);
-    };
-  }, [router]);
+    return () => controller.abort();
+  }, []);
 
   async function reload() {
     setLoading(true); setError(""); setNotice("");
