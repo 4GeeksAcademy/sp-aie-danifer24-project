@@ -1,8 +1,11 @@
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.responses import JSONResponse
 
 from services.api.incidents import (
     CsvInputError,
@@ -13,6 +16,7 @@ from services.api.incidents import (
 )
 from services.api.routes.suppliers import router as suppliers_router
 from services.api.routes.auth import router as auth_router
+from services.api.routes.incidents import router as incidents_router
 from services.api.routes.profiles import router as profiles_router
 from services.api.routes.users import router as users_router
 from services.api.security import CurrentUser
@@ -23,7 +27,50 @@ app.include_router(suppliers_router)
 app.include_router(auth_router)
 app.include_router(profiles_router)
 app.include_router(users_router)
+app.include_router(incidents_router)
 latest_report_csv = None
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_exception_handler(
+    request: Request, error: RequestValidationError
+):
+    errors = []
+    for item in error.errors():
+        location = item.get("loc", ())
+        field = str(location[-1]) if location else "request"
+        errors.append(
+            {
+                "field": field,
+                "message": "El valor es obligatorio o no tiene un formato permitido.",
+            }
+        )
+    if not request.url.path.startswith("/api/incidents"):
+        return JSONResponse(
+            status_code=422,
+            content={"detail": errors},
+        )
+    return JSONResponse(
+        status_code=400,
+        content={"message": "La solicitud contiene datos no válidos.", "errors": errors},
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, error: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Error interno del servidor."},
+    )
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, error: StarletteHTTPException):
+    return JSONResponse(
+        status_code=error.status_code,
+        content={"detail": error.detail},
+        headers=error.headers,
+    )
 
 
 @app.post("/api/incidents/analyze")

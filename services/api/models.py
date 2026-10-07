@@ -81,7 +81,7 @@ class IncidentCreate(BaseModel):
 	title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 	description: str
 	category: IncidentCategory
-	status: IncidentStatus = IncidentStatus.OPEN
+	status: IncidentStatus
 	origin: IncidentOrigin
 	branch: IncidentBranch
 
@@ -103,6 +103,16 @@ class Incident(IncidentCreate):
 	def mark_updated(self) -> None:
 		"""Actualizar la marca temporal cuando se modifica una incidencia."""
 		self.updated_at = datetime.now(timezone.utc)
+
+
+class IncidentResponse(Incident):
+	"""Representación pública de una incidencia guardada."""
+
+
+class IncidentStatusUpdate(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	status: IncidentStatus
 
 
 class SupplierBase(BaseModel):
