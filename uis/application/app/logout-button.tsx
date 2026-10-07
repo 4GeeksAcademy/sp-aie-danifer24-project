@@ -12,7 +12,7 @@ export default function LogoutButton() {
 
   useEffect(() => {
     function updateVisibility() {
-      if (pathname === "/login" || pathname === "/register") {
+      if (["/login", "/register", "/forgot-password", "/reset-password"].includes(pathname)) {
         setVisible(false);
         return;
       }
