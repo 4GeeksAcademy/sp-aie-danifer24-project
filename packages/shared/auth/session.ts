@@ -15,6 +15,14 @@ export function readSessionToken(): string | null {
   }
 }
 
+export function clearSessionToken(): void {
+  try {
+    window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+  } catch {
+    // Storage can be unavailable in restricted browser contexts.
+  }
+}
+
 export async function validateSession(signal: AbortSignal): Promise<void> {
   const token = readSessionToken();
   if (!token) throw new InvalidSessionError();
@@ -30,7 +38,7 @@ export async function validateSession(signal: AbortSignal): Promise<void> {
     throw new Error("No se pudo verificar la sesión. Comprueba la conexión con la API.");
   }
   if (response.status === 401 || response.status === 403) {
-    if (readSessionToken() === token) window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+    if (readSessionToken() === token) clearSessionToken();
     throw new InvalidSessionError();
   }
   if (!response.ok) throw new Error("El servicio de autenticación no está disponible. Inténtalo de nuevo.");

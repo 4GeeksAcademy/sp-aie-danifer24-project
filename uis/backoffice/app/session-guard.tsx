@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { InvalidSessionError, validateSession } from "../../../packages/shared/auth/session";
+import { clearSessionToken, InvalidSessionError, validateSession } from "../../../packages/shared/auth/session";
 
 export default function SessionGuard({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -54,5 +54,5 @@ function ProtectedSession({ children }: { children: ReactNode }) {
 
   if (!result) return <main className="auth-page"><p role="status">Verificando sesión...</p></main>;
   if (result.error) return <main className="auth-page"><p role="alert">{result.error}</p><button onClick={() => { setResult(null); setAttempt((current) => current + 1); }}>Reintentar</button></main>;
-  return children;
+  return <><div className="session-actions"><button type="button" onClick={() => { clearSessionToken(); router.replace("/login"); }}>Cerrar sesión</button></div>{children}</>;
 }

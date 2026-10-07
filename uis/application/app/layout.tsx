@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { Building2, UserRound } from "lucide-react";
+import LogoutButton from "./logout-button";
 import "@fontsource/dm-sans/400.css";
 import "@fontsource/dm-sans/500.css";
 import "@fontsource/dm-sans/600.css";
@@ -26,6 +27,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <Link href="/account/profile"><UserRound size={18} /> Mi cuenta</Link>
           </nav>
           <span className="workspace-name">Valencia / Miami</span>
+          <LogoutButton />
         </header>
         <main>{children}</main>
         </SessionGuard>

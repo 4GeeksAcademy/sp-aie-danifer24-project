@@ -27,3 +27,5 @@ body {
 .auth-page button { min-height: 44px; padding: 10px 18px; border: 0; border-radius: 5px; background: #14745d; color: white; cursor: pointer; }
 .auth-page button:disabled { opacity: .6; cursor: wait; }
 .auth-form [role="alert"] { color: #9b352d; }
+.session-actions { position: fixed; top: 16px; right: 20px; z-index: 50; }
+.session-actions button { min-height: 38px; padding: 8px 12px; border: 1px solid #a5aaa7; border-radius: 5px; background: white; color: #171717; cursor: pointer; }

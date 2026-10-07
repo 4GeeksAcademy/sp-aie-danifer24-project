@@ -131,6 +131,7 @@ tr:hover td { background: #fafcfb; }
 .auth-switch a { color: var(--accent); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
 .app-header nav { display: flex; flex-wrap: wrap; gap: 16px; }
 .app-header nav a { white-space: nowrap; }
+.logout-button { white-space: nowrap; }
 .account-profile { max-width: 600px; animation: enter .3s ease-out; }
 .profile-form { padding-top: 24px; border-top: 1px solid var(--border); margin-top: 20px; }
 .profile-form label { display: grid; gap: 7px; font-size: 13px; font-weight: 600; }
@@ -151,6 +152,7 @@ tr:hover td { background: #fafcfb; }
   .app-header { gap: 24px; padding: 16px 20px; }
   .brand { font-size: 24px; }
   .workspace-name { display: none; }
+  .logout-button { min-height: 38px; padding: 8px 10px; font-size: 12px; }
   nav a { font-size: 13px; }
   main { padding: 26px 18px; }
   .page-heading { align-items: flex-start; flex-direction: column; gap: 18px; }
