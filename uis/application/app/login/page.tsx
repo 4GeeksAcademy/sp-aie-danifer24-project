@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertCircle, ArrowRight, LoaderCircle, LockKeyhole } from "lucide-react";
 import { loginRequest, storeAccessToken } from "@/lib/auth";
@@ -54,6 +55,7 @@ export default function LoginPage() {
             {busy ? "Verificando acceso…" : "Entrar"}
           </button>
         </form>
+        <p className="auth-switch">¿No tienes una cuenta? <Link href="/register">Regístrate</Link></p>
       </div>
     </section>
   );

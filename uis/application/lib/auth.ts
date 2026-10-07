@@ -1,5 +1,24 @@
 export const ACCESS_TOKEN_STORAGE_KEY = "nexova_access_token";
 
+export type RegistrationField = "email" | "password" | "name" | "phone" | "address";
+export type RegistrationFieldErrors = Partial<Record<RegistrationField, string>>;
+const registrationFields: RegistrationField[] = ["email", "password", "name", "phone", "address"];
+
+export interface RegistrationInput {
+  email: string;
+  password: string;
+  name?: string;
+  phone?: string;
+  address?: string;
+}
+
+export class RegistrationError extends Error {
+  constructor(readonly fieldErrors: RegistrationFieldErrors) {
+    super("Revisa los campos marcados.");
+    this.name = "RegistrationError";
+  }
+}
+
 export function getStoredAccessToken(): string | null {
   return typeof window === "undefined"
     ? null
@@ -12,6 +31,69 @@ export function storeAccessToken(token: string): void {
 
 export function clearStoredAccessToken(): void {
   window.localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
+}
+
+function parseRegistrationErrors(payload: unknown): RegistrationFieldErrors {
+  if (!payload || typeof payload !== "object" || !("detail" in payload) || !Array.isArray(payload.detail)) {
+    return {};
+  }
+
+  const fieldErrors: RegistrationFieldErrors = {};
+  for (const issue of payload.detail) {
+    if (!issue || typeof issue !== "object" || !("loc" in issue) || !Array.isArray(issue.loc)) continue;
+    const location = issue.loc as unknown[];
+    const field = location.find((part: unknown): part is RegistrationField =>
+      typeof part === "string" && registrationFields.includes(part as RegistrationField),
+    );
+    if (!field || fieldErrors[field]) continue;
+
+    const type = "type" in issue && typeof issue.type === "string" ? issue.type : "";
+    if (type === "missing") {
+      fieldErrors[field] = "Este campo es obligatorio.";
+    } else if (field === "email") {
+      fieldErrors[field] = "Introduce una dirección de correo válida.";
+    } else if (field === "password" && type === "string_too_short") {
+      fieldErrors[field] = "La contraseña debe tener al menos 8 caracteres.";
+    } else if (field === "password") {
+      fieldErrors[field] = "La contraseña no puede superar 72 bytes.";
+    } else {
+      fieldErrors[field] = "Revisa este campo.";
+    }
+  }
+
+  return fieldErrors;
+}
+
+export async function registerRequest(input: RegistrationInput): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch("/api/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+      cache: "no-store",
+    });
+  } catch {
+    throw new Error("No se pudo conectar con la API. Comprueba que esté en funcionamiento e inténtalo de nuevo.");
+  }
+
+  const payload: unknown = await response.json().catch(() => null);
+  if (response.ok) return;
+
+  if (response.status === 409) {
+    throw new RegistrationError({ email: "Este correo ya está registrado." });
+  }
+  if (response.status === 422) {
+    const fieldErrors = parseRegistrationErrors(payload);
+    if (Object.keys(fieldErrors).length) throw new RegistrationError(fieldErrors);
+  }
+  if (response.status >= 500) {
+    throw new Error("El servicio de registro no está disponible. Inténtalo de nuevo.");
+  }
+  if (payload && typeof payload === "object" && "detail" in payload && typeof payload.detail === "string") {
+    throw new Error(payload.detail);
+  }
+  throw new Error("No se pudo crear la cuenta. Revisa los datos e inténtalo de nuevo.");
 }
 
 export async function loginRequest(email: string, password: string): Promise<string> {
