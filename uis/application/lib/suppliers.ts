@@ -1,3 +1,5 @@
+import { clearStoredAccessToken, getStoredAccessToken } from "@/lib/auth";
+
 export const categories = {
   job_boards: "Portales de empleo",
   ats_software: "Software ATS",
@@ -64,9 +66,14 @@ function apiError(payload: unknown): string {
 export async function suppliersRequest<T>(path = "", options?: RequestInit): Promise<T> {
   let response: Response;
   try {
+    const headers = new Headers(options?.headers);
+    headers.set("Content-Type", "application/json");
+    const token = getStoredAccessToken();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+
     response = await fetch(`/api/suppliers${path}`, {
       ...options,
-      headers: { "Content-Type": "application/json", ...options?.headers },
+      headers,
       cache: "no-store",
     });
   } catch (error) {
@@ -74,6 +81,10 @@ export async function suppliersRequest<T>(path = "", options?: RequestInit): Pro
     throw new Error("No se pudo conectar con el directorio. Inténtalo de nuevo.");
   }
   if (!response.ok) {
+    if (response.status === 401 && typeof window !== "undefined") {
+      clearStoredAccessToken();
+      window.dispatchEvent(new Event("nexova:unauthorized"));
+    }
     const payload: unknown = await response.json().catch(() => null);
     throw new Error(response.status >= 500 ? "El servicio no está disponible. Inténtalo de nuevo." : apiError(payload));
   }
