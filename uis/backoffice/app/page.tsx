@@ -7,25 +7,24 @@ export default function HomePage() {
         <p className="badge">Backoffice · Nexova</p>
         <h1>Panel Interno</h1>
         <p>
-          Vista de entrada del backoffice para operaciones internas. Desde aqui
-          puedes navegar a los modulos de trabajo y a la vista de validacion.
+          Centro de operaciones de Nexova para dar seguimiento a incidencias y
+          acceder a las herramientas del equipo.
         </p>
       </section>
 
-      <section className="playground-grid" aria-label="Accesos de backoffice">
+      <section className="backoffice-home-grid" aria-label="Accesos de backoffice">
         <article className="panel">
           <div className="panel-header">
-            <h2>Accesos rapidos</h2>
+            <h2>Gestión de incidencias</h2>
           </div>
           <p>
-            Usa este espacio como estructura base de dashboard. Puedes conectar
-            aqui widgets de pipeline, actividad y alertas.
+            Consulta los problemas reportados, revisa sus métricas o registra
+            una nueva incidencia para el equipo.
           </p>
-          <p>
-            <Link className="btn btn-dark" href="/validacion-tecnica">
-              Abrir centro de validacion tecnica
-            </Link>
-          </p>
+          <div className="quick-links">
+            <Link className="btn btn-dark" href="/incidents">Abrir panel de incidencias</Link>
+            <Link className="btn btn-outline" href="/incidents/new">Registrar incidencia</Link>
+          </div>
         </article>
 
         <article className="panel">
@@ -33,9 +32,9 @@ export default function HomePage() {
             <h2>Resumen operativo</h2>
           </div>
           <ul>
-            <li>Dashboard base disponible en la ruta /</li>
-            <li>Centro de validacion disponible en /validacion-tecnica</li>
-            <li>Logica de negocio importada desde src/utils y src/types</li>
+            <li>Incidencias de cliente, sedes y operaciones internas</li>
+            <li>Seguimiento de estados y métricas agregadas</li>
+            <li><Link href="/validacion-tecnica">Centro de validación técnica</Link></li>
           </ul>
         </article>
       </section>
