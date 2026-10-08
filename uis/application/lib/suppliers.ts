@@ -33,6 +33,24 @@ export interface Supplier extends SupplierInput {
   updated_at: string;
 }
 
+export function isSupplier(value: unknown): value is Supplier {
+  if (!value || typeof value !== "object") return false;
+  const supplier = value as Partial<Supplier>;
+  return typeof supplier.id === "number"
+    && typeof supplier.name === "string"
+    && (supplier.country === "Spain" || supplier.country === "USA")
+    && Array.isArray(supplier.categories)
+    && supplier.categories.every((category) => Object.prototype.hasOwnProperty.call(categories, category))
+    && typeof supplier.monthly_rate === "number" && Number.isFinite(supplier.monthly_rate)
+    && (supplier.currency === "EUR" || supplier.currency === "USD")
+    && (supplier.status === "active" || supplier.status === "suspended")
+    && typeof supplier.updated_at === "string";
+}
+
+export function isSupplierList(value: unknown): value is Supplier[] {
+  return Array.isArray(value) && value.every(isSupplier);
+}
+
 const fieldNames: Record<string, string> = {
   name: "Nombre",
   country: "País",
@@ -44,17 +62,17 @@ const fieldNames: Record<string, string> = {
   contact_email: "Email",
 };
 
-function apiError(payload: unknown): string {
-  if (!payload || typeof payload !== "object" || !("detail" in payload)) {
-    return "No se pudo completar la operación. Inténtalo de nuevo.";
-  }
-  if (typeof payload.detail === "string") return payload.detail;
-  if (!Array.isArray(payload.detail)) return "La API ha rechazado los datos.";
-  return payload.detail.map((error: unknown) => {
+function apiError(status: number, payload: unknown): string {
+  if (status === 401) return "Tu sesión ha caducado. Inicia sesión de nuevo.";
+  if (status === 403) return "No tienes permiso para realizar esta operación. Contacta con soporte.";
+  if (status === 404) return "No se encontró el proveedor solicitado. Actualiza el listado.";
+  const detail = payload && typeof payload === "object" && "detail" in payload ? payload.detail : null;
+  if (!Array.isArray(detail)) return "No se pudo completar la operación. Revisa los datos e inténtalo de nuevo.";
+  return detail.map((error: unknown) => {
     if (!error || typeof error !== "object" || !("loc" in error)) return "Revisa los datos.";
     const location = Array.isArray(error.loc) ? error.loc : [];
-    const field = location.find((part: unknown) => typeof part === "string" && part in fieldNames);
-    const label = typeof field === "string" ? fieldNames[field] : "Datos";
+    const field = location.find((part: unknown) => typeof part === "string" && Object.prototype.hasOwnProperty.call(fieldNames, part));
+    const label = typeof field === "string" ? fieldNames[field] ?? "Datos" : "Datos";
     const type = "type" in error ? error.type : "";
     const message = type === "greater_than" ? "debe ser mayor que cero" :
       type === "enum" ? "elige una opción válida" :
@@ -86,13 +104,21 @@ export async function suppliersRequest<T>(path = "", options?: RequestInit): Pro
       window.dispatchEvent(new Event("nexova:unauthorized"));
     }
     const payload: unknown = await response.json().catch(() => null);
-    throw new Error(response.status >= 500 ? "El servicio no está disponible. Inténtalo de nuevo." : apiError(payload));
+    throw new Error(response.status >= 500 ? "El servicio no está disponible. Inténtalo de nuevo." : apiError(response.status, payload));
   }
-  return response.json() as Promise<T>;
+  try {
+    return await response.json() as T;
+  } catch {
+    throw new Error("El directorio devolvió una respuesta no válida. Inténtalo de nuevo.");
+  }
 }
 
 export function money(amount: number, currency: string): string {
-  return new Intl.NumberFormat("es-ES", { style: "currency", currency }).format(amount);
+  try {
+    return new Intl.NumberFormat("es-ES", { style: "currency", currency }).format(amount);
+  } catch {
+    return "Importe no disponible";
+  }
 }
 
 export function renewalSoon(value?: string): boolean {

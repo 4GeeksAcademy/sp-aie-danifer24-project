@@ -43,15 +43,15 @@ async function accountRequest<T>(path: string, options?: RequestInit): Promise<T
     clearStoredAccessToken();
     throw new AccountSessionError();
   }
-  if (!response.ok) {
-    const payload: unknown = await response.json().catch(() => null);
-    if (response.status >= 500) throw new Error("El servicio no está disponible. Inténtalo de nuevo.");
-    if (payload && typeof payload === "object" && "detail" in payload && typeof payload.detail === "string") {
-      throw new Error(payload.detail);
-    }
-    throw new Error("No se pudo actualizar el perfil. Revisa los datos e inténtalo de nuevo.");
+  if (response.status >= 500) throw new Error("El servicio no está disponible. Inténtalo de nuevo.");
+  if (response.status === 403) throw new Error("No tienes permiso para acceder a este perfil. Contacta con soporte.");
+  if (response.status === 404) throw new Error("No se encontró tu perfil. Contacta con soporte.");
+  if (!response.ok) throw new Error("No se pudo guardar el perfil. Revisa los datos e inténtalo de nuevo.");
+  try {
+    return await response.json() as T;
+  } catch {
+    throw new Error("El servicio devolvió una respuesta no válida. Inténtalo de nuevo.");
   }
-  return response.json() as Promise<T>;
 }
 
 export function getCurrentAccount(signal?: AbortSignal): Promise<CurrentAccount> {

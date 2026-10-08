@@ -20,17 +20,28 @@ export class RegistrationError extends Error {
 }
 
 export function getStoredAccessToken(): string | null {
-  return typeof window === "undefined"
-    ? null
-    : window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
+  } catch {
+    throw new Error("El navegador no permite acceder a la sesión. Habilita el almacenamiento local e inténtalo de nuevo.");
+  }
 }
 
 export function storeAccessToken(token: string): void {
-  window.localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, token);
+  try {
+    window.localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, token);
+  } catch {
+    throw new Error("El navegador no permite guardar la sesión. Habilita el almacenamiento local e inténtalo de nuevo.");
+  }
 }
 
 export function clearStoredAccessToken(): void {
-  window.localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
+  try {
+    window.localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
+  } catch {
+    window.dispatchEvent(new Event("nexova:unauthorized"));
+  }
 }
 
 function parseRegistrationErrors(payload: unknown): RegistrationFieldErrors {
@@ -90,9 +101,6 @@ export async function registerRequest(input: RegistrationInput): Promise<void> {
   if (response.status >= 500) {
     throw new Error("El servicio de registro no está disponible. Inténtalo de nuevo.");
   }
-  if (payload && typeof payload === "object" && "detail" in payload && typeof payload.detail === "string") {
-    throw new Error(payload.detail);
-  }
   throw new Error("No se pudo crear la cuenta. Revisa los datos e inténtalo de nuevo.");
 }
 
@@ -116,9 +124,6 @@ export async function loginRequest(email: string, password: string): Promise<str
     }
     if (response.status >= 500) {
       throw new Error("El servicio de autenticación no está disponible. Inténtalo de nuevo.");
-    }
-    if (payload && typeof payload === "object" && "detail" in payload && typeof payload.detail === "string") {
-      throw new Error(payload.detail);
     }
     throw new Error("Revisa el correo y la contraseña e inténtalo de nuevo.");
   }

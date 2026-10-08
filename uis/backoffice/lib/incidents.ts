@@ -85,11 +85,16 @@ function readSessionToken(): string | null {
   }
 }
 
-function safeMessage(value: unknown): string {
-  if (typeof value === "string" && value.length < 180 && !/traceback|exception|sql|tinydb|internal server/i.test(value)) {
-    return value;
-  }
-  return "No se pudo completar la operación. Inténtalo de nuevo.";
+function fieldMessage(field: unknown): string {
+  const messages: Record<string, string> = {
+    title: "El título es obligatorio.",
+    description: "La descripción es obligatoria.",
+    category: "Selecciona una categoría válida.",
+    status: "No se pudo aplicar ese cambio de estado. Actualiza la incidencia e inténtalo de nuevo.",
+    origin: "Selecciona un origen válido.",
+    branch: "Selecciona una sede válida.",
+  };
+  return typeof field === "string" ? messages[field] ?? "Revisa los datos e inténtalo de nuevo." : "Revisa los datos e inténtalo de nuevo.";
 }
 
 export class IncidentApiError extends Error {
@@ -130,20 +135,23 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     if (Array.isArray(errors) && errors.length) {
       const first = errors[0] as { field?: unknown; message?: unknown };
       const field = typeof first.field === "string" ? first.field : undefined;
-      throw new IncidentApiError(safeMessage(first.message), field);
+      throw new IncidentApiError(fieldMessage(field), field);
     }
     const detail = outerDetail;
     if (detail && typeof detail === "object" && "field" in detail) {
       const field = typeof detail.field === "string" ? detail.field : undefined;
-      const message = "message" in detail ? safeMessage(detail.message) : "Revisa este campo.";
-      throw new IncidentApiError(message, field);
+      throw new IncidentApiError(fieldMessage(field), field);
     }
     const fallback = response.status >= 500
       ? "El servicio no está disponible ahora. Inténtalo de nuevo más tarde."
       : "No se pudo guardar la incidencia. Revisa los datos e inténtalo de nuevo.";
     throw new IncidentApiError(fallback);
   }
-  return response.json() as Promise<T>;
+  try {
+    return await response.json() as T;
+  } catch {
+    throw new IncidentApiError("El servicio de incidencias devolvió una respuesta no válida. Inténtalo de nuevo.");
+  }
 }
 
 export function createIncident(input: Omit<Incident, "id" | "created_at" | "updated_at">): Promise<Incident> {
