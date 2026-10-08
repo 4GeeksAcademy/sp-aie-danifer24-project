@@ -19,6 +19,13 @@
 - Los formularios limpian estado `busy` mediante `finally`; cargas de incidencias también limpian `loading` en `finally`. Los errores de cambio de estado del panel ofrecen reintento, y los fallbacks evitan fallos de render con datos opcionales.
 - Verificación: lint, typecheck y build correctos en Application y Backoffice; `git diff --check` correcto. Website no tiene dependencias instaladas en el workspace y no fue modificado; las apps no ofrecen suite automatizada de UI.
 
+## Gestión de errores del backend (2026-10-08)
+
+- Los handlers FastAPI devuelven códigos estables (`code`) y `status_code` junto a `detail` compatible; las validaciones sanitizan el nombre de campo y mensajes, y los fallos no manejados responden 500 genérico mientras el log registra solo el tipo de excepción.
+- El endpoint de análisis CSV cierra siempre el archivo cargado, convierte fallos de lectura en 500 controlado y mantiene validaciones 400/415/422.
+- El único cliente externo de la API, Resend, limita los `try/except` a parseo de URL, construcción de request y transporte; controla errores HTTP, URL y timeout sin registrar token, destinatario, URL ni cuerpo.
+- Verificación backend: 16 pruebas pasan, incluyendo respuestas estructuradas 400/404/422/500, fallos de transporte y ausencia de secretos en logs; `compileall` y `git diff --check` correctos.
+
 ## Estado actual (resumen ejecutivo)
 
 El desarrollo del Talent Pipeline Tracker se encuentra en una fase avanzada y ya cubre el flujo operativo principal de gestion de candidaturas en Nexova.

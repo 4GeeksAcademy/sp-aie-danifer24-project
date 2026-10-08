@@ -1,4 +1,5 @@
 from pathlib import Path
+import logging
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
@@ -29,6 +30,24 @@ app.include_router(profiles_router)
 app.include_router(users_router)
 app.include_router(incidents_router)
 latest_report_csv = None
+logger = logging.getLogger(__name__)
+
+VALIDATION_FIELDS = {
+    "email", "password", "new_password", "current_password", "name", "phone",
+    "address", "role", "is_active", "title", "description", "category",
+    "status", "origin", "branch", "monthly_rate", "currency", "country",
+    "categories", "contract_renewal_date", "contact_email", "notes", "file",
+}
+
+HTTP_ERROR_CODES = {
+    400: "bad_request",
+    401: "unauthorized",
+    403: "forbidden",
+    404: "not_found",
+    409: "conflict",
+    415: "unsupported_media_type",
+    422: "validation_error",
+}
 
 
 @app.exception_handler(RequestValidationError)
@@ -38,7 +57,8 @@ async def request_validation_exception_handler(
     errors = []
     for item in error.errors():
         location = item.get("loc", ())
-        field = str(location[-1]) if location else "request"
+        candidate = str(location[-1]) if location else "request"
+        field = candidate if candidate in VALIDATION_FIELDS else "request"
         errors.append(
             {
                 "field": field,
@@ -48,19 +68,29 @@ async def request_validation_exception_handler(
     if not request.url.path.startswith("/api/incidents"):
         return JSONResponse(
             status_code=422,
-            content={"detail": errors},
+            content={"detail": errors, "code": "validation_error", "status_code": 422},
         )
     return JSONResponse(
         status_code=400,
-        content={"message": "La solicitud contiene datos no válidos.", "errors": errors},
+        content={
+            "message": "La solicitud contiene datos no válidos.",
+            "errors": errors,
+            "code": "validation_error",
+            "status_code": 400,
+        },
     )
 
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, error: Exception):
+    logger.error("Unhandled API error (type=%s)", type(error).__name__)
     return JSONResponse(
         status_code=500,
-        content={"detail": "Error interno del servidor."},
+        content={
+            "detail": "Error interno del servidor.",
+            "code": "internal_server_error",
+            "status_code": 500,
+        },
     )
 
 
@@ -68,7 +98,11 @@ async def unhandled_exception_handler(request: Request, error: Exception):
 async def http_exception_handler(request: Request, error: StarletteHTTPException):
     return JSONResponse(
         status_code=error.status_code,
-        content={"detail": error.detail},
+        content={
+            "detail": error.detail,
+            "code": HTTP_ERROR_CODES.get(error.status_code, "http_error"),
+            "status_code": error.status_code,
+        },
         headers=error.headers,
     )
 
@@ -80,17 +114,21 @@ async def analyze_incidents(
 ):
     global latest_report_csv
 
-    filename = Path(file.filename or "").name
-    if not filename or Path(filename).suffix.lower() != ".csv":
-        raise HTTPException(status_code=415, detail="Selecciona un archivo con extensión .csv.")
-
-    contents = await file.read()
-    if not contents:
-        raise HTTPException(status_code=400, detail="El archivo CSV está vacío.")
     try:
-        rows = load_records_from_text(contents)
-    except CsvInputError as error:
-        raise HTTPException(status_code=422, detail=str(error)) from error
+        filename = Path(file.filename or "").name
+        if not filename or Path(filename).suffix.lower() != ".csv":
+            raise HTTPException(status_code=415, detail="Selecciona un archivo con extensión .csv.")
+
+        try:
+            contents = await file.read()
+        except (OSError, RuntimeError) as error:
+            raise HTTPException(status_code=500, detail="No se pudo leer el archivo cargado.") from error
+        if not contents:
+            raise HTTPException(status_code=400, detail="El archivo CSV está vacío.")
+        try:
+            rows = load_records_from_text(contents)
+        except CsvInputError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
     finally:
         await file.close()
 

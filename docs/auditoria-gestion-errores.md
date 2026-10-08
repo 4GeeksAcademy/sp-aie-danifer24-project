@@ -30,12 +30,13 @@ Alcance: revisión estática de las aplicaciones Next.js en `uis/`, la API FastA
 - **Problema:** Los bloques `catch` muestran `error.message` directamente. Un fallo de red o de `response.json()` puede presentar mensajes técnicos del navegador en la interfaz.
 - **Corrección sugerida:** Mostrar un mensaje genérico para errores de transporte o parseo y reservar mensajes controlados para errores de API conocidos.
 
-#### Recuperación de contraseña captura excepciones demasiado amplias
+#### Recuperación de contraseña captura excepciones demasiado amplias — Resuelto
 
 - **Categoría:** Catch demasiado amplio
 - **Ubicación:** [`services/api/services/email.py`](../services/api/services/email.py#L13), [`services/api/services/email.py`](../services/api/services/email.py#L48)
 - **Problema:** El `except Exception` cubre configuración, construcción del mensaje, serialización y envío. Un defecto de programación también queda clasificado como un fallo genérico de entrega.
 - **Corrección sugerida:** Distinguir fallos esperados de configuración/transporte de errores inesperados, conservando la respuesta genérica externa del flujo de recuperación.
+- **Estado:** Resuelto el 2026-10-08. `send_reset_email` separa validación de configuración, creación de la solicitud y transporte; solo captura errores esperados, y los logs no incluyen valores sensibles.
 
 #### Comprobación de sesión sin reintento en el backoffice heredado
 
