@@ -44,7 +44,7 @@ export default function NewIncidentPage() {
     setError("");
     setFieldErrors({});
     try {
-      await createIncident({
+      const created = await createIncident({
         title: String(values.get("title") ?? "").trim(),
         description: String(values.get("description") ?? "").trim(),
         category: String(values.get("category")) as IncidentCategory,
@@ -52,6 +52,7 @@ export default function NewIncidentPage() {
         origin: String(values.get("origin")) as IncidentOrigin,
         branch: String(values.get("branch")) as IncidentBranch,
       });
+      if (!created || typeof created.id !== "number") throw new Error("El servicio devolvió una incidencia no válida. Inténtalo de nuevo.");
       form.reset();
       setOrigin("");
       setSuccess("La incidencia se ha registrado correctamente.");

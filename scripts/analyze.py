@@ -23,11 +23,11 @@ def print_breakdown(label, count, percentage=None):
     print(line)
 
 
-def print_report(source_name, results):
+def print_report(results):
     separator = "=" * 68
     print(separator)
     print("  NEXOVA | ANÁLISIS DE INCIDENCIAS DE SOPORTE")
-    print(f"  Archivo de origen: {source_name}")
+    print("  Archivo de origen: CSV proporcionado por el usuario")
     print(separator)
     print()
     print("RESUMEN DE REGISTROS")
@@ -69,13 +69,13 @@ def print_report(source_name, results):
 
 
 def export_results(results):
-    export_path = Path.cwd() / "results.csv"
     try:
+        export_path = Path.cwd() / "results.csv"
         export_path.write_bytes(results_csv_bytes(results))
-    except OSError:
-        print("No se pudo guardar results.csv.", file=sys.stderr)
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        print(f"Error: no se pudieron preparar o guardar los resultados ({type(error).__name__}).", file=sys.stderr)
         return 1
-    print(f"Resultados exportados a {export_path}")
+    print("Resultados exportados a results.csv.")
     return 0
 
 
@@ -92,15 +92,25 @@ def main():
         print(f"Error: no se pudo leer el CSV ({error}).", file=sys.stderr)
         return 2
 
-    results = analyze(rows)
-    print_report(args.csv_file.name, results)
     try:
-        export_choice = input("¿Deseas exportar los resultados a CSV? [s / n] ").strip().lower()
-    except EOFError:
-        export_choice = "n"
-    while export_choice not in {"s", "si", "sí", "n", "no", ""}:
+        results = analyze(rows)
+        print_report(results)
+    except (KeyError, TypeError, ValueError, ZeroDivisionError) as error:
+        print(f"Error: no se pudo procesar el contenido del CSV ({type(error).__name__}).", file=sys.stderr)
+        return 1
+
+    valid_choices = {"s", "si", "sí", "n", "no", ""}
+    while True:
+        try:
+            export_choice = input("¿Deseas exportar los resultados a CSV? [s / n] ").strip().lower()
+        except EOFError:
+            return 0
+        except OSError as error:
+            print(f"Error: no se pudo leer la respuesta del terminal ({type(error).__name__}).", file=sys.stderr)
+            return 1
+        if export_choice in valid_choices:
+            break
         print("Respuesta no válida. Escribe 's' para exportar o 'n' para salir.")
-        export_choice = input("¿Deseas exportar los resultados a CSV? [s / n] ").strip().lower()
     if export_choice in {"s", "si", "sí"}:
         return export_results(results)
     return 0

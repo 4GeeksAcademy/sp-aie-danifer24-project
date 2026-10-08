@@ -23,12 +23,15 @@ async function passwordRequest(endpoint: string, body: Record<string, string>, a
     window.dispatchEvent(new Event("nexova:unauthorized"));
     throw new Error("Tu sesión ha caducado. Inicia sesión de nuevo.");
   }
-  const payload: unknown = await response.json().catch(() => null);
   if (response.status >= 500) throw new Error("El servicio no está disponible. Inténtalo de nuevo.");
-  if (payload && typeof payload === "object" && "detail" in payload && typeof payload.detail === "string") {
-    throw new Error(payload.detail);
+  if (response.status === 400 && endpoint === "reset-password") {
+    throw new Error("El enlace de recuperación no es válido o ha caducado. Solicita uno nuevo.");
+  }
+  if (response.status === 400 && endpoint === "change-password") {
+    throw new Error("La contraseña actual no es correcta.");
   }
   if (response.status === 422) throw new Error("Revisa los datos. La nueva contraseña debe tener al menos 8 caracteres y no superar 72 bytes.");
+  if (response.status === 403) throw new Error("No tienes permiso para realizar esta operación. Contacta con soporte.");
   throw new Error("No se pudo completar la solicitud. Inténtalo de nuevo.");
 }
 

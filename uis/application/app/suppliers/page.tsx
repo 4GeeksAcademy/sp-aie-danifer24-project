@@ -2,10 +2,16 @@
 
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { AlertCircle, ArrowUpRight, Building2, Check, CheckCircle2, Clock3, Pencil, Plus, RefreshCw, Search, X } from "lucide-react";
-import { categories, money, renewalSoon, suppliersRequest, type Category, type Country, type Supplier, type SupplierInput } from "@/lib/suppliers";
+import { categories, isSupplier, isSupplierList, money, renewalSoon, suppliersRequest, type Category, type Country, type Supplier, type SupplierInput } from "@/lib/suppliers";
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "No se pudo completar la operación.";
+}
+
+function formatDate(value?: string): string {
+  if (!value) return "Fecha no disponible";
+  const date = new Date(value.length === 10 ? `${value}T00:00:00` : value);
+  return Number.isNaN(date.getTime()) ? "Fecha no disponible" : date.toLocaleDateString("es-ES");
 }
 
 function Modal({ title, onClose, busy, children }: { title: string; onClose: () => void; busy: boolean; children: ReactNode }) {
@@ -47,8 +53,11 @@ function CreateSupplier({ onClose, onCreated }: { onClose: () => void; onCreated
     }
     setBusy(true); setError("");
     try {
-      onCreated(await suppliersRequest<Supplier>("", { method: "POST", body: JSON.stringify(payload) }));
-    } catch (error) { setError(errorMessage(error)); setBusy(false); }
+      const supplier = await suppliersRequest<Supplier>("", { method: "POST", body: JSON.stringify(payload) });
+      if (!isSupplier(supplier)) throw new Error("El directorio devolvió un proveedor no válido. Inténtalo de nuevo.");
+      onCreated(supplier);
+    } catch (error) { setError(errorMessage(error)); }
+    finally { setBusy(false); }
   }
 
   return (
@@ -86,8 +95,11 @@ function EditRate({ supplier, onClose, onUpdated }: { supplier: Supplier; onClos
     if (!Number.isFinite(rate) || rate <= 0) { setError("La tarifa mensual debe ser mayor que cero."); return; }
     setBusy(true); setError("");
     try {
-      onUpdated(await suppliersRequest<Supplier>(`/${supplier.id}/rate`, { method: "PATCH", body: JSON.stringify({ monthly_rate: rate }) }));
-    } catch (error) { setError(errorMessage(error)); setBusy(false); }
+      const updated = await suppliersRequest<Supplier>(`/${supplier.id}/rate`, { method: "PATCH", body: JSON.stringify({ monthly_rate: rate }) });
+      if (!isSupplier(updated)) throw new Error("El directorio devolvió un proveedor no válido. Inténtalo de nuevo.");
+      onUpdated(updated);
+    } catch (error) { setError(errorMessage(error)); }
+    finally { setBusy(false); }
   }
   return (
     <Modal title="Actualizar tarifa" onClose={onClose} busy={busy}>
@@ -116,7 +128,11 @@ export default function SuppliersPage() {
   useEffect(() => {
     const controller = new AbortController();
     suppliersRequest<Supplier[]>("", { signal: controller.signal })
-      .then((data) => { setSuppliers(data); setError(""); })
+      .then((data) => {
+        if (!isSupplierList(data)) throw new Error("El directorio devolvió una respuesta no válida. Inténtalo de nuevo.");
+        setSuppliers(data);
+        setError("");
+      })
       .catch((error) => { if (!controller.signal.aborted) setError(errorMessage(error)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
@@ -124,7 +140,11 @@ export default function SuppliersPage() {
 
   async function reload() {
     setLoading(true); setError(""); setNotice("");
-    try { setSuppliers(await suppliersRequest<Supplier[]>()); }
+    try {
+      const data = await suppliersRequest<Supplier[]>();
+      if (!isSupplierList(data)) throw new Error("El directorio devolvió una respuesta no válida. Inténtalo de nuevo.");
+      setSuppliers(data);
+    }
     catch (error) { setError(errorMessage(error)); }
     finally { setLoading(false); }
   }
@@ -133,15 +153,16 @@ export default function SuppliersPage() {
     setPendingId(supplier.id); setError(""); setNotice("");
     try {
       const updated = await suppliersRequest<Supplier>(`/${supplier.id}/status`, { method: "PATCH", body: JSON.stringify({ status: supplier.status === "active" ? "suspended" : "active" }) });
+      if (!isSupplier(updated)) throw new Error("El directorio devolvió un proveedor no válido. Inténtalo de nuevo.");
       setSuppliers((current) => current.map((item) => item.id === updated.id ? updated : item));
       setNotice(`${supplier.name}: ${updated.status === "active" ? "activado" : "suspendido"}.`);
     } catch (error) { setError(errorMessage(error)); }
     finally { setPendingId(null); }
   }
 
-  const filtered = suppliers.filter((supplier) => (!country || supplier.country === country) && (!category || supplier.categories.includes(category as Category)) && supplier.name.toLocaleLowerCase("es").includes(search.trim().toLocaleLowerCase("es")));
+  const filtered = suppliers.filter((supplier) => (!country || supplier.country === country) && (!category || (supplier.categories ?? []).includes(category as Category)) && (supplier.name ?? "").toLocaleLowerCase("es").includes(search.trim().toLocaleLowerCase("es")));
   const active = filtered.filter((supplier) => supplier.status === "active");
-  const totals = ["EUR", "USD"].map((currency) => ({ currency, amount: active.filter((supplier) => supplier.currency === currency).reduce((total, supplier) => total + supplier.monthly_rate, 0) }));
+  const totals = ["EUR", "USD"].map((currency) => ({ currency, amount: active.filter((supplier) => supplier.currency === currency).reduce((total, supplier) => total + (supplier.monthly_rate ?? 0), 0) }));
   const hasFilters = Boolean(country || category || search);
 
   return (
@@ -176,12 +197,12 @@ export default function SuppliersPage() {
             <tbody>
               {filtered.map((supplier) => (
                 <tr key={supplier.id} className={supplier.status === "suspended" ? "suspended-row" : ""}>
-                  <td className="supplier-cell"><div className="supplier-content"><div className="supplier-avatar" aria-hidden="true">{supplier.name.charAt(0)}</div><div><strong>{supplier.name}</strong>{supplier.contact_email && <a className="contact-link" href={`mailto:${supplier.contact_email}`}>{supplier.contact_email}<ArrowUpRight size={11} /></a>}</div></div></td>
-                  <td data-label="País"><span className="country-code">{supplier.country === "Spain" ? "ES" : "US"}</span>{supplier.country === "Spain" ? "España" : "Estados Unidos"}</td>
-                  <td data-label="Categorías" className="categories-cell"><div className="category-tags">{supplier.categories.map((value) => <span key={value}>{categories[value]}</span>)}</div></td>
-                  <td data-label="Tarifa mensual"><div className="rate-cell"><span className="rate-number">{money(supplier.monthly_rate, supplier.currency)}</span><button className="icon-button edit-button" onClick={() => setEditing(supplier)} disabled={pendingId !== null || loading} title={`Editar tarifa de ${supplier.name}`} aria-label={`Editar tarifa de ${supplier.name}`}><Pencil size={15} /></button></div><span className="updated-date" title={new Date(supplier.updated_at).toLocaleString("es-ES")}>Actualizada {new Date(supplier.updated_at).toLocaleDateString("es-ES")}</span></td>
-                  <td data-label="Renovación"><span className={renewalSoon(supplier.contract_renewal_date) ? "renewal-soon" : "renewal-date"}>{renewalSoon(supplier.contract_renewal_date) && <Clock3 size={14} />}{supplier.contract_renewal_date ? new Date(`${supplier.contract_renewal_date}T00:00:00`).toLocaleDateString("es-ES") : "Sin fecha"}</span></td>
-                  <td data-label="Estado"><div className="status-cell"><span className={`status-badge ${supplier.status}`}><span className={`status-dot ${supplier.status}`} />{supplier.status === "active" ? "Activo" : "Suspendido"}</span><label className="status-toggle" title={`${supplier.status === "active" ? "Suspender" : "Activar"} ${supplier.name}`}><input type="checkbox" role="switch" checked={supplier.status === "active"} aria-label={`${supplier.status === "active" ? "Suspender" : "Activar"} ${supplier.name}`} disabled={pendingId !== null || loading} onChange={() => toggleStatus(supplier)} /><span aria-hidden="true" /></label></div></td>
+                  <td className="supplier-cell"><div className="supplier-content"><div className="supplier-avatar" aria-hidden="true">{supplier.name?.charAt(0) || "?"}</div><div><strong>{supplier.name ?? "Proveedor"}</strong>{supplier.contact_email && <a className="contact-link" href={`mailto:${supplier.contact_email}`}>{supplier.contact_email}<ArrowUpRight size={11} /></a>}</div></div></td>
+                  <td data-label="País"><span className="country-code">{supplier.country === "Spain" ? "ES" : supplier.country === "USA" ? "US" : "—"}</span>{supplier.country === "Spain" ? "España" : supplier.country === "USA" ? "Estados Unidos" : "País no disponible"}</td>
+                  <td data-label="Categorías" className="categories-cell"><div className="category-tags">{(supplier.categories ?? []).map((value) => <span key={value}>{categories[value] ?? "Otra categoría"}</span>)}</div></td>
+                  <td data-label="Tarifa mensual"><div className="rate-cell"><span className="rate-number">{money(supplier.monthly_rate ?? 0, supplier.currency ?? "EUR")}</span><button className="icon-button edit-button" onClick={() => setEditing(supplier)} disabled={pendingId !== null || loading} title={`Editar tarifa de ${supplier.name ?? "proveedor"}`} aria-label={`Editar tarifa de ${supplier.name ?? "proveedor"}`}><Pencil size={15} /></button></div><span className="updated-date">Actualizada {formatDate(supplier.updated_at)}</span></td>
+                  <td data-label="Renovación"><span className={renewalSoon(supplier.contract_renewal_date) ? "renewal-soon" : "renewal-date"}>{renewalSoon(supplier.contract_renewal_date) && <Clock3 size={14} />}{supplier.contract_renewal_date ? formatDate(supplier.contract_renewal_date) : "Sin fecha"}</span></td>
+                  <td data-label="Estado"><div className="status-cell"><span className={`status-badge ${supplier.status ?? "unknown"}`}><span className={`status-dot ${supplier.status ?? "unknown"}`} />{supplier.status === "active" ? "Activo" : supplier.status === "suspended" ? "Suspendido" : "No disponible"}</span><label className="status-toggle" title={`${supplier.status === "active" ? "Suspender" : "Activar"} ${supplier.name ?? "proveedor"}`}><input type="checkbox" role="switch" checked={supplier.status === "active"} aria-label={`${supplier.status === "active" ? "Suspender" : "Activar"} ${supplier.name ?? "proveedor"}`} disabled={pendingId !== null || loading} onChange={() => toggleStatus(supplier)} /><span aria-hidden="true" /></label></div></td>
                 </tr>
               ))}
             </tbody>

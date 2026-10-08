@@ -29,6 +29,7 @@ function LoginForm() {
       router.replace("/suppliers");
     } catch (error) {
       setError(error instanceof Error ? error.message : "No se pudo iniciar sesión. Inténtalo de nuevo.");
+    } finally {
       setBusy(false);
     }
   }

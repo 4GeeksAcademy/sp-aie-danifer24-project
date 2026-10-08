@@ -3,7 +3,7 @@ import os
 import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-only-signing-key-not-for-production")
 
@@ -85,7 +85,9 @@ class PasswordResetTests(unittest.TestCase):
 		access = self.session_headers()["Authorization"].split(" ")[1]
 		for invalid in ("", "bad-token", expired, ".".join(parts), access):
 			with self.subTest(token_type=invalid[:5]):
-				self.assertEqual(self.reset(invalid).status_code, 400)
+				response = self.reset(invalid)
+				self.assertEqual(response.status_code, 400)
+				self.assertEqual(response.json()["code"], "bad_request")
 		self.assertEqual(self.reset(token).status_code, 200)
 
 	def test_reset_token_cannot_authenticate_session(self):
@@ -97,7 +99,10 @@ class PasswordResetTests(unittest.TestCase):
 		headers = self.session_headers()
 		body = {"current_password": "wrong-password", "new_password": "changed-password"}
 		self.assertEqual(self.client.post("/auth/change-password", json=body).status_code, 401)
-		self.assertEqual(self.client.post("/auth/change-password", headers=headers, json=body).status_code, 400)
+		bad_password = self.client.post("/auth/change-password", headers=headers, json=body)
+		self.assertEqual(bad_password.status_code, 400)
+		self.assertEqual(bad_password.json()["code"], "bad_request")
+		self.assertEqual(bad_password.json()["status_code"], 400)
 		body["current_password"] = "initial-password"
 		self.assertEqual(self.client.post("/auth/change-password", headers=headers, json=body).status_code, 200)
 		self.assertEqual(self.reset(token).status_code, 400)
@@ -125,12 +130,42 @@ class PasswordResetTests(unittest.TestCase):
 		self.tables[0].remove(doc_ids=[1])
 		self.assertEqual(self.reset(token).status_code, 400)
 
+	def test_missing_user_response_has_structured_not_found_code(self):
+		self.tables[1].truncate()
+		response = self.client.get("/profiles/me", headers=self.session_headers())
+		self.assertEqual(response.status_code, 404)
+		self.assertEqual(response.json()["code"], "not_found")
+		self.assertEqual(response.json()["status_code"], 404)
+
 	def test_forgot_survives_email_service_failure(self):
 		with patch.dict(os.environ, {"RESEND_API_KEY": ""}), patch("services.api.services.email.logger.error") as log:
 			self.mail.side_effect = send_reset_email
 			response = self.client.post("/auth/forgot-password", json={"email": "test@example.test"})
 			self.assertEqual(response.status_code, 200)
 			log.assert_called_once()
+
+	def test_request_validation_response_is_structured_and_sanitized(self):
+		response = self.client.post("/users", json={"email": "not-an-email"})
+		self.assertEqual(response.status_code, 422)
+		payload = response.json()
+		self.assertEqual(payload["code"], "validation_error")
+		self.assertEqual(payload["status_code"], 422)
+		self.assertTrue(all(set(error) == {"field", "message"} for error in payload["detail"]))
+		self.assertNotIn("not-an-email", response.text)
+
+	def test_unhandled_exception_returns_safe_structured_500(self):
+		secret_detail = "db=/private/path token=do-not-return"
+		with patch("services.api.routes.auth.get_user_by_email", side_effect=RuntimeError(secret_detail)), patch("services.api.main.logger.error") as log:
+			with TestClient(app, raise_server_exceptions=False) as client:
+				response = client.post("/auth/login", json={"email": "test@example.test", "password": "initial-password"})
+		self.assertEqual(response.status_code, 500)
+		self.assertEqual(response.json(), {
+			"detail": "Error interno del servidor.",
+			"code": "internal_server_error",
+			"status_code": 500,
+		})
+		self.assertNotIn(secret_detail, response.text)
+		self.assertNotIn(secret_detail, str(log.call_args))
 
 
 class ResetEmailTests(unittest.TestCase):
@@ -154,6 +189,16 @@ class ResetEmailTests(unittest.TestCase):
 			log.assert_called_once()
 			self.assertNotIn("test-key", str(log.call_args))
 			self.assertNotIn("signed-test-token", str(log.call_args))
+
+	def test_transport_failures_are_caught_without_logging_sensitive_values(self):
+		settings = {"RESEND_API_KEY": "test-key", "RESEND_FROM_EMAIL": "noreply@example.test", "PASSWORD_RESET_URL": "https://app.example.test/reset-password"}
+		for failure in (URLError("private connection detail"), TimeoutError("private timeout detail")):
+			with self.subTest(failure=type(failure).__name__), patch.dict(os.environ, settings), patch("services.api.services.email.urlopen", side_effect=failure), patch("services.api.services.email.logger.error") as log:
+				send_reset_email("recipient@example.test", "signed-test-token")
+				log.assert_called_once()
+				self.assertNotIn("recipient@example.test", str(log.call_args))
+				self.assertNotIn("test-key", str(log.call_args))
+				self.assertNotIn("signed-test-token", str(log.call_args))
 
 
 if __name__ == "__main__":

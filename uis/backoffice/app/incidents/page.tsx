@@ -6,6 +6,7 @@ import {
   BRANCH_LABELS,
   CATEGORY_LABELS,
   INCIDENT_BRANCHES,
+  INCIDENT_CATEGORIES,
   INCIDENT_ORIGINS,
   INCIDENT_STATUSES,
   NEXT_STATUSES,
@@ -26,6 +27,37 @@ const EMPTY_FILTERS = { status: "", origin: "", branch: "" };
 
 type Filters = typeof EMPTY_FILTERS;
 
+function isIncidentSummary(value: unknown): value is IncidentSummary {
+  if (!value || typeof value !== "object") return false;
+  const summary = value as Partial<IncidentSummary>;
+  const isCountMap = (counts: unknown) => counts !== null && typeof counts === "object" && !Array.isArray(counts)
+    && Object.values(counts).every((count) => typeof count === "number" && Number.isFinite(count));
+  return typeof summary.total === "number"
+    && isCountMap(summary.by_status)
+    && isCountMap(summary.by_category)
+    && isCountMap(summary.by_origin)
+    && isCountMap(summary.by_branch);
+}
+
+function isIncident(value: unknown): value is Incident {
+  if (!value || typeof value !== "object") return false;
+  const incident = value as Partial<Incident>;
+  return typeof incident.id === "number"
+    && typeof incident.title === "string"
+    && typeof incident.description === "string"
+    && INCIDENT_CATEGORIES.includes(incident.category as typeof INCIDENT_CATEGORIES[number])
+    && INCIDENT_STATUSES.includes(incident.status as IncidentStatus)
+    && INCIDENT_ORIGINS.includes(incident.origin as IncidentOrigin)
+    && INCIDENT_BRANCHES.includes(incident.branch as IncidentBranch)
+    && typeof incident.created_at === "string"
+    && typeof incident.updated_at === "string";
+}
+
+function formatIncidentDate(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Fecha no disponible" : new Intl.DateTimeFormat("es-ES", { dateStyle: "medium" }).format(date);
+}
+
 export default function IncidentsPage() {
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [loadState, setLoadState] = useState<{ loading: boolean; error: string; incidents: Incident[] }>({ loading: true, error: "", incidents: [] });
@@ -36,6 +68,7 @@ export default function IncidentsPage() {
   const [retry, setRetry] = useState(0);
   const [updating, setUpdating] = useState<Record<number, boolean>>({});
   const [notice, setNotice] = useState("");
+  const [statusRetry, setStatusRetry] = useState<{ incident: Incident; next: IncidentStatus } | null>(null);
   const [summaryRefresh, setSummaryRefresh] = useState(0);
 
   function setIncidents(update: Incident[] | ((current: Incident[]) => Incident[])) {
@@ -49,9 +82,12 @@ export default function IncidentsPage() {
         origin: filters.origin as IncidentOrigin || undefined,
         branch: filters.branch as IncidentBranch || undefined,
       });
-      if (!signal.aborted) setLoadState({ loading: false, error: "", incidents: result });
+      if (!Array.isArray(result) || !result.every(isIncident)) throw new Error("El servicio devolvió una lista no válida.");
+      if (!signal.aborted) setLoadState((current) => ({ ...current, error: "", incidents: result }));
     } catch (caught) {
-      if (!signal.aborted) setLoadState((current) => ({ ...current, loading: false, error: readableError(caught) }));
+      if (!signal.aborted) setLoadState((current) => ({ ...current, error: readableError(caught) }));
+    } finally {
+      if (!signal.aborted) setLoadState((current) => ({ ...current, loading: false }));
     }
   }, [filters]);
 
@@ -63,19 +99,27 @@ export default function IncidentsPage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    void getIncidentSummary().then((result) => {
-      if (!controller.signal.aborted) {
-        setSummaryLoad({ summary: result, state: "ready" });
+    async function loadSummary() {
+      try {
+        const result = await getIncidentSummary();
+        if (!isIncidentSummary(result)) throw new Error("El servicio devolvió métricas no válidas.");
+        if (!controller.signal.aborted) setSummaryLoad({ summary: result, state: "ready" });
+      } catch {
+        if (!controller.signal.aborted) setSummaryLoad((current) => ({ ...current, state: "error" }));
+      } finally {
+        if (!controller.signal.aborted) {
+          setSummaryLoad((current) => current.state === "loading" ? { ...current, state: "error" } : current);
+        }
       }
-    }).catch(() => {
-      if (!controller.signal.aborted) setSummaryLoad((current) => ({ ...current, state: "error" }));
-    });
+    }
+    void loadSummary();
     return () => controller.abort();
   }, [summaryRetry, summaryRefresh]);
 
   async function changeStatus(incident: Incident, next: IncidentStatus) {
     const previous = loadState.incidents;
     setNotice("");
+    setStatusRetry(null);
     setIncidents((current) => current.flatMap((item) => {
       if (item.id !== incident.id) return [item];
       if (filters.status && next !== filters.status) return [];
@@ -84,12 +128,15 @@ export default function IncidentsPage() {
     setUpdating((current) => ({ ...current, [incident.id]: true }));
     try {
       const updated = await updateIncidentStatus(incident.id, next);
+      if (!isIncident(updated)) throw new Error("El servicio devolvió una incidencia no válida. Inténtalo de nuevo.");
       setIncidents((current) => current.map((item) => item.id === updated.id ? updated : item));
       setNotice(`Estado actualizado: ${STATUS_LABELS[next]}.`);
+      setSummaryLoad((current) => ({ ...current, state: "loading" }));
       setSummaryRefresh((value) => value + 1);
     } catch (caught) {
       setIncidents(previous);
       setNotice(readableError(caught));
+      setStatusRetry({ incident, next });
     } finally {
       setUpdating((current) => ({ ...current, [incident.id]: false }));
     }
@@ -141,7 +188,7 @@ export default function IncidentsPage() {
           {hasFilters && <button className="text-button" type="button" onClick={() => { setLoadState((current) => ({ ...current, loading: true, error: "" })); setFilters(EMPTY_FILTERS); }}>Limpiar filtros</button>}
         </div>
 
-        {notice && <p className="notice notice-info" role="status">{notice}</p>}
+        {notice && <div className={`notice ${statusRetry ? "notice-error" : "notice-info"}`} role={statusRetry ? "alert" : "status"}>{notice}{statusRetry && <button className="text-button" type="button" onClick={() => void changeStatus(statusRetry.incident, statusRetry.next)}>Reintentar</button>}</div>}
         {loading && displayedIncidents.length === 0 && <div className="loading-state" role="status"><span className="spinner" /> Cargando incidencias…</div>}
         {!loading && error && displayedIncidents.length === 0 && <div className="empty-state error-state" role="alert"><span className="state-icon">!</span><h3>No se pudieron cargar las incidencias</h3><p>{error}</p><button className="btn btn-dark" type="button" onClick={() => { setLoadState((current) => ({ ...current, loading: true, error: "" })); setRetry((value) => value + 1); }}>Reintentar</button></div>}
         {!loading && error && displayedIncidents.length > 0 && <p className="notice notice-error" role="alert">No se pudieron actualizar los resultados: {error} <button className="text-button" type="button" onClick={() => { setLoadState((current) => ({ ...current, loading: true, error: "" })); setRetry((value) => value + 1); }}>Reintentar</button></p>}
@@ -150,14 +197,14 @@ export default function IncidentsPage() {
           <div className="incident-list">
             {displayedIncidents.map((incident) => <article className="incident-card" key={incident.id}>
               <div className="incident-card-main">
-                <div className="incident-card-title"><h3>{incident.title}</h3><span className={`status-badge status-${incident.status}`}>{STATUS_LABELS[incident.status]}</span></div>
+                <div className="incident-card-title"><h3>{incident.title ?? "Incidencia sin título"}</h3><span className={`status-badge status-${incident.status}`}>{STATUS_LABELS[incident.status] ?? "Estado no disponible"}</span></div>
                 <p className="incident-description">{incident.description}</p>
-                <div className="incident-meta"><span>{CATEGORY_LABELS[incident.category]}</span><span>{ORIGIN_LABELS[incident.origin]}</span><span>{BRANCH_LABELS[incident.branch]}</span><time dateTime={incident.created_at}>{new Intl.DateTimeFormat("es-ES", { dateStyle: "medium" }).format(new Date(incident.created_at))}</time></div>
+                <div className="incident-meta"><span>{CATEGORY_LABELS[incident.category] ?? "Otra categoría"}</span><span>{ORIGIN_LABELS[incident.origin] ?? "Origen no disponible"}</span><span>{BRANCH_LABELS[incident.branch] ?? "Sede no disponible"}</span><time dateTime={incident.created_at || undefined}>{formatIncidentDate(incident.created_at)}</time></div>
               </div>
               <label className="status-control" htmlFor={`status-${incident.id}`}>Cambiar estado
                 <select id={`status-${incident.id}`} value={incident.status} disabled={Boolean(updating[incident.id]) || NEXT_STATUSES[incident.status].length === 0} onChange={(event) => void changeStatus(incident, event.target.value as IncidentStatus)}>
                   <option value={incident.status}>{STATUS_LABELS[incident.status]}</option>
-                  {NEXT_STATUSES[incident.status].map((status) => <option key={status} value={status}>{STATUS_LABELS[status]}</option>)}
+                  {(NEXT_STATUSES[incident.status] ?? []).map((status) => <option key={status} value={status}>{STATUS_LABELS[status] ?? "Estado no disponible"}</option>)}
                 </select>
                 {updating[incident.id] && <span className="field-hint">Actualizando…</span>}
               </label>
@@ -172,14 +219,14 @@ export default function IncidentsPage() {
 function SummaryPanel({ summary, state, onRetry }: { summary: IncidentSummary | null; state: "loading" | "ready" | "error"; onRetry: () => void }) {
   return (
     <section className="summary-panel" aria-labelledby="summary-title">
-      <div className="summary-heading"><div><p className="eyebrow">Vista general</p><h2 id="summary-title">Resumen operativo</h2></div>{summary && <strong className="summary-total">{summary.total}<span>total</span></strong>}</div>
+      <div className="summary-heading"><div><p className="eyebrow">Vista general</p><h2 id="summary-title">Resumen operativo</h2></div>{summary && <strong className="summary-total">{summary.total ?? 0}<span>total</span></strong>}</div>
       {state === "loading" && <p className={`summary-state${summary ? " summary-refreshing" : ""}`} role="status"><span className="spinner" /> {summary ? "Actualizando métricas…" : "Cargando métricas…"}</p>}
       {state === "error" && <div className={`summary-state summary-error${summary ? " summary-refreshing" : ""}`} role="alert"><span>{summary ? "No se pudieron actualizar las métricas." : "No se pudieron cargar las métricas."}</span><button className="text-button" type="button" onClick={onRetry}>Reintentar</button></div>}
       {summary && <div className="metrics-grid">
-        <MetricGroup title="Por estado" values={summary.by_status} labels={STATUS_LABELS} />
-        <MetricGroup title="Por categoría" values={summary.by_category} labels={CATEGORY_LABELS} />
-        <MetricGroup title="Por origen" values={summary.by_origin} labels={ORIGIN_LABELS} />
-        <MetricGroup title="Por sede" values={summary.by_branch} labels={BRANCH_LABELS} />
+        <MetricGroup title="Por estado" values={summary.by_status ?? {}} labels={STATUS_LABELS} />
+        <MetricGroup title="Por categoría" values={summary.by_category ?? {}} labels={CATEGORY_LABELS} />
+        <MetricGroup title="Por origen" values={summary.by_origin ?? {}} labels={ORIGIN_LABELS} />
+        <MetricGroup title="Por sede" values={summary.by_branch ?? {}} labels={BRANCH_LABELS} />
       </div>}
     </section>
   );

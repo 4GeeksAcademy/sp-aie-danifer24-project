@@ -19,6 +19,7 @@ export default function LoginPage() {
       router.replace("/");
     } catch (error) {
       setError(error instanceof Error ? error.message : "No se pudo iniciar sesión.");
+    } finally {
       setBusy(false);
     }
   }

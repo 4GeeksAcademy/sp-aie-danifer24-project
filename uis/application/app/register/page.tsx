@@ -59,6 +59,7 @@ export default function RegisterPage() {
       } else {
         setError(error instanceof Error ? error.message : "No se pudo crear la cuenta. Inténtalo de nuevo.");
       }
+    } finally {
       setBusy(false);
     }
   }

@@ -53,9 +53,9 @@ def transform_record(row: dict[str, str], inserted_at: datetime) -> tuple[dict, 
     raw_status = value_of(row, "status")
     raw_category = value_of(row, "category")
     if raw_status not in STATUS_MAP:
-        raise ValueError(f"status no mapeable: {raw_status or '(vacío)'}")
+        raise ValueError("status no mapeable")
     if raw_category not in CATEGORY_MAP:
-        raise ValueError(f"category no mapeable: {raw_category or '(vacía)'}")
+        raise ValueError("category no mapeable")
 
     csv_date = date.fromisoformat(value_of(row, "date"))
     created_at = datetime.combine(csv_date, time.min, tzinfo=timezone.utc)
@@ -104,12 +104,14 @@ def seed_incidents(csv_path: Path = DEFAULT_CSV_PATH) -> dict:
             )
             try:
                 incident_data, created_at = transform_record(row, inserted_at)
-            except (ValueError, TypeError) as error:
-                problems.append(f"mapping_error: {error}")
+            except (ValueError, TypeError):
+                problems.append("mapping_error: registro no válido")
                 incident_data = None
                 created_at = ""
 
-            if problems:
+            if problems or incident_data is None:
+                if not problems:
+                    problems.append("mapping_error: registro incompleto")
                 invalid_rows.append((row_number, problems))
                 continue
 
@@ -138,19 +140,23 @@ def seed_incidents(csv_path: Path = DEFAULT_CSV_PATH) -> dict:
 def main() -> int:
     try:
         summary = seed_incidents()
-    except (CsvInputError, OSError) as error:
+    except CsvInputError as error:
         print(f"Error al cargar el CSV: {error}", file=sys.stderr)
         return 1
+    except Exception as error:
+        print(f"Error crítico durante la importación ({type(error).__name__}).", file=sys.stderr)
+        return 1
 
-    print("Importación histórica de incidencias finalizada")
+    print("Importación histórica de incidencias finalizada" if not summary["invalid"] else "Importación finalizada con errores")
     print(f"Filas leídas: {summary['total']}")
     print(f"Incidencias insertadas: {summary['inserted']}")
     print(f"Duplicados ya existentes: {summary['duplicates']}")
     print(f"Filas inválidas descartadas: {len(summary['invalid'])}")
     if summary["invalid"]:
-        print("Detalle de filas inválidas:")
+        print("Error: se descartaron filas inválidas; revisa los detalles por fila:", file=sys.stderr)
         for row_number, problems in summary["invalid"]:
-            print(f"  Fila {row_number}: {', '.join(problems)}")
+            print(f"  Fila {row_number}: {', '.join(problems)}", file=sys.stderr)
+        return 1
     return 0
 
 
