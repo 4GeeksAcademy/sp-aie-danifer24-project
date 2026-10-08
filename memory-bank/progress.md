@@ -1,5 +1,17 @@
 # Progreso del proyecto
 
+## Gestor centralizado de incidencias
+
+- Definidos modelos Pydantic y enums de incidencia, con validacion de campos, estado y timestamps UTC de sistema.
+- Centralizados parser y validador de CSV; implementado `scripts/seed_incidents.py` con transformaciones del legado, reporte de filas invalidas e idempotencia por ticket o fallback titulo/fecha. Verificado con 96 altas, 4 filas invalidas y 0 altas en la segunda ejecucion; conteos de estados y categorias coinciden con el contexto.
+- Implementados endpoints autenticados para alta, listado con filtros, detalle, cambio de estado y resumen por estado/categoria/origen/sucursal. Se validan transiciones y estados finales; listas y resumen funcionan con la base vacia.
+- Errores de validacion de incidencias se presentan como HTTP 400 con campos; se preserva HTTP 422 en endpoints existentes. Excepciones inesperadas devuelven un mensaje 500 generico.
+- Documentados API y seed en `services/api/README.md`. Verificacion: pruebas aisladas de endpoints con TinyDB en memoria, `compileall`, `git diff --check` y 12 pruebas de restablecimiento de contrasena correctas.
+- Backoffice: agregado menu global y paginas `/incidents` y `/incidents/new`. El formulario mantiene sede requerida visible, muestra todas las sedes del contexto, enfatiza sede para origen sucursal, presenta errores por campo y confirma/limpia tras el alta.
+- El panel lista incidencias con filtros por estado, origen y sede, estados de carga/error/reintento y vacios diferenciados; los cambios de estado son optimistas y revierten ante fallo. El resumen por estado, categoria, origen y sede tiene carga, reintento y ciclo de actualizacion independiente, y conserva las metricas visibles durante recargas o errores.
+- Agregados proxies Next autenticados `/api/incidents` (incluyendo resumen, detalle y cambio de estado), con destino configurable mediante `SUPPLIERS_API_URL`. Los errores tecnicos no se exponen como detalles internos al usuario.
+- Validacion frontend en `uis/backoffice`: `npm run lint`, `npx tsc --noEmit`, `npm run build` y `git diff --check` correctos. El build reconoce paginas de incidencias y sus cuatro rutas proxy. No hay suite automatizada de UI ni validacion visual en navegador.
+
 ## Estado actual (resumen ejecutivo)
 
 El desarrollo del Talent Pipeline Tracker se encuentra en una fase avanzada y ya cubre el flujo operativo principal de gestion de candidaturas en Nexova.

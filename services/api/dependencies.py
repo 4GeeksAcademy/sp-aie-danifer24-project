@@ -7,7 +7,7 @@ from tinydb.table import Table
 from services.api.database import database_lock, get_database
 
 
-def get_request_tables() -> Iterator[tuple[Table, Table, Table, Table]]:
+def get_request_tables() -> Iterator[tuple[Table, Table, Table, Table, Table]]:
 	with database_lock:
 		with get_database() as database:
 			yield (
@@ -15,11 +15,12 @@ def get_request_tables() -> Iterator[tuple[Table, Table, Table, Table]]:
 				database.table("profiles"),
 				database.table("suppliers"),
 				database.table("password_resets"),
+				database.table("incidents"),
 			)
 
 
 RequestTables = Annotated[
-	tuple[Table, Table, Table, Table],
+	tuple[Table, Table, Table, Table, Table],
 	Depends(get_request_tables),
 ]
 
