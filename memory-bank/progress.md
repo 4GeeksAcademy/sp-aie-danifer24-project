@@ -12,6 +12,13 @@
 - Agregados proxies Next autenticados `/api/incidents` (incluyendo resumen, detalle y cambio de estado), con destino configurable mediante `SUPPLIERS_API_URL`. Los errores tecnicos no se exponen como detalles internos al usuario.
 - Validacion frontend en `uis/backoffice`: `npm run lint`, `npx tsc --noEmit`, `npm run build` y `git diff --check` correctos. El build reconoce paginas de incidencias y sus cuatro rutas proxy. No hay suite automatizada de UI ni validacion visual en navegador.
 
+## Auditoría y mejoras de gestión de errores (2026-10-08)
+
+- Creado `docs/auditoria-gestion-errores.md` con hallazgos priorizados para frontend, API y scripts; el alcance es estático y el documento conserva recomendaciones pendientes para legacy JS y el seeder.
+- En `uis/application` y `uis/backoffice`, los clientes HTTP convierten errores de transporte, parseo y respuesta en mensajes controlados; se validan respuestas antes de renderizar datos de proveedores, perfil e incidencias.
+- Los formularios limpian estado `busy` mediante `finally`; cargas de incidencias también limpian `loading` en `finally`. Los errores de cambio de estado del panel ofrecen reintento, y los fallbacks evitan fallos de render con datos opcionales.
+- Verificación: lint, typecheck y build correctos en Application y Backoffice; `git diff --check` correcto. Website no tiene dependencias instaladas en el workspace y no fue modificado; las apps no ofrecen suite automatizada de UI.
+
 ## Estado actual (resumen ejecutivo)
 
 El desarrollo del Talent Pipeline Tracker se encuentra en una fase avanzada y ya cubre el flujo operativo principal de gestion de candidaturas en Nexova.
