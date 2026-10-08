@@ -25,6 +25,9 @@
 - El endpoint de análisis CSV cierra siempre el archivo cargado, convierte fallos de lectura en 500 controlado y mantiene validaciones 400/415/422.
 - El único cliente externo de la API, Resend, limita los `try/except` a parseo de URL, construcción de request y transporte; controla errores HTTP, URL y timeout sin registrar token, destinatario, URL ni cuerpo.
 - Verificación backend: 16 pruebas pasan, incluyendo respuestas estructuradas 400/404/422/500, fallos de transporte y ausencia de secretos en logs; `compileall` y `git diff --check` correctos.
+- Scripts Python: lectores/parseo CSV conservan errores de dominio sanitizados; errores de escritura y procesamiento imprimen mensajes controlados a stderr y terminan con código no cero. Importaciones parciales del seeder de incidencias también devuelven `1`; errores de mapeo ya no incluyen valores de filas.
+- Revisados los `print` del alcance: el análisis solo emite agregados, el seeder muestra códigos por fila, y `pandas_clean.py` reporta metadatos sin imprimir nombres de columnas ni filas. No se encontraron llamadas `console.error` en `uis/`.
+- Verificación de scripts: `py_compile` pasa; suite backend 16/16; fallos simulados de ambos seeders devuelven código 1; CSV inexistente en `scripts/analyze.py` devuelve código 2. No se ejecutaron seeds contra la base de datos real.
 
 ## Estado actual (resumen ejecutivo)
 

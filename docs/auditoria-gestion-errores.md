@@ -13,6 +13,7 @@ Alcance: revisión estática de las aplicaciones Next.js en `uis/`, la API FastA
 - **Ubicación:** [`scripts/seed_incidents.py`](../scripts/seed_incidents.py#L56), [`scripts/seed_incidents.py`](../scripts/seed_incidents.py#L58), [`scripts/seed_incidents.py`](../scripts/seed_incidents.py#L153)
 - **Problema:** Los errores de mapeo interpolan los valores CSV recibidos para `status` y `category`, y luego imprimen el detalle de cada fila inválida. Si una fila está desplazada o mal formada, esos campos pueden contener otros valores de la fila, incluidos datos personales, que acabarían en la consola o en logs del proceso.
 - **Corrección sugerida:** Informar códigos de validación estables y el número de fila; no incluir valores de entrada en mensajes de error.
+- **Estado:** Resuelto el 2026-10-08. Los errores de mapeo ahora imprimen códigos estables, número de fila y no interpolan valores CSV.
 
 #### Importación parcial reportada como exitosa
 
@@ -20,6 +21,7 @@ Alcance: revisión estática de las aplicaciones Next.js en `uis/`, la API FastA
 - **Ubicación:** [`scripts/seed_incidents.py`](../scripts/seed_incidents.py#L150), [`scripts/seed_incidents.py`](../scripts/seed_incidents.py#L154)
 - **Problema:** Cuando hay filas inválidas, el seeder las descarta y las informa, pero `main()` devuelve `0`. La automatización puede interpretar como completa una importación con registros omitidos.
 - **Corrección sugerida:** Devolver un código distinto de cero si hay filas descartadas, o definir un modo explícito para permitir importaciones parciales.
+- **Estado:** Resuelto el 2026-10-08. El seeder informa las filas descartadas en stderr y devuelve código `1` si la importación es parcial.
 
 ### Bajo
 

@@ -1,3 +1,5 @@
+import sys
+
 from tinydb import Query, TinyDB
 
 from services.api.database import get_database
@@ -180,11 +182,16 @@ def seed_database(database: TinyDB) -> int:
 	return inserted
 
 
-def main() -> None:
-	with get_database() as database:
-		inserted = seed_database(database)
+def main() -> int:
+	try:
+		with get_database() as database:
+			inserted = seed_database(database)
+	except Exception as error:
+		print(f"Error crítico al cargar los proveedores ({type(error).__name__}).", file=sys.stderr)
+		return 1
 	print(f"Proveedores insertados: {inserted}")
+	return 0
 
 
 if __name__ == "__main__":
-	main()
+	raise SystemExit(main())
