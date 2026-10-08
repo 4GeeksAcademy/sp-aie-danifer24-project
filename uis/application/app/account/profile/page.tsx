@@ -6,8 +6,8 @@ import Link from "next/link";
 import { AlertCircle, CheckCircle2, LoaderCircle, RefreshCw, Save } from "lucide-react";
 import { AccountSessionError, getCurrentAccount, updateMyProfile, type CurrentAccount, type Profile } from "@/lib/account";
 
-function profileFields(profile: Profile) {
-  return { name: profile.name ?? "", phone: profile.phone ?? "", address: profile.address ?? "" };
+function profileFields(profile?: Profile | null) {
+  return { name: profile?.name ?? "", phone: profile?.phone ?? "", address: profile?.address ?? "" };
 }
 
 export default function AccountProfilePage() {
@@ -25,8 +25,9 @@ export default function AccountProfilePage() {
     getCurrentAccount(controller.signal)
       .then((data) => {
         if (controller.signal.aborted) return;
+        if (typeof data?.email !== "string" || !data.profile) throw new Error("El servicio devolvió datos de perfil incompletos. Inténtalo de nuevo.");
         setAccount(data);
-        setFields(profileFields(data.profile));
+        setFields(profileFields(data?.profile));
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
@@ -49,6 +50,7 @@ export default function AccountProfilePage() {
         phone: fields.phone.trim() || null,
         address: fields.address.trim() || null,
       });
+      if (!profile || typeof profile !== "object") throw new Error("El servicio devolvió datos de perfil no válidos. Inténtalo de nuevo.");
       setAccount({ ...account, profile });
       setFields(profileFields(profile));
       setNotice("Perfil actualizado correctamente.");
