@@ -244,6 +244,7 @@ body {
 .summary-total { display: grid; justify-items: end; color: #174e42; font-size: 1.5rem; }
 .summary-total span { color: #74827d; font-size: .68rem; text-transform: uppercase; letter-spacing: .08em; }
 .summary-state { min-height: 75px; justify-content: flex-start; font-size: .88rem; }
+.summary-refreshing { min-height: 0; padding-top: .8rem; }
 .summary-error { color: #94372f; }
 .summary-error .text-button { margin-left: auto; }
 .metrics-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; padding-top: 1rem; }

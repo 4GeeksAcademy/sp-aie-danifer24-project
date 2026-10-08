@@ -172,10 +172,10 @@ export default function IncidentsPage() {
 function SummaryPanel({ summary, state, onRetry }: { summary: IncidentSummary | null; state: "loading" | "ready" | "error"; onRetry: () => void }) {
   return (
     <section className="summary-panel" aria-labelledby="summary-title">
-      <div className="summary-heading"><div><p className="eyebrow">Vista general</p><h2 id="summary-title">Resumen operativo</h2></div>{summary && state === "ready" && <strong className="summary-total">{summary.total}<span>total</span></strong>}</div>
-      {state === "loading" && <p className="summary-state" role="status"><span className="spinner" /> Cargando métricas…</p>}
-      {state === "error" && <div className="summary-state summary-error" role="alert"><span>No se pudieron cargar las métricas.</span><button className="text-button" type="button" onClick={onRetry}>Reintentar</button></div>}
-      {state === "ready" && summary && <div className="metrics-grid">
+      <div className="summary-heading"><div><p className="eyebrow">Vista general</p><h2 id="summary-title">Resumen operativo</h2></div>{summary && <strong className="summary-total">{summary.total}<span>total</span></strong>}</div>
+      {state === "loading" && <p className={`summary-state${summary ? " summary-refreshing" : ""}`} role="status"><span className="spinner" /> {summary ? "Actualizando métricas…" : "Cargando métricas…"}</p>}
+      {state === "error" && <div className={`summary-state summary-error${summary ? " summary-refreshing" : ""}`} role="alert"><span>{summary ? "No se pudieron actualizar las métricas." : "No se pudieron cargar las métricas."}</span><button className="text-button" type="button" onClick={onRetry}>Reintentar</button></div>}
+      {summary && <div className="metrics-grid">
         <MetricGroup title="Por estado" values={summary.by_status} labels={STATUS_LABELS} />
         <MetricGroup title="Por categoría" values={summary.by_category} labels={CATEGORY_LABELS} />
         <MetricGroup title="Por origen" values={summary.by_origin} labels={ORIGIN_LABELS} />
