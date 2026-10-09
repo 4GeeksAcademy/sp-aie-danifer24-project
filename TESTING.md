@@ -27,7 +27,7 @@ También se comprobarán las respuestas de validación estructuradas y que las e
 
 ## Frontend — Jest + ts-jest + TypeScript
 
-Suite: `uis/application/tests/auth.test.ts` y `uis/application/tests/account.test.ts`, probando las funciones de `lib/auth.ts`, `lib/passwords.ts` y `lib/account.ts`. Se ejecuta desde `uis/application`:
+Suites: `uis/application/tests/auth.test.ts`, `uis/application/tests/account.test.ts` y `uis/application/tests/shared-session.test.ts`, probando las funciones de `lib/auth.ts`, `lib/passwords.ts`, `lib/account.ts` y `packages/shared/auth/session.ts`. Jest mantiene el root del monorepo para instrumentar la utilidad compartida. Se ejecuta desde `uis/application`:
 
 ```bash
 npm test
@@ -41,6 +41,7 @@ Jest usa `ts-jest`, `jest-environment-jsdom`, el alias `@/` y `jsdom`; `fetch` s
 | Cliente auth | Login envía email normalizado y devuelve `access_token`; registrar cuenta acepta `2xx`; guardar, leer y borrar token opera sobre la clave esperada. | SSR sin `window`; respuestas con JSON inválido o esquema de login inesperado; errores 409/422 de registro mapeados a campos. | Rechazo de red, `401`, `5xx`, localStorage bloqueado; mensajes no deben incluir respuesta interna/token. |
 | Contraseñas | Forgot/reset envían endpoint y payload correctos; cambio añade bearer existente. | Entradas y respuesta vacía `2xx`; validación `400` específica para contraseña actual y reset; `422` legible. | Red caída, `5xx`, sesión ausente o `401` durante cambio; token guardado se elimina ante sesión inválida. |
 | Cuenta/perfil | GET del perfil autenticado y PUT de cambios transmiten bearer, JSON y devuelven respuesta tipada. | Aborto explícito de petición; respuesta JSON inválida; código `404`. | Sesión ausente o caducada (`401`) limpia token; `403`, `5xx` y fallo de red muestran error controlado. |
+| Sesión compartida | `signIn` normaliza email y almacena el token; `readSessionToken` y `clearSessionToken` leen/limpian; `validateSession` envía el bearer y acepta una identidad válida. | Almacenamiento de navegador no disponible y aborto de la petición. | Credenciales inválidas, token ausente/revocado, respuesta malformada, `5xx` y fallo de red se rechazan de forma controlada. |
 
 Se reemplazarán `fetch` y `localStorage` con dobles de prueba; ninguna suite frontend contactará la API real. No se planean pruebas visuales de componentes ni E2E en este alcance.
 
@@ -52,5 +53,7 @@ Se priorizan los límites de confianza del flujo de autenticación (enumeración
 
 - Backend desde la raíz del monorepo: `uv run --with-requirements services/api/requirements.txt pytest services/api/tests -q` — **57 passed**, además de 7 subtests.
 - Cobertura: `uv run --with-requirements services/api/requirements.txt pytest services/api/tests --cov=services.api.routes.auth --cov=services.api.security --cov=services.api.services.passwords --cov-report=term-missing -q` — **93% total** en autenticación (auth routes 96%, security 90%, password service 93%), sobre el mínimo requerido de 70%.
-- Frontend: `cd uis/application && npm run test:coverage` — **2 suites y 11 tests passed**; cobertura de líneas total **87.6%** (auth 80.59%, cuenta 100%, contraseñas 93.33%). `npm run typecheck` pasó. `npm run lint` terminó con 0 errores y un warning en JavaScript generado bajo `coverage/lcov-report/`.
+- Frontend actualizado: `cd uis/application && npm run test:coverage` — **3 suites y 18 tests passed**; cobertura total de líneas **91.77%**, sentencias **87.97%**, ramas **84.84%** y funciones **84%**, incluyendo 100% de líneas en `packages/shared/auth/session.ts`. `npm run typecheck` y `npm run lint` pasaron sin errores ni warnings.
+- Cobertura de utilidades de autenticación: incluye `lib/auth.ts`, `lib/passwords.ts`, `lib/account.ts` y `packages/shared/auth/session.ts`; las pruebas de sesión comprueban éxito, tokens ausentes/revocados, respuestas inválidas, errores de red/servidor, almacenamiento bloqueado y aborto. No se detectaron bugs en estas pruebas, por lo que no hubo cambios funcionales que corregir.
+- Los informes generados bajo `coverage/` quedan excluidos de ESLint y de la recolección de cobertura para que no contaminen las validaciones.
 - La suite FastAPI muestra un aviso deprecado de Starlette: su `TestClient` importa `httpx` con una ruta que recomienda `httpx2`; no afecta al resultado. La instalación frontend informó 25 vulnerabilidades (20 moderadas, 5 altas); revisar por separado antes de aplicar actualizaciones automáticas.
