@@ -78,6 +78,33 @@ En terminos de impacto, el proyecto ya reduce friccion en la operacion de selecc
 - Verificacion: 12 pruebas backend pasan; typecheck y lint de application pasan. Pruebas backend simulan Resend; no se verifico entrega real del proveedor ni se enviaron correos.
 - Pendiente crear commits separados de backend/tests, frontend y documentacion. Los mensajes se deben confirmar antes de crear los commits.
 
+## Pruebas de autenticación FastAPI (2026-10-09)
+
+- Pruebas ubicadas bajo `services/api/tests/`, raíz del proyecto FastAPI, con un módulo por endpoint de autenticación: registro, login, consulta de sesión (`/auth/me`), solicitud de restablecimiento, restablecimiento y cambio de contraseña. Se conservaron pruebas ampliadas y la suite unittest de restablecimiento.
+- Cada endpoint cuenta con camino feliz, caso límite y fallo, usando TestClient, TinyDB en memoria y email simulado.
+- El `pyproject.toml` del monorepo conserva únicamente pytest y pytest-cov en el grupo dev; las dependencias FastAPI se instalan desde `services/api/requirements.txt`. Las opciones de coverage se pasan explícitamente al comando.
+- Verificación tras el traslado, desde la raíz del monorepo: 57 tests correctos y 7 subtests; cobertura combinada **93%** (auth routes 96%, security 90%, password service 93%), superior al mínimo 70%, usando `uv run --with-requirements services/api/requirements.txt pytest services/api/tests --cov=services.api.routes.auth --cov=services.api.security --cov=services.api.services.passwords`.
+- La suite TypeScript de `uis/application` también quedó implementada y validada; sus resultados se registran a continuación.
+
+## Pruebas automatizadas del frontend (2026-10-09)
+
+- Configurados Jest 30, ts-jest y jsdom en `uis/application`, con scripts `test` y `test:coverage` y sus dependencias de desarrollo.
+- Añadidas suites de autenticación y cuenta: 11 pruebas en 2 suites.
+- Verificación desde `uis/application`: pruebas Jest correctas, cobertura de líneas 87.6% y `npm run typecheck` correcto. `npm run lint` terminó con 0 errores y 1 warning en JavaScript generado por el informe de cobertura.
+- Los tests usan mocks y no llaman una API real ni envían correos. Los artefactos de cobertura se retiraron del árbol de trabajo.
+
+## Documentación de pruebas (2026-10-09)
+
+- Añadido `TESTING.md` con alcance, casos, comandos y resultados de las suites FastAPI y TypeScript.
+- Pendiente: crear commits separados para pruebas/configuración FastAPI, pruebas/configuración Jest y documentación, con mensajes en español aprobados por el desarrollador.
+
+## Cobertura de utilidades TypeScript de autenticación (2026-10-09)
+
+- Ampliadas las suites Jest para probar las utilidades compartidas de sesión (`packages/shared/auth/session.ts`): inicio de sesión con almacenamiento de token, lectura/limpieza y validación de sesión; todos los flujos principales tienen camino feliz y fallo.
+- Añadidos casos para almacenamiento bloqueado, tokens ausentes/revocados, respuesta malformada, errores de API/red y aborto de petición. La suite total queda en 18 pruebas.
+- Corregida la configuración Jest para usar el root del monorepo e instrumentar el paquete compartido; ESLint ignora `coverage/` generado.
+- Validación: `npm run test:coverage` (3 suites, 18 tests; 91.77% líneas globales, 100% líneas en `session.ts`), `npm run typecheck` y `npm run lint` correctos. No se detectaron bugs de implementación, por lo que no fue necesario modificar las utilidades productivas.
+
 ## Proteccion de rutas internas (2026-10-07)
 
 - Aniadido SessionGuard cliente compartido: valida el JWT de localStorage consultando /api/auth/me, bloquea la vista durante la comprobacion y redirige a /login si falta o no es valido. Revalida al cambiar ruta, recuperar foco, recibir cambios de almacenamiento y cada minuto; muestra reintento ante errores de conexion.
