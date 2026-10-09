@@ -28,6 +28,19 @@ describe("auth client", () => {
     expect(getStoredAccessToken()).toBeNull();
   });
 
+  it("reports token storage failures and broadcasts when a token cannot be removed", () => {
+    const setItem = jest.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("blocked"); });
+    expect(() => storeAccessToken("jwt-value")).toThrow("El navegador no permite guardar la sesión.");
+    setItem.mockRestore();
+
+    const removeItem = jest.spyOn(Storage.prototype, "removeItem").mockImplementation(() => { throw new Error("blocked"); });
+    const dispatch = jest.spyOn(window, "dispatchEvent");
+    expect(() => clearStoredAccessToken()).not.toThrow();
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "nexova:unauthorized" }));
+    removeItem.mockRestore();
+    dispatch.mockRestore();
+  });
+
   it("sends a normalized email and returns the access token", async () => {
     const fetchMock = jest.mocked(global.fetch);
     fetchMock.mockResolvedValue(jsonResponse({ access_token: "jwt-value", token_type: "bearer" }));

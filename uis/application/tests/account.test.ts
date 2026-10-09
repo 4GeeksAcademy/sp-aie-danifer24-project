@@ -73,6 +73,13 @@ describe("account and password clients", () => {
     await expect(resetPassword("reset-jwt", "replacement-password")).resolves.toBeUndefined();
     expect(fetchMock.mock.calls[1][0]).toBe("/api/auth/reset-password");
     expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toEqual({ token: "reset-jwt", new_password: "replacement-password" });
+
+    await expect(changePassword("current-password", "replacement-password")).resolves.toBeUndefined();
+    expect(fetchMock.mock.calls[2][0]).toBe("/api/auth/change-password");
+    expect(JSON.parse(String(fetchMock.mock.calls[2][1]?.body))).toEqual({
+      current_password: "current-password",
+      new_password: "replacement-password",
+    });
   });
 
   it("requires a session for password change and clears an expired one", async () => {

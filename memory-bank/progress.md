@@ -98,6 +98,13 @@ En terminos de impacto, el proyecto ya reduce friccion en la operacion de selecc
 - Añadido `TESTING.md` con alcance, casos, comandos y resultados de las suites FastAPI y TypeScript.
 - Pendiente: crear commits separados para pruebas/configuración FastAPI, pruebas/configuración Jest y documentación, con mensajes en español aprobados por el desarrollador.
 
+## Cobertura de utilidades TypeScript de autenticación (2026-10-09)
+
+- Ampliadas las suites Jest para probar las utilidades compartidas de sesión (`packages/shared/auth/session.ts`): inicio de sesión con almacenamiento de token, lectura/limpieza y validación de sesión; todos los flujos principales tienen camino feliz y fallo.
+- Añadidos casos para almacenamiento bloqueado, tokens ausentes/revocados, respuesta malformada, errores de API/red y aborto de petición. La suite total queda en 18 pruebas.
+- Corregida la configuración Jest para usar el root del monorepo e instrumentar el paquete compartido; ESLint ignora `coverage/` generado.
+- Validación: `npm run test:coverage` (3 suites, 18 tests; 91.77% líneas globales, 100% líneas en `session.ts`), `npm run typecheck` y `npm run lint` correctos. No se detectaron bugs de implementación, por lo que no fue necesario modificar las utilidades productivas.
+
 ## Proteccion de rutas internas (2026-10-07)
 
 - Aniadido SessionGuard cliente compartido: valida el JWT de localStorage consultando /api/auth/me, bloquea la vista durante la comprobacion y redirige a /login si falta o no es valido. Revalida al cambiar ruta, recuperar foco, recibir cambios de almacenamiento y cada minuto; muestra reintento ante errores de conexion.
