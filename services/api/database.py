@@ -1,10 +1,11 @@
 import os
+from collections.abc import Iterator
 from pathlib import Path
 from threading import Lock
 
 from dotenv import load_dotenv
 from sqlalchemy.engine import make_url
-from sqlmodel import create_engine
+from sqlmodel import Session, create_engine
 from tinydb import TinyDB
 
 
@@ -24,6 +25,11 @@ engine = create_engine(
 	database_url.set(drivername="postgresql+psycopg2"),
 	pool_pre_ping=True,
 )
+
+
+def get_db() -> Iterator[Session]:
+	with Session(engine) as session:
+		yield session
 
 
 def get_database() -> TinyDB:
