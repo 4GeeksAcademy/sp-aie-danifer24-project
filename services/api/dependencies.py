@@ -2,9 +2,13 @@ from collections.abc import Iterator
 from typing import Annotated
 
 from fastapi import Depends
+from sqlmodel import Session
 from tinydb.table import Table
 
-from services.api.database import database_lock, get_database
+from services.api.database import database_lock, get_database, get_db
+
+
+DatabaseSession = Annotated[Session, Depends(get_db)]
 
 
 def get_request_tables() -> Iterator[tuple[Table, Table, Table, Table, Table]]:
