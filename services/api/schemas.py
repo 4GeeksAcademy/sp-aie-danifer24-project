@@ -34,7 +34,6 @@ class AssetEntryCreate(BaseModel):
 	quantity: int = Field(gt=0, strict=True)
 	supplier: NonEmptyString
 	office: Office
-	user_uuid: NonEmptyString
 
 
 class AssetEntryResponse(AssetEntryCreate):
@@ -42,6 +41,7 @@ class AssetEntryResponse(AssetEntryCreate):
 
 	id: int = Field(gt=0)
 	created_at: datetime
+	user_uuid: NonEmptyString
 
 
 class AssetExitCreate(BaseModel):
@@ -52,7 +52,6 @@ class AssetExitCreate(BaseModel):
 	exit_type: Literal["allocation", "consumption"]
 	assigned_to: NonEmptyString | None = None
 	office: Office
-	user_uuid: NonEmptyString
 
 	@model_validator(mode="after")
 	def validate_assigned_to(self) -> "AssetExitCreate":
@@ -68,3 +67,14 @@ class AssetExitResponse(AssetExitCreate):
 
 	id: int = Field(gt=0)
 	created_at: datetime
+	user_uuid: NonEmptyString
+
+
+class AssetEntryOrderResponse(AssetEntryResponse):
+	order_type: Literal["inbound"] = "inbound"
+	asset: AssetResponse
+
+
+class AssetExitOrderResponse(AssetExitResponse):
+	order_type: Literal["outbound"] = "outbound"
+	asset: AssetResponse
