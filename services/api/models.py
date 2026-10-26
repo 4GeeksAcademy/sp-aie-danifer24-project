@@ -13,6 +13,63 @@ from pydantic import (
 	field_validator,
 	model_validator,
 )
+from sqlalchemy import CheckConstraint, DateTime
+from sqlmodel import Field as SQLField, SQLModel
+
+
+class Asset(SQLModel, table=True):
+	__table_args__ = (
+		CheckConstraint("category IN ('hardware', 'peripherals', 'office_supplies', 'training_materials')"),
+		CheckConstraint("office IN ('Valencia', 'Miami')"),
+	)
+
+	id: int | None = SQLField(default=None, primary_key=True)
+	name: str
+	sku: str = SQLField(unique=True)
+	category: str
+	office: str
+
+
+class AssetEntry(SQLModel, table=True):
+	__table_args__ = (
+		CheckConstraint("quantity > 0"),
+		CheckConstraint("office IN ('Valencia', 'Miami')"),
+	)
+
+	id: int | None = SQLField(default=None, primary_key=True)
+	asset_id: int = SQLField(foreign_key="asset.id", index=True)
+	quantity: int = SQLField(gt=0)
+	supplier: str
+	office: str
+	created_at: datetime = SQLField(
+		default_factory=lambda: datetime.now(timezone.utc),
+		sa_type=DateTime(timezone=True),
+	)
+	user_uuid: str
+
+
+class AssetExit(SQLModel, table=True):
+	__table_args__ = (
+		CheckConstraint("quantity > 0"),
+		CheckConstraint("office IN ('Valencia', 'Miami')"),
+		CheckConstraint("exit_type IN ('allocation', 'consumption')"),
+		CheckConstraint(
+			"(exit_type = 'allocation' AND assigned_to IS NOT NULL AND trim(assigned_to) <> '') "
+			"OR (exit_type = 'consumption' AND assigned_to IS NULL)"
+		),
+	)
+
+	id: int | None = SQLField(default=None, primary_key=True)
+	asset_id: int = SQLField(foreign_key="asset.id", index=True)
+	quantity: int = SQLField(gt=0)
+	exit_type: str
+	assigned_to: str | None = None
+	office: str
+	created_at: datetime = SQLField(
+		default_factory=lambda: datetime.now(timezone.utc),
+		sa_type=DateTime(timezone=True),
+	)
+	user_uuid: str
 
 
 class SupplierCountry(str, Enum):

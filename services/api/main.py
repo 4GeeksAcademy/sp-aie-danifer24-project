@@ -1,5 +1,6 @@
 from pathlib import Path
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
@@ -7,7 +8,9 @@ from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import JSONResponse
+from sqlmodel import SQLModel
 
+from services.api.database import engine
 from services.api.incidents import (
     CsvInputError,
     analyze,
@@ -23,7 +26,13 @@ from services.api.routes.users import router as users_router
 from services.api.security import CurrentUser
 
 
-app = FastAPI(title="Nexova Incidents API", version="1.0.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    SQLModel.metadata.create_all(engine)
+    yield
+
+
+app = FastAPI(title="Nexova Incidents API", version="1.0.0", lifespan=lifespan)
 app.include_router(suppliers_router)
 app.include_router(auth_router)
 app.include_router(profiles_router)
