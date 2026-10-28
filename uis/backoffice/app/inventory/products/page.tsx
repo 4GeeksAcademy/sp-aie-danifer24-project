@@ -1,16 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import {
-  createAssetEntry,
-  createAssetExit,
-  listAssets,
-  readableInventoryError,
-  type Asset,
-  type AssetExitInput,
-} from "../../../lib/inventory";
-
-type OrderType = "inbound" | "outbound";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { listAssets, readableInventoryError, type Asset } from "../../../lib/inventory";
 
 const CATEGORY_LABELS: Record<Asset["category"], string> = {
   hardware: "Hardware",
@@ -46,15 +38,6 @@ export default function InventoryProductsPage() {
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
   const [search, setSearch] = useState("");
-  const [orderType, setOrderType] = useState<OrderType | null>(null);
-  const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
-  const [quantity, setQuantity] = useState("1");
-  const [supplier, setSupplier] = useState("");
-  const [exitType, setExitType] = useState<AssetExitInput["exit_type"]>("allocation");
-  const [assignedTo, setAssignedTo] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [formError, setFormError] = useState("");
-  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -84,70 +67,6 @@ export default function InventoryProductsPage() {
   const totalUnits = assets.reduce((total, asset) => total + asset.current_stock, 0);
   const lowStockCount = assets.filter((asset) => asset.current_stock < LOW_STOCK_THRESHOLD).length;
 
-  function openOrder(asset: Asset, type: OrderType) {
-    setSelectedAsset(asset);
-    setOrderType(type);
-    setQuantity("1");
-    setSupplier("");
-    setExitType("allocation");
-    setAssignedTo("");
-    setFormError("");
-    setNotice("");
-  }
-
-  function closeOrder() {
-    if (submitting) return;
-    setOrderType(null);
-    setSelectedAsset(null);
-    setFormError("");
-  }
-
-  async function submitOrder(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!selectedAsset || !orderType) return;
-    const parsedQuantity = Number(quantity);
-    if (!Number.isSafeInteger(parsedQuantity) || parsedQuantity < 1) {
-      setFormError("Indica una cantidad entera mayor que cero.");
-      return;
-    }
-
-    setSubmitting(true);
-    setFormError("");
-    setNotice("");
-    try {
-      if (orderType === "inbound") {
-        await createAssetEntry({
-          asset_id: selectedAsset.id,
-          quantity: parsedQuantity,
-          supplier: supplier.trim(),
-          office: selectedAsset.office,
-        });
-        setAssets((current) => current.map((asset) => asset.id === selectedAsset.id
-          ? { ...asset, current_stock: asset.current_stock + parsedQuantity }
-          : asset));
-        setNotice(`Entrada registrada para ${selectedAsset.name}.`);
-      } else {
-        await createAssetExit({
-          asset_id: selectedAsset.id,
-          quantity: parsedQuantity,
-          exit_type: exitType,
-          assigned_to: exitType === "allocation" ? assignedTo.trim() : null,
-          office: selectedAsset.office,
-        });
-        setAssets((current) => current.map((asset) => asset.id === selectedAsset.id
-          ? { ...asset, current_stock: asset.current_stock - parsedQuantity }
-          : asset));
-        setNotice(`Salida registrada para ${selectedAsset.name}.`);
-      }
-      setOrderType(null);
-      setSelectedAsset(null);
-    } catch (caught) {
-      setFormError(readableInventoryError(caught));
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
   return (
     <main className="shell inventory-shell">
       <header className="hero inventory-hero">
@@ -164,12 +83,16 @@ export default function InventoryProductsPage() {
         <div className={lowStockCount > 0 ? "overview-warning" : ""}><span>Con stock bajo o agotado</span><strong>{lowStockCount}</strong></div>
       </section>
 
-      {notice && <p className="notice notice-success" role="status">{notice}</p>}
-
       <section className="inventory-panel" aria-labelledby="products-title">
         <div className="panel-header inventory-panel-header">
           <div><p className="eyebrow">Existencias</p><h2 id="products-title">Productos</h2></div>
-          {!loading && !error && <span className="count-pill">{filteredAssets.length} {filteredAssets.length === 1 ? "producto" : "productos"}</span>}
+          {!loading && !error && <div className="inventory-panel-tools">
+            <span className="count-pill">{filteredAssets.length} {filteredAssets.length === 1 ? "producto" : "productos"}</span>
+            {assets.length > 0 && <div className="inventory-page-actions">
+              <Link className="btn btn-outline" href="/inventory/orders/inbound">Registrar entrada</Link>
+              <Link className="btn btn-dark" href="/inventory/orders/outbound">Registrar salida</Link>
+            </div>}
+          </div>}
         </div>
 
         <label className="inventory-search" htmlFor="inventory-search">Buscar producto
@@ -183,7 +106,7 @@ export default function InventoryProductsPage() {
         {!loading && !error && filteredAssets.length > 0 && (
           <div className="inventory-table-wrap">
             <table className="inventory-table">
-              <thead><tr><th scope="col">Producto</th><th scope="col">Categoría</th><th scope="col">Oficina</th><th scope="col">Stock actual</th><th scope="col">Órdenes</th></tr></thead>
+              <thead><tr><th scope="col">Producto</th><th scope="col">Categoría</th><th scope="col">Oficina</th><th scope="col">Stock actual</th></tr></thead>
               <tbody>{filteredAssets.map((asset) => {
                 const state = stockState(asset.current_stock);
                 return <tr key={asset.id}>
@@ -191,10 +114,6 @@ export default function InventoryProductsPage() {
                   <td>{CATEGORY_LABELS[asset.category] ?? asset.category}</td>
                   <td>{asset.office}</td>
                   <td><span className={`stock-indicator ${state.className}`}><span aria-hidden="true">{state.symbol}</span><strong>{asset.current_stock}</strong><span>{state.label}</span></span></td>
-                  <td><div className="inventory-row-actions">
-                    <button className="btn btn-outline" type="button" onClick={() => openOrder(asset, "inbound")}>Registrar entrada</button>
-                    <button className="btn btn-dark" type="button" disabled={asset.current_stock === 0} title={asset.current_stock === 0 ? "No hay unidades disponibles" : undefined} onClick={() => openOrder(asset, "outbound")}>Registrar salida</button>
-                  </div></td>
                 </tr>;
               })}</tbody>
             </table>
@@ -202,30 +121,6 @@ export default function InventoryProductsPage() {
         )}
       </section>
 
-      {orderType && selectedAsset && <div className="inventory-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeOrder(); }}>
-        <section className="inventory-dialog" role="dialog" aria-modal="true" aria-labelledby="order-dialog-title">
-          <div className="inventory-dialog-heading"><div><p className="eyebrow">{selectedAsset.sku} · {selectedAsset.office}</p><h2 id="order-dialog-title">{orderType === "inbound" ? "Registrar entrada" : "Registrar salida"}</h2><p>{selectedAsset.name}</p></div><button className="inventory-dialog-close" type="button" aria-label="Cerrar" disabled={submitting} onClick={closeOrder}>×</button></div>
-          <form className="inventory-order-form" onSubmit={submitOrder}>
-            <label htmlFor="order-quantity">Cantidad
-              <input id="order-quantity" type="number" min="1" step="1" required value={quantity} onChange={(event) => setQuantity(event.target.value)} />
-            </label>
-            {orderType === "inbound" ? <label htmlFor="order-supplier">Proveedor
-              <input id="order-supplier" type="text" required maxLength={200} value={supplier} onChange={(event) => setSupplier(event.target.value)} />
-            </label> : <>
-              <label htmlFor="order-exit-type">Tipo de salida
-                <select id="order-exit-type" value={exitType} onChange={(event) => { setExitType(event.target.value as AssetExitInput["exit_type"]); setAssignedTo(""); }}>
-                  <option value="allocation">Asignación</option><option value="consumption">Consumo</option>
-                </select>
-              </label>
-              {exitType === "allocation" && <label htmlFor="order-assigned-to">Asignado a
-                <input id="order-assigned-to" type="text" required maxLength={200} value={assignedTo} onChange={(event) => setAssignedTo(event.target.value)} />
-              </label>}
-            </>}
-            {formError && <p className="notice notice-error" role="alert">{formError}</p>}
-            <div className="inventory-dialog-actions"><button className="btn btn-outline" type="button" disabled={submitting} onClick={closeOrder}>Cancelar</button><button className="btn btn-dark" type="submit" disabled={submitting}>{submitting ? "Guardando…" : orderType === "inbound" ? "Guardar entrada" : "Guardar salida"}</button></div>
-          </form>
-        </section>
-      </div>}
     </main>
   );
 }

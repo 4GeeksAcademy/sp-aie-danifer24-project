@@ -129,9 +129,10 @@ En terminos de impacto, el proyecto ya reduce friccion en la operacion de selecc
 - Aniadida la regla `*.tsbuildinfo` a `.gitignore` para excluir la cache incremental de TypeScript.
 - Validacion: `npx tsc --noEmit` y ESLint enfocado en los tres archivos nuevos pasan. No se modificaron componentes; los consumidores deben usar el modulo central.
 
-## Pagina de productos de inventario en Backoffice (2026-10-28)
+## Flujos de órdenes de inventario en Backoffice (2026-10-28)
 
-- Aniadida `/inventory/products` con listado responsive, busqueda, SKU, categoria, oficina y stock calculado; indicadores: saludable desde 5 unidades, bajo de 1 a 4 y agotado en 0.
-- Las acciones por producto abren formularios de entrada/salida que llaman al cliente central y muestran errores del backend; el stock visible se actualiza tras guardar.
-- Enlace de inventario agregado a la navegacion. El proxy ya no reenvia el AbortSignal entrante, que cancelaba la peticion upstream en Next; comprobado HTTP 200 para productos y 401 para ordenes sin token.
-- Validacion: `npm run lint`, `npx tsc --noEmit` y `npm run build` correctos; no hay script de pruebas automatizadas en Backoffice.
+- `/inventory/products` muestra listado responsive, busqueda, SKU, categoria, oficina y stock calculado; indicadores: saludable desde 5 unidades, bajo de 1 a 4 y agotado en 0.
+- Las acciones de entrada y salida aparecen una sola vez en la cabecera cuando hay productos cargados. Formularios dedicados `/inventory/orders/inbound` y `/inventory/orders/outbound` permiten elegir producto por nombre.
+- La salida consulta stock actualizado al cambiar de producto, advierte si la cantidad lo supera y muestra el HTTP 400 de stock insuficiente junto al campo. La entrada muestra exito y errores inline; ambas operaciones usan el cliente central autenticado.
+- La navegación ya no duplica «Registrar incidencia»; esa acción permanece en la página de incidencias. El proxy de inventario no reenvia AbortSignal para evitar cancelar la petición upstream en Next.
+- Validacion: `npm run lint`, `npx tsc --noEmit` y `npm run build` correctos; las rutas y el selector responden HTTP 200 y órdenes sin autenticación responden 401. Backoffice no dispone de pruebas automatizadas.
