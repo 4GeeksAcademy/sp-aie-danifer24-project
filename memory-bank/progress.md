@@ -121,3 +121,19 @@ En terminos de impacto, el proyecto ya reduce friccion en la operacion de selecc
 3. Reforzar calidad en validaciones y manejo de errores para reducir riesgo operativo.
 4. Completar checklist de entrega y criterios de despliegue.
 5. Preparar el proyecto para la siguiente iteracion de mejora y escalado.
+
+## Cliente API de inventario en Backoffice (2026-10-27)
+
+- Aniadido `uis/backoffice/lib/inventory.ts` con tipos y funciones centralizadas para los seis endpoints de inventario; las operaciones protegidas adjuntan el token `nexova_access_token` y exponen mensajes de error del backend.
+- Aniadido proxy same-origin de Next en `/api/inventory/[...path]`, que reenvia la autorizacion al backend configurado por `NEXT_PUBLIC_INVENTORY_API_URL`.
+- Aniadida la regla `*.tsbuildinfo` a `.gitignore` para excluir la cache incremental de TypeScript.
+- Validacion: `npx tsc --noEmit` y ESLint enfocado en los tres archivos nuevos pasan. No se modificaron componentes; los consumidores deben usar el modulo central.
+
+## Flujos de órdenes de inventario en Backoffice (2026-10-28)
+
+- `/inventory/products` muestra listado responsive, busqueda, SKU, categoria, oficina y stock calculado; indicadores: saludable desde 5 unidades, bajo de 1 a 4 y agotado en 0.
+- Las acciones de entrada y salida aparecen una sola vez en la cabecera cuando hay productos cargados. Formularios dedicados `/inventory/orders/inbound` y `/inventory/orders/outbound` permiten elegir producto por nombre.
+- La salida consulta stock actualizado al cambiar de producto, advierte si la cantidad lo supera y muestra el HTTP 400 de stock insuficiente junto al campo. La entrada muestra exito y errores inline; ambas operaciones usan el cliente central autenticado.
+- Aniadido `/inventory/orders` como historial de solo lectura con producto, cantidad, tipo, fecha y `user_uuid`; distingue visualmente entradas y salidas y enlaza desde la pagina de productos. Queda cubierto por el `SessionGuard` global.
+- La navegación ya no duplica «Registrar incidencia»; esa acción permanece en la página de incidencias. El proxy de inventario no reenvia AbortSignal para evitar cancelar la petición upstream en Next.
+- Validacion: `npm run lint`, `npx tsc --noEmit` y `npm run build` correctos para los flujos de ordenes; al aniadir historial, typecheck y ESLint enfocado pasan, la ruta responde HTTP 200 y la API de ordenes sin autenticacion responde 401. Backoffice no dispone de pruebas automatizadas.
