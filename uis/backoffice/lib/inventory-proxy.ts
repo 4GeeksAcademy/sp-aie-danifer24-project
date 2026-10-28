@@ -24,7 +24,6 @@ export async function forwardInventoryRequest(request: Request, suffix: string):
       headers,
       body: method === "GET" || method === "HEAD" ? undefined : await request.text(),
       cache: "no-store",
-      signal: request.signal,
     });
     return new Response(response.body, {
       status: response.status,

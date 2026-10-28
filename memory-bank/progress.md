@@ -128,3 +128,10 @@ En terminos de impacto, el proyecto ya reduce friccion en la operacion de selecc
 - Aniadido proxy same-origin de Next en `/api/inventory/[...path]`, que reenvia la autorizacion al backend configurado por `NEXT_PUBLIC_INVENTORY_API_URL`.
 - Aniadida la regla `*.tsbuildinfo` a `.gitignore` para excluir la cache incremental de TypeScript.
 - Validacion: `npx tsc --noEmit` y ESLint enfocado en los tres archivos nuevos pasan. No se modificaron componentes; los consumidores deben usar el modulo central.
+
+## Pagina de productos de inventario en Backoffice (2026-10-28)
+
+- Aniadida `/inventory/products` con listado responsive, busqueda, SKU, categoria, oficina y stock calculado; indicadores: saludable desde 5 unidades, bajo de 1 a 4 y agotado en 0.
+- Las acciones por producto abren formularios de entrada/salida que llaman al cliente central y muestran errores del backend; el stock visible se actualiza tras guardar.
+- Enlace de inventario agregado a la navegacion. El proxy ya no reenvia el AbortSignal entrante, que cancelaba la peticion upstream en Next; comprobado HTTP 200 para productos y 401 para ordenes sin token.
+- Validacion: `npm run lint`, `npx tsc --noEmit` y `npm run build` correctos; no hay script de pruebas automatizadas en Backoffice.

@@ -10,6 +10,7 @@ export default function BackofficeNavigation() {
     <nav className="app-nav" aria-label="Menú principal">
       <Link className="app-nav-brand" href="/">Nexova <span>Operaciones</span></Link>
       <div className="app-nav-links">
+        <Link href="/inventory/products" aria-current={pathname.startsWith("/inventory") ? "page" : undefined}>Inventario</Link>
         <Link href="/incidents" aria-current={pathname === "/incidents" ? "page" : undefined}>Incidencias</Link>
         <Link href="/incidents/new" aria-current={pathname === "/incidents/new" ? "page" : undefined}>Registrar incidencia</Link>
         <Link href="/validacion-tecnica" aria-current={pathname === "/validacion-tecnica" ? "page" : undefined}>Validación técnica</Link>
