@@ -89,6 +89,7 @@ export default function InventoryProductsPage() {
           {!loading && !error && <div className="inventory-panel-tools">
             <span className="count-pill">{filteredAssets.length} {filteredAssets.length === 1 ? "producto" : "productos"}</span>
             {assets.length > 0 && <div className="inventory-page-actions">
+              <Link className="btn btn-outline" href="/inventory/orders">Historial de órdenes</Link>
               <Link className="btn btn-outline" href="/inventory/orders/inbound">Registrar entrada</Link>
               <Link className="btn btn-dark" href="/inventory/orders/outbound">Registrar salida</Link>
             </div>}
