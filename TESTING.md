@@ -27,7 +27,7 @@ También se comprobarán las respuestas de validación estructuradas y que las e
 
 ## Frontend — Jest + ts-jest + TypeScript
 
-Suites: `uis/application/tests/auth.test.ts`, `uis/application/tests/account.test.ts` y `uis/application/tests/shared-session.test.ts`, probando las funciones de `lib/auth.ts`, `lib/passwords.ts`, `lib/account.ts` y `packages/shared/auth/session.ts`. Jest mantiene el root del monorepo para instrumentar la utilidad compartida. Se ejecuta desde `uis/application`:
+Suites: `uis/backoffice/tests/auth.test.ts`, `uis/backoffice/tests/account.test.ts` y `uis/backoffice/tests/shared-session.test.ts`, probando los clientes de autenticación/cuenta migrados y `packages/shared/auth/session.ts`. Jest mantiene el root del monorepo para instrumentar la utilidad compartida. Se ejecuta desde `uis/backoffice`:
 
 ```bash
 npm test
@@ -53,7 +53,7 @@ Se priorizan los límites de confianza del flujo de autenticación (enumeración
 
 - Backend desde la raíz del monorepo: `uv run --with-requirements services/api/requirements.txt pytest services/api/tests -q` — **57 passed**, además de 7 subtests.
 - Cobertura: `uv run --with-requirements services/api/requirements.txt pytest services/api/tests --cov=services.api.routes.auth --cov=services.api.security --cov=services.api.services.passwords --cov-report=term-missing -q` — **93% total** en autenticación (auth routes 96%, security 90%, password service 93%), sobre el mínimo requerido de 70%.
-- Frontend actualizado: `cd uis/application && npm run test:coverage` — **3 suites y 18 tests passed**; cobertura total de líneas **91.77%**, sentencias **87.97%**, ramas **84.84%** y funciones **84%**, incluyendo 100% de líneas en `packages/shared/auth/session.ts`. `npm run typecheck` y `npm run lint` pasaron sin errores ni warnings.
+- Frontend migrado: `cd uis/backoffice && npm test` — **3 suites y 18 tests passed**. Las pruebas conservan la cobertura de login, registro, contraseña, perfil y sesión compartida; la verificación de cobertura se ejecuta con `npm run test:coverage`.
 - Cobertura de utilidades de autenticación: incluye `lib/auth.ts`, `lib/passwords.ts`, `lib/account.ts` y `packages/shared/auth/session.ts`; las pruebas de sesión comprueban éxito, tokens ausentes/revocados, respuestas inválidas, errores de red/servidor, almacenamiento bloqueado y aborto. No se detectaron bugs en estas pruebas, por lo que no hubo cambios funcionales que corregir.
 - Los informes generados bajo `coverage/` quedan excluidos de ESLint y de la recolección de cobertura para que no contaminen las validaciones.
 - La suite FastAPI muestra un aviso deprecado de Starlette: su `TestClient` importa `httpx` con una ruta que recomienda `httpx2`; no afecta al resultado. La instalación frontend informó 25 vulnerabilidades (20 moderadas, 5 altas); revisar por separado antes de aplicar actualizaciones automáticas.
