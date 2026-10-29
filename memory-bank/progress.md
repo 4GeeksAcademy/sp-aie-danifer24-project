@@ -1,5 +1,13 @@
 # Progreso del proyecto
 
+## Unificación de Application en Backoffice (2026-10-29)
+
+- Migradas las rutas de proveedores, login, registro, recuperación/restablecimiento de contraseña, perfil y cambio de contraseña a `uis/backoffice`; retirado del repositorio el frontend independiente `uis/application`.
+- Backoffice conserva el JWT `nexova_access_token` y la sesión compartida; agregados proxies same-origin para registro, contraseña, perfil y proveedores, con autorización bearer en las rutas protegidas.
+- La navegación incluye Proveedores y Mi cuenta. La página inicial enlaza proveedores, inventario, incidencias y validación técnica.
+- Migradas a Backoffice las tres suites de autenticación/cuenta: 18 pruebas correctas. `npm run typecheck`, `npm run lint` y `npm run build` correctos; rutas principales responden 200 y los endpoints de sesión/proveedores sin token responden 401.
+- Login probado manualmente con una cuenta válida: autenticación correcta. Pendiente comprobar visualmente el flujo y probar registro/recuperación; no se leyeron credenciales locales.
+
 ## Gestor centralizado de incidencias
 
 - Definidos modelos Pydantic y enums de incidencia, con validacion de campos, estado y timestamps UTC de sistema.

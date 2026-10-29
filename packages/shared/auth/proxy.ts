@@ -1,10 +1,12 @@
-export async function forwardAuth(request: Request, endpoint: "me" | "login"): Promise<Response> {
+export type AuthEndpoint = "me" | "login" | "forgot-password" | "reset-password" | "change-password";
+
+export async function forwardAuth(request: Request, endpoint: AuthEndpoint): Promise<Response> {
   const authorization = request.headers.get("authorization");
-  if (endpoint === "me" && !authorization) {
+  if ((endpoint === "me" || endpoint === "change-password") && !authorization) {
     return Response.json({ detail: "Inicia sesión para continuar." }, { status: 401 });
   }
   let body: string | undefined;
-  if (endpoint === "login") {
+  if (endpoint !== "me") {
     try {
       body = JSON.stringify(await request.json());
     } catch {
@@ -14,7 +16,7 @@ export async function forwardAuth(request: Request, endpoint: "me" | "login"): P
   const apiUrl = (process.env.SUPPLIERS_API_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
   try {
     const response = await fetch(`${apiUrl}/auth/${endpoint}`, {
-      method: endpoint === "login" ? "POST" : "GET",
+      method: endpoint === "me" ? "GET" : "POST",
       headers: { "Content-Type": "application/json", ...(authorization ? { Authorization: authorization } : {}) },
       body,
       cache: "no-store",

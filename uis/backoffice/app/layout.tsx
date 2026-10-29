@@ -5,8 +5,8 @@ import SessionGuard from "./session-guard";
 import BackofficeNavigation from "./navigation";
 
 export const metadata: Metadata = {
-  title: "Nexova Backoffice | Panel Interno",
-  description: "Backoffice interno con centro de validacion tecnica para funciones de negocio.",
+  title: "Nexova | Centro de operaciones",
+  description: "Operaciones internas de Nexova: proveedores, inventario e incidencias.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

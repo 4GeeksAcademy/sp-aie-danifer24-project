@@ -50,13 +50,13 @@ a `NEXT_PUBLIC_` prefix or commit secrets):
 ```dotenv
 RESEND_API_KEY=your_resend_api_key
 RESEND_FROM_EMAIL=Nexova <noreply@your-verified-domain.com>
-PASSWORD_RESET_URL=http://localhost:3000/reset-password
+PASSWORD_RESET_URL=http://localhost:3001/reset-password
 ```
 
 Create an API key in Resend and verify the sender domain. Resend's test sender
 can only deliver to permitted test recipients. Use an HTTPS application URL in
 production; `PASSWORD_RESET_URL` must be an absolute URL without a query string
-or fragment. It targets `uis/application`, where recovery pages are public.
+or fragment. It targets `uis/backoffice`, where recovery pages are public.
 Restart FastAPI after changing environment settings. No extra email dependency
 is required: the backend uses Resend's HTTPS REST API with a 10-second timeout.
 
