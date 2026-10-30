@@ -1,0 +1,68 @@
+services:
+  api:
+    build:
+      context: ./services
+      dockerfile: Dockerfile
+      additional_contexts:
+        repo: .
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Define DATABASE_URL en el archivo .env o en el entorno}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Define JWT_SECRET_KEY en el archivo .env}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:?}
+      SUPPLIERS_DB_PATH: ${SUPPLIERS_DB_PATH:?}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-}
+      PASSWORD_RESET_URL: ${PASSWORD_RESET_URL:?}
+    command: ["uvicorn", "services.api.main:app", "--host", "0.0.0.0", "--port", "${API_PORT:?}", "--reload"]
+    ports:
+      - "${API_PORT:?}:${API_PORT:?}"
+    volumes:
+      - ./services:/app/services
+      - ./packages/shared:/app/packages/shared:ro
+      - api-data:/app/data
+    networks:
+      - nexova
+
+  uis:
+    build:
+      context: ./uis
+      dockerfile: Dockerfile
+      additional_contexts:
+        repo: .
+      args:
+        NEXT_PUBLIC_INVENTORY_API_URL: ${NEXT_PUBLIC_INVENTORY_API_URL:?}
+    depends_on:
+      - api
+    init: true
+    command: ["bash", "/app/uis/start.sh"]
+    environment:
+      NODE_ENV: ${NODE_ENV:?}
+      NEXTJS_MODE: ${NEXTJS_MODE:?}
+      WEBSITE_PORT: ${WEBSITE_PORT:?}
+      BACKOFFICE_PORT: ${BACKOFFICE_PORT:?}
+      NEXT_PUBLIC_INVENTORY_API_URL: ${NEXT_PUBLIC_INVENTORY_API_URL:?}
+      SUPPLIERS_API_URL: ${SUPPLIERS_API_URL:?}
+    ports:
+      - "${WEBSITE_PORT:?}:${WEBSITE_PORT:?}"
+      - "${BACKOFFICE_PORT:?}:${BACKOFFICE_PORT:?}"
+    volumes:
+      - ./uis:/app/uis
+      - ./packages/shared:/app/packages/shared:ro
+      - ./src:/app/src:ro
+      - website-dependencies:/app/uis/website/node_modules
+      - backoffice-dependencies:/app/uis/backoffice/node_modules
+      - website-next:/app/uis/website/.next
+      - backoffice-next:/app/uis/backoffice/.next
+    networks:
+      - nexova
+
+volumes:
+  api-data:
+  website-dependencies:
+  backoffice-dependencies:
+  website-next:
+  backoffice-next:
+
+networks:
+  nexova:
+    name: ${DOCKER_NETWORK_NAME:?}

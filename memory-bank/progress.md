@@ -1,5 +1,14 @@
 # Progreso del proyecto
 
+## Dockerizacion del monorepo (2026-10-29)
+
+- Aniadidos Dockerfile y .dockerignore en `uis/` y `services/`, y `docker-compose.yml` en la raiz. La API usa un volumen persistente para TinyDB y requiere `DATABASE_URL` por entorno para PostgreSQL.
+- La imagen Node Alpine instala y compila Website y Backoffice por separado. `uis/start.sh` arranca Website en 3000 y Backoffice en 3001, y termina ambos procesos al detener el contenedor o finalizar uno de ellos. Compose publica ambos puertos y conecta los proxies con la API en 8000.
+- Validacion previa al commit: lint de Website y Backoffice correctos; 3 suites y 18 pruebas de Backoffice correctas; sintaxis Bash y `docker compose config --quiet` correctas. Website no declara script de pruebas.
+- La imagen API se construyo correctamente. Los builds Next de ambas interfaces pasaron, pero la exportacion de su ultima imagen se cancelo; pendiente completar la imagen y comprobar el arranque HTTP de ambos servidores. No se verifico conexion con PostgreSQL ni se usaron credenciales reales.
+- Actualizacion 2026-10-30: API con Python oficial, instalacion mediante uv y Uvicorn con `--reload`; incorporado `packages/shared` al contexto de build para resolver la importacion del parser CSV. Compose define dos servicios con bind mounts, volumenes independientes de dependencias y cache Next, y red con nombre configurable. El script de interfaces admite modo y puertos por entorno; Compose conserva modo desarrollo, no una configuracion endurecida de produccion.
+- Verificacion actual: lint de ambas interfaces, 6 pruebas de sesion compartida, sintaxis Bash, Compose con entorno de ejemplo y build/importaciones de la imagen API correctos. Pendiente comprobar arranque integral y revisar la plantilla `.env.example`, protegida por Copilot; `.env` permanece ignorado por Git y sin cambios del agente.
+
 ## Unificación de Application en Backoffice (2026-10-29)
 
 - Migradas las rutas de proveedores, login, registro, recuperación/restablecimiento de contraseña, perfil y cambio de contraseña a `uis/backoffice`; retirado del repositorio el frontend independiente `uis/application`.
