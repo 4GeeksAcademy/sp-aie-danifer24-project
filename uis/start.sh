@@ -3,13 +3,13 @@ set -eu
 
 (
   cd /app/uis/website
-  exec node node_modules/next/dist/bin/next start --hostname 0.0.0.0 --port 3000
+  exec node node_modules/next/dist/bin/next "${NEXTJS_MODE:-start}" --hostname 0.0.0.0 --port "${WEBSITE_PORT:-3000}"
 ) &
 website_pid=$!
 
 (
   cd /app/uis/backoffice
-  exec node node_modules/next/dist/bin/next start --hostname 0.0.0.0 --port 3001
+  exec node node_modules/next/dist/bin/next "${NEXTJS_MODE:-start}" --hostname 0.0.0.0 --port "${BACKOFFICE_PORT:-3001}"
 ) &
 backoffice_pid=$!
 
