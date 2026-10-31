@@ -1,29 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import {
   createAssetEntry,
-  listAssets,
   readableInventoryError,
-  type Asset,
 } from "../../../../lib/inventory";
-
-function isAsset(value: unknown): value is Asset {
-  if (!value || typeof value !== "object") return false;
-  const asset = value as Partial<Asset>;
-  return typeof asset.id === "number"
-    && typeof asset.name === "string"
-    && typeof asset.sku === "string"
-    && (asset.office === "Valencia" || asset.office === "Miami")
-    && typeof asset.current_stock === "number";
-}
+import { useInventoryAssets } from "../../../../hooks/useInventoryAssets";
 
 export default function InboundOrderPage() {
-  const [assets, setAssets] = useState<Asset[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
-  const [retry, setRetry] = useState(0);
+  const { assets, setAssets, loading, error: loadError, retryLoading } = useInventoryAssets();
   const [assetId, setAssetId] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [supplier, setSupplier] = useState("");
@@ -31,34 +17,10 @@ export default function InboundOrderPage() {
   const [formError, setFormError] = useState("");
   const [success, setSuccess] = useState("");
 
-  useEffect(() => {
-    let active = true;
-    listAssets()
-      .then((result) => {
-        if (!Array.isArray(result) || !result.every(isAsset)) {
-          throw new Error("El servicio devolvió una lista de productos no válida.");
-        }
-        if (active) setAssets(result);
-      })
-      .catch((error: unknown) => {
-        if (active) setLoadError(readableInventoryError(error));
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => { active = false; };
-  }, [retry]);
-
   const selectedAsset = useMemo(
     () => assets.find((asset) => String(asset.id) === assetId) ?? null,
     [assets, assetId],
   );
-
-  function retryLoading() {
-    setLoadError("");
-    setLoading(true);
-    setRetry((current) => current + 1);
-  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

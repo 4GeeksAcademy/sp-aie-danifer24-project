@@ -1,5 +1,14 @@
 # Progreso del proyecto
 
+## Auditoría de rendimiento frontend (2026-10-30)
+
+- Realizada auditoría Lighthouse before/after de cuatro vistas desktop y mobile de Website y Backoffice, con capturas organizadas en `audit/before/` y `audit/after/`; resultados y comparación documentados en `AUDIT.md` y `REPORT.md`.
+- Extraído `uis/backoffice/hooks/useInventoryAssets.ts` para compartir carga, validación runtime, errores y reintento de activos entre productos, entradas y salidas de inventario.
+- Extraído `uis/website/components/SiteHeader.tsx` y reutilizado en las páginas de portada y talento.
+- Las métricas after muestran reducción de TBT móvil en tres vistas (−100, −60 y −120 ms) y CLS móvil de 0 en las cuatro. TBT se interpreta como métrica de laboratorio, no como Core Web Vital.
+- Validación de Backoffice: `npm run lint`, `npm run typecheck` y Jest correctos (3 suites, 18 pruebas). Validación de Website: `npm run lint` y `npm run build` correctos; Next informa un warning no bloqueante por múltiples lockfiles.
+- Revisión de formato: `git diff --check` y `git diff --cached --check` correctos. Los cambios están organizados para commits separados de Backoffice, Website y, finalmente, capturas after más entregables; los commits se ejecutarán tras confirmación explícita de sus mensajes.
+
 ## Dockerizacion del monorepo (2026-10-29)
 
 - Aniadidos Dockerfile y .dockerignore en `uis/` y `services/`, y `docker-compose.yml` en la raiz. La API usa un volumen persistente para TinyDB y requiere `DATABASE_URL` por entorno para PostgreSQL.

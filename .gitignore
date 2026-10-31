@@ -3,4 +3,5 @@ __pycache__/
 *.tsbuildinfo
 .venv/
 .env
+.env.docker
 /data/suppliers.json

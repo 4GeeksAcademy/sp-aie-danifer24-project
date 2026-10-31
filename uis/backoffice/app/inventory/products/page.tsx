@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { listAssets, readableInventoryError, type Asset } from "../../../lib/inventory";
+import { useInventoryAssets } from "../../../hooks/useInventoryAssets";
+import type { Asset } from "../../../lib/inventory";
 
 const CATEGORY_LABELS: Record<Asset["category"], string> = {
   hardware: "Hardware",
@@ -14,18 +15,6 @@ const CATEGORY_LABELS: Record<Asset["category"], string> = {
 // Stock saludable: 5 unidades o más; bajo: de 1 a 4; sin stock: 0.
 const LOW_STOCK_THRESHOLD = 5;
 
-function isAsset(value: unknown): value is Asset {
-  if (!value || typeof value !== "object") return false;
-  const asset = value as Partial<Asset>;
-  return typeof asset.id === "number"
-    && typeof asset.name === "string"
-    && typeof asset.sku === "string"
-    && typeof asset.category === "string"
-    && typeof asset.office === "string"
-    && typeof asset.current_stock === "number"
-    && Number.isFinite(asset.current_stock);
-}
-
 function stockState(stock: number): { label: string; className: string; symbol: string } {
   if (stock <= 0) return { label: "Sin stock", className: "stock-empty", symbol: "!" };
   if (stock < LOW_STOCK_THRESHOLD) return { label: "Stock bajo", className: "stock-low", symbol: "!" };
@@ -33,29 +22,8 @@ function stockState(stock: number): { label: string; className: string; symbol: 
 }
 
 export default function InventoryProductsPage() {
-  const [assets, setAssets] = useState<Asset[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [retry, setRetry] = useState(0);
+  const { assets, loading, error, retryLoading } = useInventoryAssets();
   const [search, setSearch] = useState("");
-
-  useEffect(() => {
-    let active = true;
-    listAssets()
-      .then((result) => {
-        if (!Array.isArray(result) || !result.every(isAsset)) {
-          throw new Error("El servicio devolvió una lista de productos no válida.");
-        }
-        if (active) setAssets(result);
-      })
-      .catch((caught: unknown) => {
-        if (active) setError(readableInventoryError(caught));
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => { active = false; };
-  }, [retry]);
 
   const filteredAssets = useMemo(() => {
     const term = search.trim().toLocaleLowerCase("es");
@@ -101,7 +69,7 @@ export default function InventoryProductsPage() {
         </label>
 
         {loading && <div className="loading-state" role="status"><span className="spinner" /> Cargando productos…</div>}
-        {!loading && error && <div className="empty-state inventory-error" role="alert"><span className="state-icon">!</span><h3>No se pudieron cargar los productos</h3><p>{error}</p><button className="btn btn-dark" type="button" onClick={() => { setError(""); setLoading(true); setRetry((value) => value + 1); }}>Reintentar</button></div>}
+        {!loading && error && <div className="empty-state inventory-error" role="alert"><span className="state-icon">!</span><h3>No se pudieron cargar los productos</h3><p>{error}</p><button className="btn btn-dark" type="button" onClick={retryLoading}>Reintentar</button></div>}
         {!loading && !error && assets.length === 0 && <div className="empty-state"><span className="state-icon">—</span><h3>Aún no hay productos</h3><p>Los activos aparecerán aquí cuando se registren.</p></div>}
         {!loading && !error && assets.length > 0 && filteredAssets.length === 0 && <div className="empty-state"><h3>No hay coincidencias</h3><p>Prueba otra búsqueda.</p></div>}
         {!loading && !error && filteredAssets.length > 0 && (

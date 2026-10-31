@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SiteHeader } from "../components/SiteHeader";
 
 const schemaOrg = {
   "@context": "https://schema.org",
@@ -44,17 +45,7 @@ export default function HomePage() {
         Saltar al contenido principal
       </a>
 
-      <header className="header" id="inicio">
-        <div className="container header-inner">
-          <p className="brand">Nexova</p>
-          <nav aria-label="Navegacion principal" className="nav-main">
-            <a href="#inicio">Inicio</a>
-            <a href="#servicios">Servicios</a>
-            <a href="#talento">Talento</a>
-            <a href="#contacto">Contacto</a>
-          </nav>
-        </div>
-      </header>
+      <SiteHeader navigationLabel="Navegacion principal" showHomeLink />
 
       <main className="container" id="contenido">
         <section className="hero">
