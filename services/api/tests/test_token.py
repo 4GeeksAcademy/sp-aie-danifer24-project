@@ -14,7 +14,8 @@ def test_token_endpoint_returns_authenticated_user_and_profile(api, register, lo
 
     assert response.status_code == 200
     assert response.json()["email"] == "user@example.test"
-    assert response.json()["profile"]["user_id"] == 1
+    assert set(response.json()["profile"]) == {"name", "phone", "address"}
+    assert "user_id" not in response.json()["profile"]
 
 
 def test_token_endpoint_returns_not_found_for_missing_profile(api, register, login):

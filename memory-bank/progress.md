@@ -163,3 +163,12 @@ En terminos de impacto, el proyecto ya reduce friccion en la operacion de selecc
 - Aniadido `/inventory/orders` como historial de solo lectura con producto, cantidad, tipo, fecha y `user_uuid`; distingue visualmente entradas y salidas y enlaza desde la pagina de productos. Queda cubierto por el `SessionGuard` global.
 - La navegación ya no duplica «Registrar incidencia»; esa acción permanece en la página de incidencias. El proxy de inventario no reenvia AbortSignal para evitar cancelar la petición upstream en Next.
 - Validacion: `npm run lint`, `npx tsc --noEmit` y `npm run build` correctos para los flujos de ordenes; al aniadir historial, typecheck y ESLint enfocado pasan, la ruta responde HTTP 200 y la API de ordenes sin autenticacion responde 401. Backoffice no dispone de pruebas automatizadas.
+
+## Auditoría e implementación de serialización FastAPI (2026-10-31)
+
+- `docs/serialization-audit.md` inventaría 35 rutas (22 serializadas, 1 parcialmente serializada y 12 sin serializar en la clasificación inicial) y distingue esos hallazgos históricos del resultado de fase 2.
+- Añadidos esquemas de respuesta para mensajes de autenticación, registro genérico, perfil, resumen/análisis de incidencias y movimientos de inventario. Los endpoints de 204 y descarga declaran `response_model=None`; las rutas HTML/OpenAPI generadas se documentan como auxiliares automáticas.
+- Las respuestas de registro y recuperación/cambio de contraseña no exponen email ni secretos. `/auth/me` conserva el email del usuario autenticado y limita perfil a nombre, teléfono y dirección.
+- Las respuestas de inventario separan los modelos de entrada y salida. El historial usa proyecciones planas con nombre/SKU del activo, proveedor o destinatario/tipo de movimiento; omite claves foráneas e identificador interno del usuario. Backoffice se alineó con ese contrato.
+- Verificación: backend `57 passed`, 7 subtests y 1 warning no bloqueante de deprecación Starlette; Backoffice `npm run lint`, `npm run typecheck` y `npm test` correctos (3 suites, 18 pruebas); `git diff --check` correcto y recuento de auditoría comprobado.
+- Pendiente: crear commits separados para implementación (backend, tests y consumidor Backoffice) y documentación (auditoría y este progreso), previa confirmación explícita de los mensajes.

@@ -2,7 +2,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 from passlib.hash import bcrypt
 
 from services.api.dependencies import PasswordTables, UserTables
-from services.api.models import AuthMeResponse, ChangePasswordRequest, ForgotPasswordRequest, LoginRequest, ResetPasswordRequest, TokenResponse
+from services.api.models import AuthMeResponse, ChangePasswordRequest, ForgotPasswordRequest, LoginRequest, MessageResponse, ResetPasswordRequest, TokenResponse
 from services.api.security import CurrentUser, create_access_token
 from services.api.services.profiles import get_profile_by_user_id
 from services.api.services.users import get_user_by_email
@@ -13,7 +13,7 @@ from services.api.services.passwords import InvalidResetTokenError, change_passw
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/forgot-password")
+@router.post("/forgot-password", response_model=MessageResponse)
 def forgot_password(request: ForgotPasswordRequest, tables: PasswordTables, background_tasks: BackgroundTasks):
 	user = get_user_by_email(tables[0], request.email)
 	if user is not None and user.is_active:
@@ -22,7 +22,7 @@ def forgot_password(request: ForgotPasswordRequest, tables: PasswordTables, back
 	return {"message": "Si esa dirección está registrada, recibirás un enlace en breve."}
 
 
-@router.post("/reset-password")
+@router.post("/reset-password", response_model=MessageResponse)
 def replace_forgotten_password(request: ResetPasswordRequest, tables: PasswordTables):
 	try:
 		reset_password(tables[0], tables[1], request.token, request.new_password)
@@ -31,7 +31,7 @@ def replace_forgotten_password(request: ResetPasswordRequest, tables: PasswordTa
 	return {"message": "Contraseña restablecida correctamente."}
 
 
-@router.post("/change-password")
+@router.post("/change-password", response_model=MessageResponse)
 def replace_current_password(request: ChangePasswordRequest, tables: PasswordTables, current_user: CurrentUser):
 	if not password_matches(request.current_password, current_user.hashed_password):
 		raise HTTPException(status_code=400, detail="La contraseña actual no es correcta.")
@@ -65,5 +65,9 @@ def retrieve_authenticated_user(tables: UserTables, current_user: CurrentUser):
 	return AuthMeResponse(
 		email=current_user.email,
 		role=current_user.role,
-		profile=profile,
+		profile={
+			"name": profile.name,
+			"phone": profile.phone,
+			"address": profile.address,
+		},
 	)

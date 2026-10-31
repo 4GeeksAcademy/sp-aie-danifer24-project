@@ -18,6 +18,7 @@ from services.api.incidents import (
     results_csv_bytes,
     summary_for_api,
 )
+from services.api.models import CsvAnalysisResponse
 from services.api.routes.suppliers import router as suppliers_router
 from services.api.routes.auth import router as auth_router
 from services.api.routes.incidents import router as incidents_router
@@ -119,7 +120,7 @@ async def http_exception_handler(request: Request, error: StarletteHTTPException
     )
 
 
-@app.post("/api/incidents/analyze")
+@app.post("/api/incidents/analyze", response_model=CsvAnalysisResponse)
 async def analyze_incidents(
     current_user: CurrentUser,
     file: UploadFile = File(...),
@@ -150,7 +151,7 @@ async def analyze_incidents(
     return summary
 
 
-@app.get("/api/incidents/results/report")
+@app.get("/api/incidents/results/report", response_model=None)
 async def download_latest_report(current_user: CurrentUser):
     if latest_report_csv is None:
         raise HTTPException(

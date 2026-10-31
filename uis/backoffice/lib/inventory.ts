@@ -19,10 +19,12 @@ export type AssetEntryInput = {
   office: InventoryOffice;
 };
 
-export type AssetEntry = AssetEntryInput & {
+export type AssetEntry = {
   id: number;
+  quantity: number;
+  supplier: string;
+  office: InventoryOffice;
   created_at: string;
-  user_uuid: string;
 };
 
 export type AssetExitInput = {
@@ -33,15 +35,18 @@ export type AssetExitInput = {
   office: InventoryOffice;
 };
 
-export type AssetExit = AssetExitInput & {
+export type AssetExit = {
   id: number;
+  quantity: number;
+  exit_type: "allocation" | "consumption";
+  assigned_to: string | null;
+  office: InventoryOffice;
   created_at: string;
-  user_uuid: string;
 };
 
 export type InventoryOrder =
-  | (AssetEntry & { order_type: "inbound"; asset: Asset })
-  | (AssetExit & { order_type: "outbound"; asset: Asset });
+  | { id: number; quantity: number; created_at: string; order_type: "inbound"; supplier: string; asset_name: string; asset_sku: string }
+  | { id: number; quantity: number; created_at: string; order_type: "outbound"; exit_type: "allocation" | "consumption"; assigned_to: string | null; asset_name: string; asset_sku: string };
 
 export class InventoryApiError extends Error {
   constructor(message: string, readonly status?: number) {

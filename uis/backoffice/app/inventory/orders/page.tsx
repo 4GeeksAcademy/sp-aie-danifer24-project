@@ -11,15 +11,17 @@ import {
 function isInventoryOrder(value: unknown): value is InventoryOrder {
   if (!value || typeof value !== "object") return false;
   const order = value as Partial<InventoryOrder>;
+  const record = value as Record<string, unknown>;
   return typeof order.id === "number"
     && (order.order_type === "inbound" || order.order_type === "outbound")
     && typeof order.quantity === "number"
     && typeof order.created_at === "string"
-    && typeof order.user_uuid === "string"
-    && typeof order.asset === "object"
-    && order.asset !== null
-    && typeof order.asset.name === "string"
-    && typeof order.asset.sku === "string";
+    && typeof order.asset_name === "string"
+    && typeof order.asset_sku === "string"
+    && (order.order_type === "inbound"
+      ? typeof record.supplier === "string"
+      : (record.exit_type === "allocation" || record.exit_type === "consumption")
+        && (typeof record.assigned_to === "string" || record.assigned_to === null));
 }
 
 function formatOrderDate(value: string): string {
@@ -83,15 +85,15 @@ export default function InventoryOrdersPage() {
         {!loading && !error && orders.length === 0 && <div className="empty-state"><span className="state-icon">—</span><h3>Aún no hay órdenes</h3><p>Las entradas y salidas registradas aparecerán aquí.</p></div>}
         {!loading && !error && orders.length > 0 && <div className="inventory-table-wrap">
           <table className="inventory-table inventory-history-table">
-            <thead><tr><th scope="col">Producto</th><th scope="col">Cantidad</th><th scope="col">Tipo de orden</th><th scope="col">Fecha de creación</th><th scope="col">Usuario</th></tr></thead>
+            <thead><tr><th scope="col">Producto</th><th scope="col">Cantidad</th><th scope="col">Tipo de orden</th><th scope="col">Fecha de creación</th><th scope="col">Proveedor / destino</th></tr></thead>
             <tbody>{orders.map((order) => {
               const inbound = order.order_type === "inbound";
               return <tr key={`${order.order_type}-${order.id}`}>
-                <th scope="row"><span className="inventory-product-name">{order.asset.name}</span><span className="inventory-sku">{order.asset.sku}</span></th>
+                <th scope="row"><span className="inventory-product-name">{order.asset_name}</span><span className="inventory-sku">{order.asset_sku}</span></th>
                 <td>{order.quantity}</td>
                 <td><span className={`order-type-badge ${inbound ? "order-type-inbound" : "order-type-outbound"}`}><span aria-hidden="true">{inbound ? "+" : "−"}</span>{inbound ? "Entrada" : "Salida"}</span></td>
                 <td><time dateTime={order.created_at}>{formatOrderDate(order.created_at)}</time></td>
-                <td><code className="order-user-id">{order.user_uuid}</code></td>
+                <td>{inbound ? order.supplier : order.assigned_to ?? "Consumo"}</td>
               </tr>;
             })}</tbody>
           </table>

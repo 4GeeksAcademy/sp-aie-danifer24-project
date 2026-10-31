@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Path, Response, status
 
 from services.api.dependencies import UserTables
-from services.api.models import User, UserCreate, UserResponse, UserRole, UserUpdate
+from services.api.models import RegistrationResponse, User, UserCreate, UserResponse, UserRole, UserUpdate
 from services.api.security import CurrentUser
 from services.api.services.users import (
 	UserAlreadyExistsError,
@@ -24,10 +24,11 @@ def _require_owner_or_admin(current_user: User, target_id: int) -> None:
 		raise HTTPException(status_code=403, detail="Permisos insuficientes")
 
 
-@router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=RegistrationResponse, status_code=status.HTTP_201_CREATED)
 def register_user(request: UserCreate, tables: UserTables):
 	try:
-		return create_user(tables[0], tables[1], request)
+		create_user(tables[0], tables[1], request)
+		return RegistrationResponse()
 	except UserAlreadyExistsError as error:
 		raise HTTPException(status_code=409, detail="El email ya está registrado") from error
 
@@ -67,7 +68,7 @@ def replace_user(
 	return user
 
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{user_id}", response_model=None, status_code=status.HTTP_204_NO_CONTENT)
 def remove_user(
 	user_id: UserId,
 	tables: UserTables,

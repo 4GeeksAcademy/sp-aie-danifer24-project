@@ -94,7 +94,7 @@ def update_supplier_status(id: SupplierId, request: SupplierStatusUpdate, table:
 	return get_supplier(table, id)
 
 
-@router.delete("/{id}", status_code=204)
+@router.delete("/{id}", response_model=None, status_code=204)
 def delete_supplier(id: SupplierId, table: SuppliersTable):
 	get_supplier(table, id)
 	table.remove(doc_ids=[id])
