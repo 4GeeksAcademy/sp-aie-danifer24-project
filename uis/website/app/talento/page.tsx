@@ -1,18 +1,10 @@
-import Link from "next/link";
 import { TalentForm } from "@/components/TalentForm";
+import { SiteHeader } from "../../components/SiteHeader";
 
 export default function TalentPage() {
   return (
     <>
-      <header className="header">
-        <div className="container header-inner">
-          <p className="brand">Nexova</p>
-          <nav aria-label="Navegacion secundaria" className="nav-main">
-            <Link href="/">Inicio</Link>
-            <a href="#formulario">Formulario</a>
-          </nav>
-        </div>
-      </header>
+      <SiteHeader navigationLabel="Navegacion secundaria" />
 
       <main className="container page-content" id="formulario">
         <section className="section">
