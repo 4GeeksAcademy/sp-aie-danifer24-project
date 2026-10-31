@@ -100,13 +100,28 @@ def create_exit(request: AssetExitCreate, current_user: CurrentUser, session: Da
 
 @router.get("/orders", response_model=list[AssetEntryOrderResponse | AssetExitOrderResponse])
 def list_orders(current_user: CurrentUser, session: DatabaseSession):
-	assets = {asset.id: asset for asset in list_products(session)}
+	assets = {asset.id: asset for asset in session.exec(select(Asset)).all()}
 	orders = [
-		AssetEntryOrderResponse(**entry.model_dump(), asset=assets[entry.asset_id])
+		AssetEntryOrderResponse(
+			id=entry.id,
+			quantity=entry.quantity,
+			created_at=entry.created_at,
+			supplier=entry.supplier,
+			asset_name=assets[entry.asset_id].name,
+			asset_sku=assets[entry.asset_id].sku,
+		)
 		for entry in session.exec(select(AssetEntry)).all()
 	]
 	orders.extend(
-		AssetExitOrderResponse(**exit_order.model_dump(), asset=assets[exit_order.asset_id])
+		AssetExitOrderResponse(
+			id=exit_order.id,
+			quantity=exit_order.quantity,
+			created_at=exit_order.created_at,
+			exit_type=exit_order.exit_type,
+			assigned_to=exit_order.assigned_to,
+			asset_name=assets[exit_order.asset_id].name,
+			asset_sku=assets[exit_order.asset_id].sku,
+		)
 		for exit_order in session.exec(select(AssetExit)).all()
 	)
 	return sorted(orders, key=lambda order: (order.created_at, order.order_type, order.id))

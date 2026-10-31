@@ -16,6 +16,7 @@ from services.api.models import (
     IncidentCreate,
     IncidentOrigin,
     IncidentResponse,
+    IncidentSummaryResponse,
     IncidentStatus,
     IncidentStatusUpdate,
 )
@@ -119,7 +120,7 @@ def list_incidents(
     return [incident_response(document, document.doc_id) for document in table.search(filters)]
 
 
-@router.get("/summary")
+@router.get("/summary", response_model=IncidentSummaryResponse)
 def incidents_summary(table: IncidentsTable):
     documents = table.all()
 

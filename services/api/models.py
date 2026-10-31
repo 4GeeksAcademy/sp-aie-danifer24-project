@@ -166,6 +166,37 @@ class IncidentResponse(Incident):
 	"""Representación pública de una incidencia guardada."""
 
 
+class IncidentSummaryResponse(BaseModel):
+	total: int = Field(ge=0)
+	by_status: dict[str, int]
+	by_category: dict[str, int]
+	by_origin: dict[str, int]
+	by_branch: dict[str, int]
+
+
+class CsvMetricResponse(BaseModel):
+	count: int = Field(ge=0)
+	percentage: float = Field(ge=0, le=100)
+
+
+class CsvSatisfactionResponse(BaseModel):
+	scored_tickets: int = Field(ge=0)
+	closed_tickets: int = Field(ge=0)
+	average: float = Field(ge=0, le=5)
+	scores: dict[str, int]
+
+
+class CsvAnalysisResponse(BaseModel):
+	source_filename: str
+	total_records: int = Field(ge=0)
+	valid_records: int = Field(ge=0)
+	invalid_records: int = Field(ge=0)
+	invalid_breakdown: dict[str, int]
+	categories: dict[str, CsvMetricResponse]
+	statuses: dict[str, CsvMetricResponse]
+	satisfaction: CsvSatisfactionResponse
+
+
 class IncidentStatusUpdate(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
@@ -258,6 +289,14 @@ class Profile(BaseModel):
 	address: str | None = None
 
 
+class ProfileResponse(BaseModel):
+	"""Proyección de perfil con solo los campos consumidos por la cuenta."""
+
+	name: str | None = None
+	phone: str | None = None
+	address: str | None = None
+
+
 class ProfileUpdate(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
@@ -340,6 +379,14 @@ class UserResponse(BaseModel):
 	created_at: datetime
 
 
+class RegistrationResponse(BaseModel):
+	message: str = "Cuenta creada correctamente."
+
+
+class MessageResponse(BaseModel):
+	message: str
+
+
 class TokenResponse(BaseModel):
 	access_token: str
 	token_type: str = "bearer"
@@ -363,7 +410,7 @@ class LoginRequest(BaseModel):
 class AuthMeResponse(BaseModel):
 	email: str
 	role: UserRole
-	profile: Profile
+	profile: ProfileResponse
 
 
 class ForgotPasswordRequest(BaseModel):

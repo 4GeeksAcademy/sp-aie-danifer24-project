@@ -1,8 +1,6 @@
 import { clearStoredAccessToken, getStoredAccessToken } from "@/lib/auth";
 
 export interface Profile {
-  id: number;
-  user_id: number;
   name: string | null;
   phone: string | null;
   address: string | null;

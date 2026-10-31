@@ -7,7 +7,10 @@ def test_register_creates_user_with_normalized_email_and_profile(api, register):
     )
 
     assert response.status_code == 201
-    assert response.json()["email"] == "person@example.test"
+    assert response.json() == {"message": "Cuenta creada correctamente."}
+    assert "person@example.test" not in response.text
+    assert "password" not in response.text.lower()
+    assert "hashed_password" not in response.text
     assert tables[0].all()[0]["email"] == "person@example.test"
     assert tables[1].all()[0]["name"] == "Person"
 

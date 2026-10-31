@@ -36,12 +36,14 @@ class AssetEntryCreate(BaseModel):
 	office: Office
 
 
-class AssetEntryResponse(AssetEntryCreate):
+class AssetEntryResponse(BaseModel):
 	model_config = ConfigDict(from_attributes=True)
 
 	id: int = Field(gt=0)
+	quantity: int = Field(gt=0)
+	supplier: NonEmptyString
+	office: Office
 	created_at: datetime
-	user_uuid: NonEmptyString
 
 
 class AssetExitCreate(BaseModel):
@@ -62,19 +64,33 @@ class AssetExitCreate(BaseModel):
 		return self
 
 
-class AssetExitResponse(AssetExitCreate):
+class AssetExitResponse(BaseModel):
 	model_config = ConfigDict(from_attributes=True)
 
 	id: int = Field(gt=0)
+	quantity: int = Field(gt=0)
+	exit_type: Literal["allocation", "consumption"]
+	assigned_to: NonEmptyString | None = None
+	office: Office
 	created_at: datetime
-	user_uuid: NonEmptyString
 
 
-class AssetEntryOrderResponse(AssetEntryResponse):
+class AssetEntryOrderResponse(BaseModel):
+	id: int = Field(gt=0)
+	quantity: int = Field(gt=0)
+	created_at: datetime
+	supplier: NonEmptyString
 	order_type: Literal["inbound"] = "inbound"
-	asset: AssetResponse
+	asset_name: NonEmptyString
+	asset_sku: NonEmptyString
 
 
-class AssetExitOrderResponse(AssetExitResponse):
+class AssetExitOrderResponse(BaseModel):
+	id: int = Field(gt=0)
+	quantity: int = Field(gt=0)
+	created_at: datetime
+	exit_type: Literal["allocation", "consumption"]
+	assigned_to: NonEmptyString | None = None
 	order_type: Literal["outbound"] = "outbound"
-	asset: AssetResponse
+	asset_name: NonEmptyString
+	asset_sku: NonEmptyString

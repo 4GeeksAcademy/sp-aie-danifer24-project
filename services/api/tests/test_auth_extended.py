@@ -60,7 +60,8 @@ def test_login_returns_bearer_jwt_and_auth_me_profile(api):
     assert me.status_code == 200
     assert me.json()["email"] == "person@example.test"
     assert me.json()["role"] == "user"
-    assert me.json()["profile"]["user_id"] == 1
+    assert set(me.json()["profile"]) == {"name", "phone", "address"}
+    assert "user_id" not in me.json()["profile"]
 
 
 def test_login_rejects_unknown_wrong_password_and_inactive_user_identically(api):
