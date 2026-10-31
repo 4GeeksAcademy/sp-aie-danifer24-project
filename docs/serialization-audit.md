@@ -1,9 +1,18 @@
 # Auditoría de serialización del backend
 
 **Fecha:** 2026-10-31
-**Alcance:** endpoints HTTP de la aplicación FastAPI definidos en `services/api/main.py` y en sus routers incluidos. Revisión estática de las rutas, modelos de respuesta y valores retornados; no se modificó la implementación.
 
-## Criterios
+**Alcance:** endpoints HTTP de la aplicación FastAPI definidos en `services/api/main.py` y en sus routers incluidos. Esta auditoría registra la clasificación inicial (fase 1) y las decisiones de implementación posteriores (fase 2).
+
+### Leyenda de estado
+
+- ✅ **Ya serializado:** `response_model` explícito y adecuado.
+- ⚠️ **Parcialmente serializado:** esquema explícito que necesitaba una proyección más segura o alineada con el cliente.
+- ❌ **Sin serializar:** faltaba esquema de salida explícito. Para respuestas 204, descargas y páginas auxiliares, `response_model=None` declara intencionalmente que no hay cuerpo JSON de modelo.
+
+Las marcas de las tablas reflejan el hallazgo de la fase 1; las observaciones registran el resultado y las decisiones de la fase 2.
+
+## Criterios de clasificación inicial (fase 1)
 
 - **Ya serializado:** declara `response_model` explícito y ese esquema limita la respuesta a los campos apropiados para el endpoint.
 - **Parcialmente serializado:** declara `response_model`, pero el esquema o la proyección necesita revisión por campos innecesarios, omisiones o desajuste con el cliente.
@@ -15,57 +24,57 @@ Las respuestas intencionales sin cuerpo (`204`) y las descargas de archivos se s
 
 | Ruta | Método | Propósito | Respuesta actual | Estado | Observaciones |
 |---|---|---|---|---|---|
-| `/auth/forgot-password` | POST | Solicitar enlace de recuperación | Sin `response_model`; devuelve un `dict` con un mensaje genérico. | **Sin serializar** | No revela si el correo existe y no devuelve el email ni el token. El mensaje es apropiado; conviene tipar la respuesta genérica. |
-| `/auth/reset-password` | POST | Restablecer contraseña con token | Sin `response_model`; devuelve un `dict` con un mensaje. | **Sin serializar** | No devuelve contraseña, hash, email ni token. Puede añadirse un esquema de respuesta para formalizar el contrato. |
-| `/auth/change-password` | POST | Cambiar contraseña de la sesión autenticada | Sin `response_model`; devuelve un `dict` con un mensaje. | **Sin serializar** | No devuelve credenciales ni datos de usuario. La respuesta podría tiparse. |
-| `/auth/login` | POST | Validar credenciales y emitir sesión | `TokenResponse`; devuelve `access_token` y `token_type`. | **Ya serializado** | No incluye email ni objeto de usuario; no expone contraseña ni hash. |
-| `/auth/me` | GET | Consultar identidad, rol y perfil propios | `AuthMeResponse`; devuelve email, rol y `Profile`. | **Ya serializado** | Proyección explícita: no contiene `hashed_password`. El email es pertinente como identidad de la sesión. |
+| `/auth/forgot-password` | POST | Solicitar enlace de recuperación | Fase 1: sin `response_model`; devolvía un `dict` con mensaje genérico. | ❌ **Sin serializar** | Fase 2: `MessageResponse`. Mensaje uniforme; no devuelve email, contraseña ni token. |
+| `/auth/reset-password` | POST | Restablecer contraseña con token | Fase 1: sin `response_model`; devolvía un `dict` con mensaje. | ❌ **Sin serializar** | Fase 2: `MessageResponse`. No devuelve email ni secretos. |
+| `/auth/change-password` | POST | Cambiar contraseña de la sesión autenticada | Fase 1: sin `response_model`; devolvía un `dict` con mensaje. | ❌ **Sin serializar** | Fase 2: `MessageResponse`; no retorna datos de cuenta o credenciales. |
+| `/auth/login` | POST | Validar credenciales y emitir sesión | `TokenResponse`; devuelve `access_token` y `token_type`. | ✅ **Ya serializado** | Respuesta intencionalmente limitada al token de sesión y su tipo; no incluye email ni contraseñas. |
+| `/auth/me` | GET | Consultar identidad, rol y perfil propios | `AuthMeResponse`; devuelve email, rol y proyección del perfil. | ✅ **Ya serializado** | El email propio es necesario para la vista de cuenta. El perfil anidado contiene solo nombre, teléfono y dirección; excluye ID de usuario. |
 
 ## Usuarios y perfiles
 
 | Ruta | Método | Propósito | Respuesta actual | Estado | Observaciones |
 |---|---|---|---|---|---|
-| `/users` | POST | Registrar usuario y perfil | `UserResponse`; devuelve id, email, estado, rol y fecha de creación. | **Parcialmente serializado** | Excluye `hashed_password` y no devuelve la contraseña de entrada. Revisar si es necesario devolver el email inmediatamente después del registro: el cliente ya lo envió y la guía de auditoría recomienda justificar su eco en respuestas de autenticación/registro. |
-| `/users` | GET | Listar usuarios | `list[UserResponse]`. | **Ya serializado** | Proyección sin hash. El email y los metadatos de cuenta forman parte del esquema de usuario; los controles de autorización para listar son una revisión separada de esta auditoría. |
-| `/users/{user_id}` | GET | Consultar usuario por ID | `UserResponse`. | **Ya serializado** | Excluye `hashed_password`; serializa únicamente campos públicos del usuario. |
-| `/users/{user_id}` | PUT | Actualizar email, contraseña, rol o estado | `UserResponse`. | **Ya serializado** | Incluso si se actualiza la contraseña, la respuesta proyectada no devuelve `password` ni `hashed_password`. |
-| `/users/{user_id}` | DELETE | Eliminar usuario y perfil asociado | Sin `response_model`; responde `204 No Content` sin cuerpo. | **Sin serializar** *(excepción intencional)* | No hay representación JSON que serializar. El `204` sin cuerpo es apropiado; no requiere incorporar un esquema solo para este endpoint. |
-| `/profiles/me` | GET | Consultar perfil propio | `Profile`. | **Ya serializado** | Campos limitados al perfil: id, user_id, nombre, teléfono y dirección; no incluye credenciales. |
-| `/profiles/me` | PUT | Actualizar perfil propio | `Profile`. | **Ya serializado** | Devuelve la proyección tipada del perfil actualizado, sin credenciales. |
+| `/users` | POST | Registrar usuario y perfil | Inicialmente `UserResponse`; devolvía id, email, estado, rol y fecha de creación. | ⚠️ **Parcialmente serializado** | Fase 2: `RegistrationResponse` devuelve solo mensaje genérico; no devuelve email, contraseña ni hash. El request de registro sigue separado (`UserCreate`). |
+| `/users` | GET | Listar usuarios | `list[UserResponse]`. | ✅ **Ya serializado** | Fase 2 mantiene la proyección sin hash. El email y metadatos de cuenta forman parte del esquema; autorización de listado queda fuera del alcance de serialización. |
+| `/users/{user_id}` | GET | Consultar usuario por ID | `UserResponse`. | ✅ **Ya serializado** | Fase 2 mantiene el esquema que excluye `hashed_password` y serializa únicamente campos públicos del usuario. |
+| `/users/{user_id}` | PUT | Actualizar email, contraseña, rol o estado | `UserResponse`. | ✅ **Ya serializado** | Fase 2 mantiene la respuesta proyectada; incluso al cambiar contraseña no devuelve `password` ni `hashed_password`. |
+| `/users/{user_id}` | DELETE | Eliminar usuario y perfil asociado | Sin modelo de respuesta; `204 No Content` sin cuerpo. | ❌ **Sin serializar** *(excepción intencional)* | Fase 2: decorador declara `response_model=None`; el `204` no tiene representación JSON. |
+| `/profiles/me` | GET | Consultar perfil propio | Inicialmente `Profile`. | ✅ **Ya serializado** | Fase 2: `ProfileResponse` devuelve nombre, teléfono y dirección; omite `id` y `user_id`, que el cliente no consume. |
+| `/profiles/me` | PUT | Actualizar perfil propio | Inicialmente `Profile`. | ✅ **Ya serializado** | Entrada `ProfileUpdate` separada de `ProfileResponse`; respuesta limitada a los campos de perfil usados por el cliente. |
 
 ## Proveedores
 
 | Ruta | Método | Propósito | Respuesta actual | Estado | Observaciones |
 |---|---|---|---|---|---|
-| `/suppliers` | POST | Crear proveedor | `SupplierResponse`; devuelve proveedor, timestamp e ID generado. | **Ya serializado** | Esquema de respuesta explícito; ID y `updated_at` son campos generados por el sistema. |
-| `/suppliers` | GET | Listar proveedores, con filtros opcionales | `list[SupplierResponse]`. | **Ya serializado** | Los resultados se proyectan con el mismo esquema explícito. |
-| `/suppliers/{id}` | GET | Consultar proveedor | `SupplierResponse`. | **Ya serializado** | Respuesta tipada. |
-| `/suppliers/{id}/rate` | PATCH | Actualizar tarifa mensual | `SupplierResponse`. | **Ya serializado** | Devuelve el proveedor actualizado, no el registro TinyDB en bruto. |
-| `/suppliers/{id}/status` | PATCH | Cambiar estado del proveedor | `SupplierResponse`. | **Ya serializado** | Devuelve el proveedor actualizado, no el registro TinyDB en bruto. |
-| `/suppliers/{id}` | DELETE | Eliminar proveedor | Sin `response_model`; responde `204 No Content` sin cuerpo. | **Sin serializar** *(excepción intencional)* | No se devuelve un cuerpo JSON; el `204` es apropiado. |
+| `/suppliers` | POST | Crear proveedor | `SupplierResponse`; devuelve proveedor, timestamp e ID generado. | ✅ **Ya serializado** | Fase 2 mantiene el esquema de salida; ID y `updated_at` son campos generados por el sistema. |
+| `/suppliers` | GET | Listar proveedores, con filtros opcionales | `list[SupplierResponse]`. | ✅ **Ya serializado** | Fase 2 mantiene resultados proyectados con el esquema explícito. |
+| `/suppliers/{id}` | GET | Consultar proveedor | `SupplierResponse`. | ✅ **Ya serializado** | Fase 2 mantiene la respuesta tipada. |
+| `/suppliers/{id}/rate` | PATCH | Actualizar tarifa mensual | `SupplierResponse`. | ✅ **Ya serializado** | Fase 2 devuelve el proveedor actualizado, no el registro TinyDB en bruto. |
+| `/suppliers/{id}/status` | PATCH | Cambiar estado del proveedor | `SupplierResponse`. | ✅ **Ya serializado** | Fase 2 devuelve el proveedor actualizado, no el registro TinyDB en bruto. |
+| `/suppliers/{id}` | DELETE | Eliminar proveedor | Sin modelo de respuesta; `204 No Content` sin cuerpo. | ❌ **Sin serializar** *(excepción intencional)* | Fase 2: decorador declara `response_model=None`; no corresponde cuerpo JSON. |
 
 ## Incidencias
 
 | Ruta | Método | Propósito | Respuesta actual | Estado | Observaciones |
 |---|---|---|---|---|---|
-| `/api/incidents/analyze` | POST | Analizar CSV y generar agregados | Sin `response_model`; devuelve un `dict` producido por `summary_for_api`. | **Sin serializar** | La respuesta es agregada y no devuelve filas crudas, descripciones ni emails. Se recomienda declarar un esquema Pydantic para fijar el contrato del resumen. |
-| `/api/incidents/results/report` | GET | Descargar el último informe agregado | Sin `response_model`; devuelve `Response` con bytes CSV y `Content-Disposition`. | **Sin serializar** *(descarga intencional)* | Es una respuesta de archivo, no JSON. Mantener la respuesta binaria y documentar su media type es adecuado; no aplicar un modelo JSON. |
-| `/api/incidents` | POST | Crear incidencia | `IncidentResponse`; devuelve los campos de incidencia, ID y timestamps. | **Ya serializado** | El payload se valida y transforma a `IncidentResponse`. |
-| `/api/incidents` | GET | Listar incidencias con filtros opcionales | `list[IncidentResponse]`. | **Ya serializado** | Cada documento TinyDB se convierte a `IncidentResponse`. |
-| `/api/incidents/summary` | GET | Obtener conteo total y desgloses | Sin `response_model`; devuelve un `dict` de agregados. | **Sin serializar** | El contenido está acotado a conteos, pero falta un esquema explícito para tipar y estabilizar el contrato. |
-| `/api/incidents/{id}` | GET | Consultar una incidencia | `IncidentResponse`. | **Ya serializado** | El documento se convierte a esquema de salida con ID. |
-| `/api/incidents/{id}/status` | PATCH | Transicionar el estado de una incidencia | `IncidentResponse`. | **Ya serializado** | Devuelve la incidencia actualizada mediante el esquema explícito. |
+| `/api/incidents/analyze` | POST | Analizar CSV y generar agregados | Inicialmente sin `response_model`; dict agregado de `summary_for_api`. | ❌ **Sin serializar** | Fase 2: `CsvAnalysisResponse`; solo métricas agregadas. No retorna filas, descripciones ni emails de origen. Request sigue siendo multipart (`UploadFile`), no hay modelo de respuesta reutilizado como entrada. |
+| `/api/incidents/results/report` | GET | Descargar el último informe agregado | Fase 1: sin modelo JSON; `Response` con bytes CSV y `Content-Disposition`. | ❌ **Sin serializar** *(descarga intencional)* | Fase 2: decorador declara `response_model=None`; conserva descarga binaria, no JSON. |
+| `/api/incidents` | POST | Crear incidencia | `IncidentResponse`; devuelve los campos de incidencia, ID y timestamps. | ✅ **Ya serializado** | Fase 2 mantiene payload validado y transformado a `IncidentResponse`. |
+| `/api/incidents` | GET | Listar incidencias con filtros opcionales | `list[IncidentResponse]`. | ✅ **Ya serializado** | Fase 2 mantiene cada documento TinyDB convertido a `IncidentResponse`. |
+| `/api/incidents/summary` | GET | Obtener conteo total y desgloses | Inicialmente sin `response_model`; devolvía `dict` de agregados. | ❌ **Sin serializar** | Fase 2: `IncidentSummaryResponse`, solo total y conteos por dimensiones. |
+| `/api/incidents/{id}` | GET | Consultar una incidencia | `IncidentResponse`. | ✅ **Ya serializado** | Fase 2 mantiene conversión del documento a esquema de salida con ID. |
+| `/api/incidents/{id}/status` | PATCH | Transicionar el estado de una incidencia | `IncidentResponse`. | ✅ **Ya serializado** | Fase 2 devuelve la incidencia actualizada mediante el esquema explícito. |
 
 ## Inventario
 
 | Ruta | Método | Propósito | Respuesta actual | Estado | Observaciones |
 |---|---|---|---|---|---|
-| `/inventory/products` | GET | Listar productos con stock calculado | `list[AssetResponse]`. | **Ya serializado** | Incluye campos del activo, ID y stock actual calculado; no devuelve el ORM directamente. |
-| `/inventory/products` | POST | Crear producto | `AssetResponse`. | **Ya serializado** | Devuelve producto validado con ID y stock calculado. |
-| `/inventory/products/{id}` | GET | Consultar producto con stock | `AssetResponse`. | **Ya serializado** | Proyección explícita del activo y stock. |
-| `/inventory/orders/inbound` | POST | Registrar entrada de inventario | `AssetEntryResponse`. | **Ya serializado** | Incluye datos de la entrada y metadatos generados (`id`, `created_at`, `user_uuid`); no devuelve la entidad SQLModel sin filtrar. |
-| `/inventory/orders/outbound` | POST | Registrar salida de inventario | `AssetExitResponse`. | **Ya serializado** | Incluye datos de salida y metadatos de auditoría; modelo explícito. |
-| `/inventory/orders` | GET | Listar entradas y salidas con producto asociado | `list[AssetEntryOrderResponse \| AssetExitOrderResponse]`. | **Ya serializado** | Unión de esquemas con `order_type` literal; incluye la proyección `AssetResponse` del activo asociado. |
+| `/inventory/products` | GET | Listar productos con stock calculado | `list[AssetResponse]`. | ✅ **Ya serializado** | Fase 2 mantiene campos del activo, ID y stock calculado; no devuelve el ORM directamente. |
+| `/inventory/products` | POST | Crear producto | `AssetResponse`. | ✅ **Ya serializado** | Fase 2 devuelve producto validado con ID y stock calculado. |
+| `/inventory/products/{id}` | GET | Consultar producto con stock | `AssetResponse`. | ✅ **Ya serializado** | Fase 2 mantiene proyección explícita del activo y stock. |
+| `/inventory/orders/inbound` | POST | Registrar entrada de inventario | Inicialmente `AssetEntryResponse` heredaba el esquema de entrada e incluía `user_uuid`. | ✅ **Ya serializado** | Fase 2: `AssetEntryCreate` separado de `AssetEntryResponse`; respuesta solo con cantidad, proveedor, oficina, fecha e ID. Omite `asset_id` y UUID del usuario. |
+| `/inventory/orders/outbound` | POST | Registrar salida de inventario | Inicialmente `AssetExitResponse` heredaba el esquema de entrada e incluía `user_uuid`. | ✅ **Ya serializado** | Fase 2: `AssetExitCreate` separado de `AssetExitResponse`; respuesta contiene los campos propios del movimiento y no el UUID interno. |
+| `/inventory/orders` | GET | Listar entradas y salidas con producto asociado | Inicialmente lista tipada con objeto de activo anidado y UUID del usuario. | ✅ **Ya serializado** | Fase 2: unión de proyecciones planas con `order_type`, ID/cantidad/fecha, proveedor para entradas, tipo/destinatario para salidas y `asset_name`/`asset_sku`. Se omiten el objeto Asset completo, `asset_id` y UUID del usuario; la UI recibe solo los datos operativos que representa. |
 
 ## Documentación interactiva de FastAPI
 
@@ -73,19 +82,25 @@ FastAPI registra también estas rutas auxiliares por defecto. No son operaciones
 
 | Ruta | Método | Propósito | Respuesta actual | Estado | Observaciones |
 |---|---|---|---|---|---|
-| `/openapi.json` | GET | Obtener el documento OpenAPI generado | Sin `response_model`; devuelve el documento OpenAPI como JSON. | **Sin serializar** *(ruta auxiliar generada)* | Esquema generado por FastAPI, no una respuesta de negocio; no requiere modelo de respuesta de aplicación. |
-| `/docs` | GET | Mostrar Swagger UI | Sin `response_model`; devuelve HTML. | **Sin serializar** *(ruta auxiliar generada)* | Interfaz de documentación generada por FastAPI. |
-| `/docs/oauth2-redirect` | GET | Completar el flujo OAuth de Swagger UI | Sin `response_model`; devuelve HTML/una respuesta de redirección según el flujo. | **Sin serializar** *(ruta auxiliar generada)* | Ruta auxiliar de la interfaz de documentación. |
-| `/redoc` | GET | Mostrar ReDoc | Sin `response_model`; devuelve HTML. | **Sin serializar** *(ruta auxiliar generada)* | Interfaz de documentación generada por FastAPI. |
+| `/openapi.json` | GET | Obtener el documento OpenAPI generado | FastAPI genera el documento OpenAPI como JSON. | ❌ **Sin serializar** *(ruta auxiliar generada)* | Ruta automática, no una operación de negocio; no tiene un decorador de la aplicación al que asignar `response_model`. |
+| `/docs` | GET | Mostrar Swagger UI | Ruta auxiliar automática; devuelve HTML, sin modelo JSON de negocio. | ❌ **Sin serializar** *(ruta auxiliar generada)* | FastAPI genera esta página HTML; no necesita esquema de respuesta de negocio. |
+| `/docs/oauth2-redirect` | GET | Completar el flujo OAuth de Swagger UI | Ruta auxiliar automática; HTML/redirección según el flujo. | ❌ **Sin serializar** *(ruta auxiliar generada)* | FastAPI genera esta ruta de soporte; no representa datos de negocio. |
+| `/redoc` | GET | Mostrar ReDoc | Ruta auxiliar automática; devuelve HTML, sin modelo JSON de negocio. | ❌ **Sin serializar** *(ruta auxiliar generada)* | FastAPI genera esta página HTML; no necesita esquema de respuesta de negocio. |
 
 ## Resumen
 
-Se identificaron **35 rutas HTTP**: **22 ya serializadas**, **1 parcialmente serializada** y **12 sin serializar** según los criterios definidos. De estas últimas, **7 son rutas sin respuesta JSON de negocio** (dos `DELETE` con `204`, descarga CSV y cuatro auxiliares de documentación); las otras cinco son respuestas JSON sin `response_model` (las tres respuestas de auth y los endpoints de análisis CSV y resumen de incidencias).
+La fase 1 inventarió **35 rutas HTTP**: **22 ya serializadas**, **1 parcialmente serializada** y **12 sin serializar**. En fase 2 se añadieron modelos de salida a todas las rutas JSON de negocio que carecían de ellos y se ajustaron las proyecciones parciales. Se declaró explícitamente `response_model=None` para las dos operaciones `204` y la descarga CSV, que no tienen respuesta JSON de negocio. Las cuatro rutas de documentación son automáticas y no corresponden a operaciones de aplicación donde se declare un modelo. Los requests de escritura mantienen esquemas de entrada separados de los de respuesta.
 
 ### Prioridades sugeridas
 
-1. Añadir esquemas de salida pequeños para las tres respuestas de auth que hoy devuelven mensajes en `dict`, preservando el mensaje genérico de recuperación.
-2. Definir esquemas de respuesta para los agregados de análisis CSV y `/api/incidents/summary`.
-3. Decidir y documentar si el email en la respuesta de registro es necesario para el siguiente paso del cliente; no se observó exposición de contraseñas ni hashes en las respuestas revisadas.
+1. Verificar consumidores externos de `POST /users`: ahora reciben un mensaje genérico en lugar de una proyección de usuario; la interfaz Backoffice no usa el cuerpo de registro y hace login por separado.
+2. Confirmar en despliegue que OpenAPI documenta correctamente `response_model=None` para respuestas no JSON (archivo, 204 y páginas auxiliares).
+
+### Decisiones de relaciones
+
+- `/auth/me`: conservar el perfil como objeto anidado y limitarlo a nombre, teléfono y dirección; el email raíz corresponde al usuario autenticado y se necesita para la pantalla de cuenta. Se excluyen claves de usuario/perfil.
+- `/profiles/me`: proyección plana (nombre, teléfono, dirección); no se envían IDs que el formulario no consume.
+- `/inventory/orders`: no anidar `AssetResponse` ni devolver el `asset_id`; aplanar la relación a `asset_name` y `asset_sku`, y conservar proveedor (entrada), tipo de salida y destinatario (salida) porque son datos operativos visibles en el historial. El identificador de usuario no se devuelve porque no se muestra ni se necesita.
+- `/inventory/orders/inbound` y `/outbound`: no devolver clave foránea del activo ni UUID interno del usuario; los datos de movimiento no necesitan objetos relacionados en el acuse de escritura.
 
 La auditoría es estática. No evalúa autorización, configuración de CORS, límites de tasa, errores HTTP ni exposición por logs, salvo cuando esos aspectos ayudan a describir el contrato de respuesta. El montaje de archivos estáticos en `/` y los manejadores de excepciones no se contabilizan como endpoints de API; el montaje sirve los recursos del backoffice y no define una operación JSON individual.
