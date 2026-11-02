@@ -32,8 +32,11 @@ export default function InventoryProductsPage() {
       .some((value) => value.toLocaleLowerCase("es").includes(term)));
   }, [assets, search]);
 
-  const totalUnits = assets.reduce((total, asset) => total + asset.current_stock, 0);
-  const lowStockCount = assets.filter((asset) => asset.current_stock < LOW_STOCK_THRESHOLD).length;
+  const { totalUnits, lowStockCount } = useMemo(() => assets.reduce((summary, asset) => {
+    summary.totalUnits += asset.current_stock;
+    if (asset.current_stock < LOW_STOCK_THRESHOLD) summary.lowStockCount += 1;
+    return summary;
+  }, { totalUnits: 0, lowStockCount: 0 }), [assets]);
 
   return (
     <main className="shell inventory-shell">
