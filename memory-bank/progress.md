@@ -1,5 +1,13 @@
 # Progreso del proyecto
 
+## Medición de caching y optimización frontend (2026-11-02)
+
+- PostgreSQL 16 de prueba inicializado bajo el usuario `codespace` en el puerto 5433; FastAPI de prueba usó el puerto 8001 y `nexova_test`. Supabase no recibió escrituras.
+- Seed de rendimiento ejecutado: 1.000 activos, 3.000 entradas y 2.000 salidas. En 20 solicitudes a `GET /inventory/products`, la mediana sin datos fue 2.8 ms y, tras el seed, 992.8 ms; resultados y condiciones están en `CACHING_REPORT.md`.
+- Backoffice: los diálogos de alta de proveedor y edición de tarifa se cargan bajo demanda con `next/dynamic`; el resumen de inventario memoiza total y recuento bajo con dependencia `[assets]`.
+- Validación de Backoffice: lint, typecheck, 3 suites Jest (18 pruebas) y las rutas `/suppliers` e `/inventory/products` respondieron correctamente.
+- Pendiente: análisis completo de endpoints FastAPI e implementación de caching backend con invalidación. No se midió aún el tamaño de chunks ni LCP/INP después de lazy loading. `caching_context.md` permanece sin incluir en cambios versionados.
+
 ## Auditoría de rendimiento frontend (2026-10-30)
 
 - Realizada auditoría Lighthouse before/after de cuatro vistas desktop y mobile de Website y Backoffice, con capturas organizadas en `audit/before/` y `audit/after/`; resultados y comparación documentados en `AUDIT.md` y `REPORT.md`.
