@@ -1,6 +1,70 @@
 # Tech Context
 
-## Stack tecnologico actual
+## Mapa del monorepo (verificado en main, 2026-11-03)
+
+Este archivo es el punto de entrada tecnico para nuevas conversaciones. `AGENTS.md` exige leerlo junto con `projectbrief.md` y `progress.md`. Describe archivos versionados, no garantiza que servidores o bases locales sigan activos. Antes de actuar, comprobar rama y `git status`; no trasladar automaticamente el estado de otra rama.
+
+### Aplicaciones y responsabilidades
+
+| Carpeta | Stack | Responsabilidad | Puerto local sugerido |
+| --- | --- | --- | --- |
+| `uis/website/` | Next.js 16.2.6, React 19.2.4, TypeScript, App Router | Website publico | 3000 |
+| `uis/backoffice/` | Next.js 16.2.6, React 19.2.4, TypeScript, App Router | Operaciones: inventario, incidencias y validacion tecnica | 3001 |
+| `uis/application/` | Frontend Next.js independiente en esta rama | Proveedores, autenticacion y cuenta; no asumir que esta integrado en Backoffice | 3003 |
+| `apps/talent-pipeline-tracker/` | Next.js 16.2.6, React 19.2.4, TypeScript, App Router | Candidaturas y procesos de seleccion | 3002 |
+| `services/api/` | FastAPI, Pydantic 2, SQLModel, psycopg2, TinyDB | API comun: usuarios, auth, perfiles, proveedores, incidencias e inventario | 8000 |
+
+Los puertos anteriores son convenciones de arranque local, no servicios garantizados ni puertos fijos del codigo. Los dos frontends usados habitualmente en la sesion son Website y Backoffice; `main` tambien conserva Application y Tracker.
+
+### Backend y almacenamiento
+
+- Entrada FastAPI: `services/api/main.py`, aplicacion `services.api.main:app`. Registra routers de proveedores, auth, perfiles, usuarios, incidencias e inventario, y sirve archivos estaticos de Backoffice en `/`.
+- `services/api/database.py` carga `.env` en la raiz con `python-dotenv`, respetando variables ya exportadas. Requiere `DATABASE_URL` PostgreSQL y fuerza el driver `postgresql+psycopg2`.
+- PostgreSQL almacena activos y movimientos de inventario mediante SQLModel. El lifespan de FastAPI crea las tablas y necesita una base accesible.
+- TinyDB almacena usuarios, perfiles, proveedores, tokens de restablecimiento e incidencias. Ruta predeterminada: `data/suppliers.json`, configurable con `SUPPLIERS_DB_PATH`. Sus accesos se serializan con un lock de proceso; usar un worker.
+- Autenticacion JWT con `JWT_SECRET_KEY` y `ACCESS_TOKEN_EXPIRE_MINUTES`. Los clientes comparten el token `nexova_access_token`; no guardar claves, tokens ni URLs con credenciales en este documento.
+- `SUPPLIERS_API_URL` y `NEXT_PUBLIC_INVENTORY_API_URL` se usan para configurar destinos backend en las interfaces segun la ruta/app. Para diagnosticar un flujo, revisar el cliente y el proxy correspondientes; no asumir que todos usan la misma variable.
+
+### Codigo compartido y documentos
+
+- `packages/shared/`: parser CSV y utilidades/tipos compartidos, incluida sesion frontend.
+- `src/types/` y `src/utils/`: modelos y utilidades TypeScript de busqueda, colecciones, transformaciones y validaciones, reutilizados en validacion tecnica.
+- `services/api/routes/` y `services/api/routers/`: endpoints; `services/api/services/`: logica de negocio; `services/api/models.py` y `schemas.py`: modelos y contratos.
+- `scripts/seed_incidents.py`: importacion de incidencias; `uv run seed`: seeder de proveedores declarado en `pyproject.toml`. Los seeds escriben datos: ejecutarlos solo contra destinos de prueba autorizados.
+- `memory-bank/progress.md`: avances y pendientes. `memory-bank/projectbrief.md`: contexto de negocio. `docs/` y los informes de auditoria describen trabajos concretos; no sustituyen este mapa.
+
+### Arranque sin Docker
+
+Desde la raiz, en terminales separadas:
+
+```bash
+npm --prefix uis/website run dev -- --port 3000
+npm --prefix uis/backoffice run dev -- --port 3001
+uv run --with-requirements services/api/requirements.txt --with sqlmodel --with psycopg2-binary uvicorn services.api.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Si se necesitan las otras interfaces:
+
+```bash
+npm --prefix uis/application run dev -- --port 3003
+npm --prefix apps/talent-pipeline-tracker run dev -- --port 3002
+```
+
+Una `DATABASE_URL` exportada solo para el comando permite usar PostgreSQL local/de prueba sin sobrescribir `.env` ni Supabase. Las dependencias Python de proyecto estan en `pyproject.toml`; las de FastAPI en `services/api/requirements.txt`. Instalar dependencias npm en cada app si no existe `node_modules`.
+
+### Validacion y diferencias entre ramas
+
+- En `main`, Website, Backoffice y Tracker declaran `dev`, `build`, `start` y `lint`; no asumir que Backoffice tiene scripts `typecheck` o `test` en esta rama. Consultar el `package.json` de la app antes de ejecutar comandos.
+- Backend: `uv run --with-requirements services/api/requirements.txt --group dev pytest services/api/tests`, con PostgreSQL de prueba accesible. `git diff --check` valida formato, no comportamiento.
+- En `main` no existe `docker-compose.yml` en la raiz. `.env.docker` no se carga automaticamente por el backend; no asumir un wrapper Compose disponible.
+- La rama `feature/caching-optimisation` contiene una estructura posterior: integracion de Application en Backoffice, Docker/Compose, informe de caching y optimizaciones frontend/backend. Verificar sus archivos al cambiar de rama; no describir esos cambios como presentes en `main`.
+- No hay que releer todo el repositorio: partir de este mapa y abrir solo el modulo, instrucciones y validacion relevantes para la tarea.
+
+## Notas del Talent Pipeline Tracker
+
+Las secciones siguientes describen el tracker original, no todas las interfaces ni la API FastAPI. Sus limitaciones requieren verificacion local antes de tomarlas como estado vigente.
+
+### Stack del tracker
 
 - Framework principal: Next.js 16 (App Router) con React 19.
 - Lenguaje: TypeScript 5 en modo estricto.
@@ -39,7 +103,7 @@ El listado usa query params para status, stage, search y page. Esto permite:
 
 ### 4) Capa de API centralizada
 
-Toda operacion de red se concentra en services/api:
+En el tracker, las operaciones de red se concentran en `apps/talent-pipeline-tracker/services/api.ts` (no confundir con `services/api/`, el backend FastAPI):
 
 - construccion de URLs y query params en un solo punto;
 - funcion request generica para GET, POST, PUT, PATCH y DELETE;
