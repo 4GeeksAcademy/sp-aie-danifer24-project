@@ -147,7 +147,7 @@ La fase 2 siguiente define envelope y contratos versionados. La instrumentacion 
 
 ## Fase 2: event envelope y esquemas
 
-Contrato exportado: `docs/telemetry/event_schemas.json`, JSON Schema draft-07, version `1.0.0`. El archivo previo `event-schemas.json` estaba vacio y no se modifica; el consumidor debe usar exclusivamente el archivo con guion bajo. `oneOf` contiene los cinco obligatorios y nueve oportunidades de la fase 1 en cinco categorias: negocio/inventario, autenticacion, rendimiento, errores y navegacion. Los otros 31 eventos del catalogo quedan pendientes de contrato, no eliminados.
+Contrato exportado: `docs/telemetry/event-schemas.json`, JSON Schema draft-07, version `1.0.0`. Este es el archivo canonico tras renombrar `event_schemas.json`; no hay dos contratos distintos. `oneOf` contiene los cinco obligatorios y nueve oportunidades de la fase 1 en cinco categorias: negocio/inventario, autenticacion, rendimiento, errores y navegacion. Los otros 31 eventos del catalogo quedan pendientes de contrato, no eliminados.
 
 Se preservan los nombres exactos del contexto y del catalogo: entidades en snake_case seguidas de accion/resultado consistente (`created`, `triggered`, `rejected`, `detected`, `attempted`, `succeeded`, `failed`, `expired`, `completed`, `viewed`). No renombrar `api_request_completed` a un ejemplo nuevo como `api_latency_recorded`; un evento y su version deben tener significado estable.
 
@@ -243,7 +243,7 @@ import sys
 from pathlib import Path
 from jsonschema import Draft7Validator, FormatChecker
 
-schema = json.loads(Path('docs/telemetry/event_schemas.json').read_text())
+schema = json.loads(Path('docs/telemetry/event-schemas.json').read_text())
 Draft7Validator.check_schema(schema)
 event = json.loads(Path(sys.argv[1]).read_text())
 Draft7Validator(schema, format_checker=FormatChecker()).validate(event)
@@ -252,3 +252,80 @@ PY
 ```
 
 Los esquemas son diseno; no se implemento emisor, endpoint de captura, claves HMAC, cambios al modelo, ni almacenamiento. Antes de instrumentar los cinco obligatorios, resolver las brechas y aprobar privacidad y reglas de negocio. Las restantes oportunidades del catalogo no se envian con schemaVersion 1.0.0 hasta tener una rama oneOf explicita.
+
+## Estrategia de entrega y procesamiento
+
+Esta seccion cubre **cada uno de los 14 eventos con esquema 1.0.0**, no los 31 candidatos pendientes de contrato. Stream significa procesamiento continuo orientado a detectar una situacion operativa; batch significa procesamiento periodico para tendencias o decisiones que admiten espera. La tabla define objetivos de latencia de diseno, no SLA medidos ni tecnologia de transporte ya desplegada. Todos los eventos conservan timestamp de ocurrencia: batch no significa generar el evento al finalizar el lote.
+
+| event_type | Procesamiento y ventana propuesta | Justificacion por urgencia de la decision |
+| --- | --- | --- |
+| `inbound_order_created` | **batch**, cada 15 minutos | Elena planifica produccion y compra segun recepciones y demanda esperada, no necesita reaccionar a cada lote en segundos. Una espera de 15 minutos permite comparar cantidades por programa/oficina sin esperar al reporte semanal. El stock transaccional se actualiza inmediatamente fuera de telemetria. |
+| `outbound_order_created` | **batch**, cada 15 minutos | El ritmo de consumo orienta reposicion y planificacion de matriculas en ventanas de actividad; no requiere una alerta por cada kit entregado. Las situaciones de escasez se detectan por el evento de umbral en stream, sin depender de completar este lote. |
+| `stock_threshold_triggered` | **stream**, objetivo <=60 segundos desde commit | Un programa sin material puede bloquear la siguiente entrega. Elena debe poder acelerar reposicion o redistribucion antes de seguir acumulando entregas fallidas; esperar 15 minutos podria prolongar una interrupcion evitable. |
+| `direct_stock_edit_rejected` | **stream**, objetivo <=60 segundos desde rechazo | Repetidos intentos de saltarse trazabilidad necesitan revision operativa temprana para distinguir confusion de uso indebido. La alerta es para investigar o dar soporte, no castigar automaticamente; el rechazo de stock ocurre sincronamente en API y no depende de telemetria. |
+| `kit_cost_variance_detected` | **batch**, cada hora | Renegociar o buscar proveedor requiere comparar importes e historico y una revision humana, no una reaccion por segundo. Una hora permite avisar a Elena/Laura dentro de la jornada; no bloquea recepciones ni sustituye controles de compras. Si aparecen compras masivas automatizadas, revisar esta tolerancia. |
+| `inventory_order_validation_failed` | **batch**, cada 15 minutos | Mejorar defaults, mensajes y capacitacion requiere patrones de fallos, no intervenir por cada campo invalido. La UI devuelve feedback inmediato independientemente del lote. No sustituye al rechazo obligatorio de stock directo ni al aviso de umbral. |
+| `login_attempted` | **stream**, objetivo <=60 segundos | El volumen de intentos es denominador necesario para detectar rapido una ola de fallos o acceso anomalo que impida operar. Debe procesarse con los resultados de login en la misma ventana, no dejar el denominador retrasado en batch. |
+| `login_succeeded` | **stream**, objetivo <=60 segundos | Contrastar accesos conseguidos con intentos/fallos permite distinguir actividad normal de una interrupcion del acceso. El procesamiento rapido habilita soporte oportuno durante el inicio de jornada; los reportes de tendencia se agregan despues. |
+| `login_failed` | **stream**, objetivo <=60 segundos | Un aumento de fallos de credenciales o indisponibilidad puede impedir que un equipo comience sus tareas. Soporte necesita detectar el problema pronto y distinguirlo de un fallo aislado; no se bloquean cuentas automaticamente desde la telemetria. |
+| `session_expired` | **batch**, cada 5 minutos | Ajustar duracion de sesion o avisos previos depende de patrones de interrupcion, no de cada token vencido. La reautenticacion del usuario es inmediata en el sistema; cinco minutos permiten investigar concentraciones sin convertir cada expiracion normal en alerta. |
+| `api_request_completed` | **stream**, objetivo <=60 segundos | Latencia, volumen y 5xx pueden anticipar indisponibilidad del inventario o autenticacion. Esperar un reporte periodico impediria intervenir antes de que se acumulen tareas bloqueadas; evaluar por plantilla, status y ventana, no alertar por cada request lento. |
+| `frontend_data_load_completed` | **batch**, cada 5 minutos | Priorizar mejoras de carga por seccion requiere distribuciones y comparacion ready/empty/error. Cinco minutos son suficientes para orientar soporte e investigacion; incidentes API y excepciones no capturadas tienen canales stream para fallos urgentes. |
+| `frontend_unhandled_error` | **stream**, objetivo <=60 segundos para la primera deteccion | Una excepcion no capturada puede dejar la pantalla inutilizable sin feedback. Detectarla rapido por build y fingerprint permite revertir un despliegue o reparar el componente antes de que mas operadores se bloqueen. |
+| `backoffice_section_viewed` | **batch**, cada hora | Reorganizar navegacion y priorizar funcionalidades depende de patrones de uso, no de la visita individual. Una hora de espera no cambia la decision ni la capacidad de completar ordenes y evita vigilancia operativa por usuario en tiempo real. |
+
+Stream tambien alimentara agregados diarios y semanales; no se duplican hechos de negocio para cada reporte. Batch procesa ventanas por timestamp y oficina/programa cuando corresponda, nunca suma monedas diferentes. Las ventanas de intentos/resultados de login admitiran eventos tardios y no confundiran un intento aun sin resultado con un fallo de credenciales.
+
+### Entrega fiable, limites y modo degradado
+
+- Para eventos obligatorios ligados a commit, proponer outbox durable en la misma transaccion que la orden y conservar eventId al reenviar; para rechazos, almacenamiento durable separado sin convertir el rechazo en escritura de stock. Estas capacidades no existen todavia y deben implementarse antes de afirmar entrega garantizada. Fallar al publicar no debe reportarse al cliente como si la orden ya confirmada hubiera fallado.
+- Propuesta de reintento del transporte: backoff exponencial con jitter, de 1 segundo hasta 60 segundos, limite de 24 horas. Tras el limite, conservar el evento en cola de incidencias durable y alertar, sin borrarlo silenciosamente. Entrega al menos una vez exige deduplicar eventId y la identidad de orden/event_type; no se promete exactly-once.
+- Separar colas/prioridades de alertas stream y procesamiento batch para que un pico de visitas no retrase un umbral. Cola batch cada 15 minutos/hora segun tabla; pagina cerrada o caida de red no debe resetear timestamps ni ventanas. No se garantiza persistencia de eventos frontend si el navegador termina antes de entregar.
+- Limite propuesto de transporte frontend: hasta 50 eventos o 64 KiB por envio, lo que ocurra antes, y flush cada 10 segundos si hay pendientes. Stream se envia sin esperar ese flush. Los lotes transportan eventos individuales con el envelope actual; un contenedor de lote/ACK necesita contrato de transporte futuro, no propiedades nuevas dentro de properties.
+- Rechazar payloads fuera de allowlist o version no soportada antes de almacenar; registrar solo contador y motivo sanitizado en diagnostico, no el payload rechazado. Autenticar canal, validar requestId/sessionId y limitar abuso; UUID/HMAC no demuestran veracidad del evento.
+- Un rate limit de ingesta contra abuso no es muestreo analitico. Reportar perdidas, backlog y latencia de entrega para no interpretar ausencia de datos como ausencia de problemas. Objetivos stream se degradan durante outage: visibilizar atraso y reconciliar al recuperar.
+
+### Throttle, debounce y deduplicacion
+
+| Evento / fuente de frecuencia | Regla propuesta | Proteccion de significado |
+| --- | --- | --- |
+| Cinco eventos obligatorios | **Sin throttle, debounce ni muestreo** de hechos distintos; solo deduplicar la misma ocurrencia | No omitir una orden, un rechazo reconocido, un cruce ni una variacion para ahorrar transporte. Un producto que permanece bajo minimo no genera eventos nuevos en cada GET; rearmar al recuperar el minimo es regla de negocio, no throttle temporal. |
+| `login_attempted`, `login_succeeded`, `login_failed` | Sin debounce de intentos/resultados; deduplicar deteccion frontend/backend de la misma ocurrencia con origen autoritativo y correlacion | Si el usuario envia dos intentos distintos, contar dos; agrupar alertas por ventana, no reducir el denominador. Limites de seguridad del endpoint no se alteran desde el plan. |
+| `session_expired` | Una deteccion por sesion/episodio de expiracion, no por cada comprobacion de guard/focus/interval | Preservar detecciones de sesiones distintas. Reautenticacion inicia otra sesion; colisiones o sessionId null requieren deduplicacion de la misma peticion, no agrupar todos los anonimos. |
+| `inventory_order_validation_failed` | Emitir al validar envio o recibir invalid del navegador, no en cada tecla; para el mismo intento/field/reason/layer, deduplicar dentro de 1 segundo | Envios distintos siempre se conservan. Se cuenta validacion de tareas, no numero de pulsaciones; no debounce backend de rechazos distintos. |
+| `api_request_completed` | Una muestra por request terminado, **sin throttle ni sampling inicial**; buffering de transporte permitido | Conservar duraciones para p95 y denominadores por ruta/status. No sustituir 100 requests por un evento promedio: el schema no define histogramas ni sampling weights. Si volumen obliga a muestrear, versionar contrato y publicar sesgo/cobertura antes de hacerlo. |
+| `frontend_data_load_completed` | Un evento por carga real finalizada; deduplicar callbacks de la misma carga, no limitar cargas distintas. En futura busqueda remota, debounce de **300 ms** antes de iniciar consulta | Debounce cambia consultas disparadas, no borra errores o resultados de consultas ya hechas. No es una modificacion del buscador local actual. Abort por cambio de ruta no se etiqueta como error final sin definir resultado de cancelacion en otro contrato. |
+| `frontend_unhandled_error` | Enviar inmediatamente la primera deteccion; deduplicar el mismo fallo captado por boundary/listeners. Para repeticiones identicas por fingerprint/build/sesion, throttle de **60 s** con lider inicial | Evita tormenta que inutilice el canal. Esta politica mide sesiones/episodios afectados, **no frecuencia total de excepciones**; no afirmar conteo exacto ni añadir repeat_count no declarado. Nuevos fingerprints/builds no esperan; mantener un contador diagnostico de suprimidos con contrato futuro. |
+| `backoffice_section_viewed` | Emitir tras ruta efectiva y autorizacion; excluir prefetch, StrictMode y rerenders. Debounce de **300 ms** para transiciones intermedias que nunca mostraron seccion utilizable | Una vista ya confirmada no se descarta al navegar rapido. No coalescer A -> B -> A cuando las tres secciones se mostraron; medir visitas reales, no clicks sin contenido. |
+
+Buffering batch y backpressure no cambian eventId ni descartan silenciosamente eventos. Las restricciones elegidas son propuestas de captura futura, no codigo implementado. Los contadores internos de throttle no forman parte del schema 1.0.0 y no se enviaran como extensiones.
+
+## Riesgos y exclusiones del plan
+
+### Eventos o capturas descartados
+
+| Considerado | Decision y motivo |
+| --- | --- |
+| Evento por pulsacion/valor en formularios | Descartado: gran volumen, riesgo de PII y ninguna decision mejor que validacion al envio y pasos de flujo; no registrar keystrokes. |
+| Busqueda libre con texto completo | Descartada: puede contener nombre/email de proveedor o persona. La oportunidad inventory_search_completed del catalogo permanece pendiente de schema y solo admitiria rangos de longitud/resultados, no texto. |
+| Evento de stock por cada GET o render bajo minimo | Descartado: duplicaria alertas y confundiria lecturas con activaciones reales. El evento obligatorio usa cruce confirmado y minimo configurado. |
+| Evento generico direct_stock_edit_rejected para todo 405/422 | Descartado: sobreatribuye intencion de saltarse controles. Solo intento explicito reconocido; validaciones no clasificables van al evento generico y quedan como brecha de cobertura. |
+| Clicks, coordenadas, scroll continuo y session replay | Descartados: alto coste y riesgo de vigilancia/PII; navegacion por seccion y pasos de tarea bastan para priorizar usabilidad. |
+| Fingerprinting por IP/user-agent/dispositivo | Descartado: permite seguimiento innecesario y no habilita la decision de reposicion o mejora de flujos; usar sesion aleatoria limitada. |
+| Matricula/finalizacion inferida de entrega de kit | Descartada: entrega no acredita matricula ni finalizacion. Integrar una fuente educativa en un proyecto posterior. |
+| Reporte de productividad o ranking individual del operador | Descartado: visitas, rechazos y latencia no representan desempeno laboral; decisiones operativas se apoyan en agregados y revision humana. |
+
+Los otros 31 eventos del catalogo de fase 1 **no estan descartados**: no tienen esquema en esta entrega y no se capturaran hasta definir contrato, fuente y beneficio de prioridad. No confundir exclusion definitiva con aplazamiento por coste/alcance.
+
+### Datos excluidos y riesgos residuales
+
+- No capturar nombres, emails, telefonos, direcciones, credenciales, JWT, tokens de recuperacion, cookies de auth, datos de clientes/candidatos/consultores, assigned_to, notas, texto CSV, texto de busqueda, request/response bodies, SQL con parametros, URLs/query/referrer completos, stacks o mensajes de error sin sanitizar. No ampliar allowlists por comodidad de diagnostico.
+- Costes e identificadores estructurados de proveedor son necesarios para la metrica obligatoria de variacion, pero sensibles comercialmente: conservar moneda original, limitar acceso y mostrar reportes agregados. No excluir estos campos necesarios por privacidad y luego afirmar que la metrica de coste esta cubierta.
+- sessionId y userId HMAC siguen siendo vinculables: riesgo de reidentificacion por grupos pequenos y patron horario. Evitar reportes individuales, restringir acceso y aprobar retencion/minimo de agrupacion antes de produccion; el plan no afirma cumplimiento legal automatico por usar HMAC.
+- Brechas de categoria/programa/minimo/coste impiden emision completa de obligatorios hasta corregir el dominio. No rellenar unknown/0 ni inferir oficina del idioma para aparentar cobertura. La metadata enviada por cliente no es autoritativa.
+- Reintentos, mensajes tardios y orden distinto pueden duplicar alertas o distorsionar ventanas. Deduplicar ocurrencia, conservar timestamp y permitir reconciliacion de batch. La alerta de umbral se fundamenta en el cruce almacenado, no en comparar con otro evento de llegada posterior.
+- Caidas frontend, bloqueo de telemetria o red pueden sesgar cargas y navegacion; distinguir ausencia de captura de abandono o cero errores. La validacion de stock, autenticacion y trazabilidad transaccional no dependen del canal de telemetria.
+- Throttle de errores reduce visibilidad de repeticiones identicas: explicitar que los informes describen episodios/sesiones y no numero total de throws. En esta version no existe un contador agregado validable para recuperar esa frecuencia.
+- Volumen API, cardinalidad de IDs y outbox pendiente de implementar pueden superar coste previsto. Medir tamanos/colas y limitar retencion, no hacer sampling oculto de obligatorios ni cambiar payloads sin version. No se asume Redis, Kafka u otra tecnologia por preferencia tecnica.
+
+La estrategia es documental: quedan pendientes implementacion de entrega/ACK, colas durables, mediciones de backlog/perdidas y aprobacion operativa de ventanas. Este cambio no modifica JSON Schema, negocio ni datos de inventario.

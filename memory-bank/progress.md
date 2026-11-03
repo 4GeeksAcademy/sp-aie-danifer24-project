@@ -1,11 +1,17 @@
 # Progreso del proyecto
 
+## Estrategia de entrega de telemetria (2026-11-03)
+
+- Documentada decision stream/batch para los 14 eventos diseñados, con ventanas justificadas por urgencia operativa, reglas de throttle/debounce, deduplicacion y riesgos/exclusiones.
+- El contrato se renombro a `docs/telemetry/event-schemas.json`; plan y comando de validacion usan esa ruta canonica, sin cambios al contenido del esquema.
+- Pendiente: implementar captura, transporte, ACK y persistencia. Las ventanas y limites son propuestas de diseño, no SLA verificados.
+
 ## Plan de telemetria: fase 2 (2026-11-03)
 
-- Definido envelope obligatorio y exportado JSON Schema draft-07 version 1.0.0 en `docs/telemetry/event_schemas.json`: cinco eventos obligatorios y nueve oportunidades del catalogo en cinco categorias.
+- Definido envelope obligatorio y exportado JSON Schema draft-07 version 1.0.0 en `docs/telemetry/event-schemas.json`: cinco eventos obligatorios y nueve oportunidades del catalogo en cinco categorias.
 - Documentados tipos, propiedades requeridas/opcionales, allowlists cerradas, correlacion, pseudonimizacion y reglas semanticas fuera del esquema. El contexto se incorpora al repositorio por autorizacion del desarrollador.
 - Validacion: metaschema, 14 ejemplos aceptados, 80 casos rechazados y cobertura documental correctos; comprobacion precommit de envelope, categorias, allowlists y date-time correcta.
-- Pendiente: instrumentacion y almacenamiento, aprobacion de privacidad y resolucion de brechas de programa, categorias, umbral y costes. El archivo anterior `event-schemas.json` sigue vacio y no se usa como contrato.
+- Pendiente: instrumentacion y almacenamiento, aprobacion de privacidad y resolucion de brechas de programa, categorias, umbral y costes. `event-schemas.json` contiene el contrato vigente; no se usa un archivo vacio alternativo.
 
 ## Plan de telemetria: fase 1 (2026-11-03)
 
