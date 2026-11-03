@@ -2,7 +2,7 @@
 
 ## Fase 1: catalogo de oportunidades de datos
 
-Fecha: 2026-11-03. Alcance: inventario y flujos relacionados del Backoffice, autenticacion, rendimiento, errores y navegacion. Fuente normativa: `contexts/06-telemetry/CONTEXT.md`. Este documento propone captura futura: no afirma que los eventos ya se emitan ni implementa instrumentacion, almacenamiento, esquemas o seeds.
+Fecha: 2026-11-03. Alcance: inventario y flujos relacionados del Backoffice, autenticacion, rendimiento, errores y navegacion. Fuente normativa: `contexts/06-telemetry/CONTEXT.md`. Este documento propone captura futura: no afirma que los eventos ya se emitan ni implementa instrumentacion, almacenamiento o seeds. La fase 2 exporta contratos JSON Schema, no codigo de captura.
 
 Las hipotesis son preguntas de negocio que se contrastaran con datos, no resultados medidos. Los cinco eventos del contexto son obligatorios; las oportunidades adicionales son exploracion y se priorizaran por utilidad y coste, no por cantidad de eventos.
 
@@ -143,4 +143,112 @@ Clasificacion de **cada fila siguiente: oportunidad identificada (propuesta en e
 
 Fase 1 documentada: cinco eventos obligatorios exactos, once puntos del flujo y catalogo amplio justificado en inventario, autenticacion, rendimiento, errores, navegacion y operaciones adyacentes. Se descartan capturas sin decision: cada tecla de formulario, body completo de error, texto de busqueda y datos personales no aportan una decision proporcional a su riesgo/coste.
 
-La siguiente fase definira envelope, esquemas versionados, procedencia fiable de identificadores, allowlist y reglas de deduplicacion; resolvera con L&D/RRHH programa, clasificacion de productos, minimo y coste historico. El dataset sugerido sigue pendiente: 6-8 Product en tres categorias, tres programas, 12-15 InboundOrder y 12-15 OutboundOrder entre oficinas, dos cruces de minimo y una variacion de coste. No ejecutado ni generado en esta fase. `event-schemas.json` permanece sin completar hasta definir el contrato.
+La fase 2 siguiente define envelope y contratos versionados. La instrumentacion futura resolvera con L&D/RRHH programa, clasificacion de productos, minimo y coste historico. El dataset sugerido sigue pendiente: 6-8 Product en tres categorias, tres programas, 12-15 InboundOrder y 12-15 OutboundOrder entre oficinas, dos cruces de minimo y una variacion de coste. No ejecutado ni generado en esta fase.
+
+## Fase 2: event envelope y esquemas
+
+Contrato exportado: `docs/telemetry/event_schemas.json`, JSON Schema draft-07, version `1.0.0`. El archivo previo `event-schemas.json` estaba vacio y no se modifica; el consumidor debe usar exclusivamente el archivo con guion bajo. `oneOf` contiene los cinco obligatorios y nueve oportunidades de la fase 1 en cinco categorias: negocio/inventario, autenticacion, rendimiento, errores y navegacion. Los otros 31 eventos del catalogo quedan pendientes de contrato, no eliminados.
+
+Se preservan los nombres exactos del contexto y del catalogo: entidades en snake_case seguidas de accion/resultado consistente (`created`, `triggered`, `rejected`, `detected`, `attempted`, `succeeded`, `failed`, `expired`, `completed`, `viewed`). No renombrar `api_request_completed` a un ejemplo nuevo como `api_latency_recorded`; un evento y su version deben tener significado estable.
+
+### Envelope obligatorio
+
+| Campo | Tipo | Obligatoriedad y significado |
+| --- | --- | --- |
+| `eventId` | string UUID v4 | Obligatorio; identifica el evento y se conserva en reintentos de entrega. No generar otro UUID en cada reenvio. |
+| `timestamp` | string ISO 8601 UTC | Obligatorio; ocurrencia, por ejemplo `2026-11-03T12:00:00.123Z`, no recepcion. Fecha real validada con FormatChecker; suffix Z obligatorio. |
+| `sessionId` | string UUID v4 o null | Campo obligatorio; UUID aleatorio de sesion de telemetria, no cookie de autenticacion/JWT. Null para procesos sin sesion fiable. |
+| `userId` | string `u1_` + 64 hex o null | Campo obligatorio; HMAC-SHA256 del ID interno autenticado con namespace de entorno y clave secreta dedicada. Null sin identidad validada, en intentos/fallos login y sesion expirada. No usar email ni ID crudo. |
+| `event_type` | string | Obligatorio; debe coincidir exactamente con una rama del contrato, no basta cumplir la regex. |
+| `schemaVersion` | string constante `1.0.0` | Obligatorio; cualquier otra version se rechaza con este contrato. Publicar un contrato nuevo para cambios, sin reinterpretar historico. |
+| `requestId` | string UUID v4 | Obligatorio; correlacion de peticion HTTP o de operacion local que no genera HTTP, no ID de usuario. |
+| `properties` | object | Obligatorio; solo claves declaradas para ese evento. No se permite ninguna clave adicional en el envelope ni en properties. |
+
+UUIDs canonicos en minusculas. `sessionId` se mantiene durante la sesion de telemetria y se rota al iniciar/cerrar identidad o tras la ventana de inactividad de 30 minutos propuesta; no persiste como fingerprint de dispositivo. El backend comprueba los IDs de correlacion externos y su longitud/formato, sustituye los invalidos y devuelve el requestId efectivo al cliente. No obtiene el usuario de headers arbitrarios: lo deriva de autenticacion verificada. Los eventos locales crean requestId de operacion; no se fabrica una peticion HTTP ni se confunde este ID con sessionId.
+
+`requestId` se conserva al atravesar frontend/proxy/FastAPI y vincula, por ejemplo, creacion de orden y umbral causado por ella; cada evento tiene distinto eventId. Un nuevo intento HTTP puede tener otro requestId. La deduplicacion de negocio usa entidad de orden + ID + event_type, ademas de eventId para reenvios; no deduplicar por usuario/timestamp. Estos mecanismos son contrato de diseno, todavia no implementados.
+
+### Propiedades comunes de inventario (I)
+
+I significa exactamente estas seis claves, no una bolsa abierta de atributos. Sus tipos y descripciones reutilizables estan en `definitions` del JSON; sus claves se declaran explicitamente en cada evento:
+
+| Propiedad | Tipo | Obligatorio/opcional | Descripcion |
+| --- | --- | --- | --- |
+| `office` | enum string valencia/miami | Obligatoria en cinco eventos del contexto | Oficina operativa resuelta, sin relacion con idioma. |
+| `product_id` | integer >= 1 | Obligatoria | ID de Product; correspondencia explicita con Asset.id, sin inventar otra identidad. |
+| `product_category` | enum string | Obligatoria | training_kit/certification/onboarding_equipment aprobada por negocio, no categoria tecnica inferida. |
+| `programme_id` | string slug, 1-64 caracteres | Obligatoria | ID de catalogo de programa/area verificado, no texto libre ni nombre de persona. |
+| `quantity` | integer | Obligatoria | >=1 para ordenes y movimiento causante; >=0 como stock absoluto intentado en direct_stock_edit_rejected. |
+| `currency` | enum string EUR/USD | Obligatoria | Valencia EUR, Miami USD. El JSON rechaza correspondencias incorrectas. |
+
+`inventory_order_validation_failed` admite I como bloque opcional: o se conocen los seis campos o no se envia ninguno. quantity puede ser negativa si eso causa la validacion; si no es entero o no hay metadata fiable, omitir el bloque entero. Los obligatorios del contexto no aceptan null/sentinelas para completar I: un rechazo malformado no clasificable se registra como validacion generica y como limitacion de cobertura, no se inventan valores ni se declara instrumentacion obligatoria completa.
+
+### Allowlist explicita de cada evento
+
+En esta tabla todas las propiedades no marcadas opcionales son obligatorias. Los nombres, tipos, required, limites, enums y descripcion individual completos estan en `oneOf[*].properties.properties` del JSON; `$ref` reutiliza solo definiciones declaradas en ese mismo archivo. `x-classification`, `x-category` y `x-privacy` son anotaciones de diseno, no claves permitidas en eventos emitidos.
+
+| event_type | Grupo / categoria | Allowlist de properties y descripcion |
+| --- | --- | --- |
+| `inbound_order_created` | Obligatorio / inventario | I; `order_id` integer positivo (InboundOrder), `supplier_id` integer positivo estructurado, `unit_cost` number >=0 en moneda de oficina. Despues del commit. |
+| `outbound_order_created` | Obligatorio / inventario | I; `order_id` integer positivo (OutboundOrder). Despues del commit; no assigned_to ni receptor. |
+| `stock_threshold_triggered` | Obligatorio / inventario | I; `order_id` integer positivo del movimiento causante; `stock_before`, `stock_after` integer >=0; `minimum_stock` integer >=1 configurado. |
+| `direct_stock_edit_rejected` | Obligatorio / inventario | I; `reason_code` constante direct_stock_write_forbidden. quantity describe stock absoluto intentado, no una salida. No confundir cualquier 405/422 con este evento. |
+| `kit_cost_variance_detected` | Obligatorio / inventario | I; `order_id`, `supplier_id` integer positivos; `unit_cost` number >=0; `baseline_unit_cost` number >0; `variance_ratio`, `threshold_ratio` number >0; `direction` enum increase/decrease; `baseline_window_days` constante 90; `baseline_order_count` integer >=1. |
+| `inventory_order_validation_failed` | Oportunidad / inventario | `order_type` enum inbound/outbound; `layer` enum browser/frontend/backend; `field` enum product_id/quantity/supplier_id/assigned_to/stock/other; `reason_code` enum required/invalid_type/out_of_range/unknown_product/direct_stock_write_forbidden/other; I opcional como bloque. No valores introducidos. |
+| `login_attempted` | Oportunidad / autenticacion | `source` constante backoffice. userId null; envio del formulario, sin datos de credenciales. |
+| `login_succeeded` | Oportunidad / autenticacion | `source` constante backoffice; `duration_ms` number entre 0 y 86400000. userId pseudonimizado obligatorio. |
+| `login_failed` | Oportunidad / autenticacion | `reason_code` enum invalid_credentials/network_error/service_unavailable/invalid_response/unknown; `layer` enum frontend/backend; `duration_ms` number acotado. userId null, no distinguir cuenta inexistente/inactiva de password incorrecta. |
+| `session_expired` | Oportunidad / autenticacion | `reason_code` constante token_expired; `source` constante backend. userId null. Solo firma y expiracion comprobadas, no inferencia a partir de 401. |
+| `api_request_completed` | Oportunidad / rendimiento | `route_template` enum de plantillas API/unmatched/auxiliary; `method` enum GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS; `status_code` integer 100-599; `duration_ms` number acotado. Incluye exitos y rechazos HTTP, no payload. |
+| `frontend_data_load_completed` | Oportunidad / rendimiento | `section` enum de secciones canonicas; `outcome` enum ready/empty/error; `duration_ms` number acotado; `reason_code` opcional enum network_error/invalid_response/unauthorized/service_unavailable/unknown, permitido solo cuando outcome=error. |
+| `frontend_unhandled_error` | Oportunidad / errores | `section` enum; `source` enum error_boundary/window_error/unhandled_rejection; `error_code` enum render_error/chunk_load_error/unhandled_rejection/unknown; `fingerprint` string SHA-256 (64 hex); `app_version` string revision de build (7-40 hex). Sin mensaje/stack crudo. |
+| `backoffice_section_viewed` | Oportunidad / navegacion | `section` enum; `entry_type` enum direct/menu/internal_link/history/unknown. Vista real tras acceso autorizado, no prefetch o cada render; userId pseudonimizado obligatorio. |
+
+En esta version duraciones son milisegundos medidos con reloj monotono, no diferencias de timestamps entre hosts; ratios son fracciones (0.10 = 10%). Los importes preservan moneda y precision definida por negocio; JSON Schema comprueba tipos, pero no debe convertir cantidades monetarias con floats durante el calculo contable.
+
+### PII, sanitizacion y seguridad por evento
+
+Todos los contratos permiten sessionId aleatorio y, salvo los casos anonimos indicados, userId pseudonimizado: **pseudonimizacion no es anonimato**. El envelope puede seguir siendo dato personal vinculable y exige acceso restringido, finalidad definida, retencion aprobada y agregacion en reportes. HMAC se genera solo en backend con clave dedicada, distinta de JWT, nunca publicada al navegador. El prefijo u1 identifica politica de pseudonimo; su rotacion exige actualizar contrato y politica de enlaces historicos.
+
+- Los cinco eventos de inventario contienen metadata comercial; coste/proveedor son sensibles para negocio y direct_stock_edit_rejected puede revelar conducta laboral. Solo IDs de catalogo validos, sin nombre de proveedor, kit, candidato, cliente, consultor o notas. El schema restringe forma, pero la capa de emision debe verificar que programme_id procede del catalogo y no de un nombre escrito como slug.
+- `inventory_order_validation_failed` enumera campo y motivo, no valor. Si la entrada no permite completar I de forma segura, enviar solo la parte generica. No copiar error.detail de salida porque puede contener el nombre del activo.
+- `login_attempted`, `login_failed` y `session_expired` exigen userId null. Ninguno permite email/password/claims, IP o JWT. Login succeeded solo expone HMAC del actor verificado, nunca token emitido. La validacion de firma/expiracion es responsabilidad del backend; no confiar en claims de token invalido.
+- `api_request_completed` sustituye ruta real por plantilla declarada; desconocida pasa a unmatched y docs/estaticos a auxiliary. No query, headers, authorization, cuerpos o SQL. `frontend_data_load_completed` enumera resultado y no envia datos cargados ni mensaje libre.
+- `frontend_unhandled_error` sanitiza antes de hash: clase y ubicaciones de codigo del build, sin texto de excepcion, query, rutas locales personales ni contenido del usuario. No basta hashear una cadena con PII. Si no se puede sanear, usar codigo unknown y ubicacion generica del build. Deduplicar boundary/listeners del mismo fallo.
+- `backoffice_section_viewed` admite solo secciones conocidas; la revision de build y section se obtienen de fuentes internas, no de entradas libres. Actividad laboral se usa agregada, no para clasificar rendimiento individual.
+
+Regla comun: construir un objeto nuevo seleccionando allowlist, validar antes de emitir y **rechazar** lo inesperado; no capturar todo y limpiarlo posteriormente. Schema no demuestra ausencia de PII por si solo: UUID/HMAC/slug deben provenir de fuentes fiables. Tamano, frecuencia, retencion, consentimiento/base legal y autorizacion del canal se concretaran antes de captura productiva. No incluir stack/messages/rawPayload ni siquiera como extensiones.
+
+### Validaciones semanticas fuera de draft-07
+
+El schema valida presencia, tipos, enums, versiones, formatos y allowlists. Estas reglas adicionales son obligatorias en el emisor/ingesta de la fase de captura, porque draft-07 no compara valores numericos entre campos ni consulta bases:
+
+- Ordenes creadas solo despues de commit y con actor verificado. No confiar en un evento de exito frontend para inventario contable.
+- Umbral: comprobar `stock_before >= minimum_stock`, `stock_after < minimum_stock` y coherencia de quantity con el movimiento confirmado. No duplicar por leer stock bajo; rearmar al recuperarse el minimo.
+- Variacion: ventana 90 dias propuesta, base ponderada por quantity con entradas anteriores del mismo Product/proveedor/moneda, excluir la actual. Comprobar ratio, direction y `variance_ratio > threshold_ratio`; igualdad no dispara, sin base positiva no hay evento. Umbral de ejemplo 0.10 requiere aprobacion L&D; no imponerlo por defecto ni convertir monedas.
+- La existencia de Product, proveedor y programa y su relacion/oficina se comprueba con catalogos. No inferir programa de nombre ni mapear hardware automaticamente a una categoria formativa.
+- Si se desconoce usuario o sesion fiable, enviar null donde se permite; los contratos que exigen userId se posponen/rechazan, no se rellena pseudonimo inventado. Evento de expiracion exige causa confirmada, no cualquier rechazo de acceso.
+- UUID externo valido no prueba autorizacion ni identidad. Correlacion y deduplicacion se verifican en el canal de ingesta, separado de autenticacion y del stock.
+
+### Validacion realizada y uso del archivo
+
+Se valido el metaschema draft-07, un ejemplo aceptado por cada uno de los 14 eventos y 80 casos rechazados de allowlists, email/ID crudo, version, fecha imposible, categoria tecnica indebida y oficina/moneda. Usar `jsonschema[format]` y `FormatChecker` para comprobar semanticamente date-time; sin dependencias de formatos la validacion de calendario puede omitirse.
+
+Ejemplo de validacion de un archivo de evento, sin emitirlo:
+
+```bash
+uv run --with 'jsonschema[format]' python - evento.json <<'PY'
+import json
+import sys
+from pathlib import Path
+from jsonschema import Draft7Validator, FormatChecker
+
+schema = json.loads(Path('docs/telemetry/event_schemas.json').read_text())
+Draft7Validator.check_schema(schema)
+event = json.loads(Path(sys.argv[1]).read_text())
+Draft7Validator(schema, format_checker=FormatChecker()).validate(event)
+print('Evento valido segun contrato estructural; verificar tambien reglas de negocio.')
+PY
+```
+
+Los esquemas son diseno; no se implemento emisor, endpoint de captura, claves HMAC, cambios al modelo, ni almacenamiento. Antes de instrumentar los cinco obligatorios, resolver las brechas y aprobar privacidad y reglas de negocio. Las restantes oportunidades del catalogo no se envian con schemaVersion 1.0.0 hasta tener una rama oneOf explicita.

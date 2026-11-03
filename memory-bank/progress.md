@@ -1,5 +1,12 @@
 # Progreso del proyecto
 
+## Plan de telemetria: fase 2 (2026-11-03)
+
+- Definido envelope obligatorio y exportado JSON Schema draft-07 version 1.0.0 en `docs/telemetry/event_schemas.json`: cinco eventos obligatorios y nueve oportunidades del catalogo en cinco categorias.
+- Documentados tipos, propiedades requeridas/opcionales, allowlists cerradas, correlacion, pseudonimizacion y reglas semanticas fuera del esquema. El contexto se incorpora al repositorio por autorizacion del desarrollador.
+- Validacion: metaschema, 14 ejemplos aceptados, 80 casos rechazados y cobertura documental correctos; comprobacion precommit de envelope, categorias, allowlists y date-time correcta.
+- Pendiente: instrumentacion y almacenamiento, aprobacion de privacidad y resolucion de brechas de programa, categorias, umbral y costes. El archivo anterior `event-schemas.json` sigue vacio y no se usa como contrato.
+
 ## Plan de telemetria: fase 1 (2026-11-03)
 
 - Catalogo documentado en `docs/telemetry/telemetry-plan.md`: cinco eventos obligatorios del contexto y 40 oportunidades adicionales con punto de captura, hipotesis y decision.
