@@ -1,0 +1,279 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:nexova:telemetry:1.0.0",
+  "title": "Nexova telemetry event envelope",
+  "description": "Contrato de diseno. Validar con format checker, rechazar campos desconocidos y aplicar sanitizacion previa. No implementa captura.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["eventId", "timestamp", "sessionId", "userId", "event_type", "schemaVersion", "requestId", "properties"],
+  "properties": {
+    "eventId": {"$ref": "#/definitions/uuid", "description": "UUID v4 del evento; estable durante reintentos de entrega."},
+    "timestamp": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$", "description": "Momento de ocurrencia ISO 8601 UTC, no momento de reenvio."},
+    "sessionId": {"anyOf": [{"$ref": "#/definitions/uuid"}, {"type": "null"}], "description": "UUID v4 aleatorio de sesion de telemetria; no cookie ni JWT. Null si no hay sesion fiable."},
+    "userId": {"anyOf": [{"$ref": "#/definitions/userPseudonym"}, {"type": "null"}], "description": "Pseudonimo HMAC del actor autenticado, generado en backend. Null antes de autenticar o sin actor fiable; sigue siendo dato personal pseudonimizado."},
+    "event_type": {"type": "string", "pattern": "^[a-z]+(?:_[a-z]+)+$", "description": "Nombre entidad_accion definido en una rama oneOf; no nombres dinamicos."},
+    "schemaVersion": {"const": "1.0.0", "description": "Version exacta del contrato. Cambios requieren nuevo contrato y migracion explicita."},
+    "requestId": {"$ref": "#/definitions/uuid", "description": "Correlacion UUID v4 de peticion HTTP u operacion local; no usar token. El servidor valida o sustituye IDs externos."},
+    "properties": {"type": "object", "description": "Payload especifico validado por una unica rama oneOf. No copiar request bodies."}
+  },
+  "oneOf": [
+    {
+      "title": "inbound_order_created", "description": "InboundOrder confirmada despues del commit; recepcion de material.",
+      "x-classification": "obligatorio", "x-category": "negocio/inventario",
+      "x-privacy": "Metadatos comerciales y de inventario sin PII directa; envelope pseudonimizado y acceso restringido. No nombres de proveedor ni destinatarios.",
+      "properties": {
+        "event_type": {"const": "inbound_order_created"}, "userId": {"$ref": "#/definitions/userPseudonym"},
+        "properties": {
+          "type": "object", "additionalProperties": false,
+          "required": ["office", "product_id", "product_category", "programme_id", "quantity", "currency", "order_id", "supplier_id", "unit_cost"],
+          "properties": {
+            "office": {"$ref": "#/definitions/office"}, "product_id": {"$ref": "#/definitions/productId"},
+            "product_category": {"$ref": "#/definitions/productCategory"}, "programme_id": {"$ref": "#/definitions/programmeId"},
+            "quantity": {"$ref": "#/definitions/quantity"}, "currency": {"$ref": "#/definitions/currency"},
+            "order_id": {"$ref": "#/definitions/orderId"}, "supplier_id": {"$ref": "#/definitions/supplierId"},
+            "unit_cost": {"$ref": "#/definitions/money"}
+          },
+          "allOf": [{"$ref": "#/definitions/officeCurrency"}]
+        }
+      }
+    },
+    {
+      "title": "outbound_order_created", "description": "OutboundOrder confirmada despues del commit; entrega de material sin identidad del receptor.",
+      "x-classification": "obligatorio", "x-category": "negocio/inventario",
+      "x-privacy": "Inventario comercial sin receptor, nombre ni assigned_to. Actor pseudonimizado en envelope.",
+      "properties": {
+        "event_type": {"const": "outbound_order_created"}, "userId": {"$ref": "#/definitions/userPseudonym"},
+        "properties": {
+          "type": "object", "additionalProperties": false,
+          "required": ["office", "product_id", "product_category", "programme_id", "quantity", "currency", "order_id"],
+          "properties": {
+            "office": {"$ref": "#/definitions/office"}, "product_id": {"$ref": "#/definitions/productId"},
+            "product_category": {"$ref": "#/definitions/productCategory"}, "programme_id": {"$ref": "#/definitions/programmeId"},
+            "quantity": {"$ref": "#/definitions/quantity"}, "currency": {"$ref": "#/definitions/currency"},
+            "order_id": {"$ref": "#/definitions/orderId"}
+          },
+          "allOf": [{"$ref": "#/definitions/officeCurrency"}]
+        }
+      }
+    },
+    {
+      "title": "stock_threshold_triggered", "description": "Cruce confirmado de stock mayor o igual al minimo a stock estrictamente inferior al minimo.",
+      "x-classification": "obligatorio", "x-category": "negocio/inventario",
+      "x-privacy": "Datos operativos, sin nombres; actor pseudonimizado de la orden causante.",
+      "properties": {
+        "event_type": {"const": "stock_threshold_triggered"}, "userId": {"$ref": "#/definitions/userPseudonym"},
+        "properties": {
+          "type": "object", "additionalProperties": false,
+          "required": ["office", "product_id", "product_category", "programme_id", "quantity", "currency", "order_id", "stock_before", "stock_after", "minimum_stock"],
+          "properties": {
+            "office": {"$ref": "#/definitions/office"}, "product_id": {"$ref": "#/definitions/productId"},
+            "product_category": {"$ref": "#/definitions/productCategory"}, "programme_id": {"$ref": "#/definitions/programmeId"},
+            "quantity": {"$ref": "#/definitions/quantity"}, "currency": {"$ref": "#/definitions/currency"},
+            "order_id": {"$ref": "#/definitions/orderId"},
+            "stock_before": {"type": "integer", "minimum": 0, "description": "Existencias confirmadas antes del movimiento."},
+            "stock_after": {"type": "integer", "minimum": 0, "description": "Existencias confirmadas despues del movimiento."},
+            "minimum_stock": {"type": "integer", "minimum": 1, "description": "Minimo configurado para Product/oficina; no indicador UI fijo."}
+          },
+          "allOf": [{"$ref": "#/definitions/officeCurrency"}]
+        }
+      }
+    },
+    {
+      "title": "direct_stock_edit_rejected", "description": "Intento explicito y rechazado de cambiar stock fuera de una orden. No equivale a cualquier 405 o 422.",
+      "x-classification": "obligatorio", "x-category": "negocio/inventario",
+      "x-privacy": "Rechazo potencialmente sensible sobre conducta laboral; no body ni campo libre, acceso restringido. Actor desconocido queda null.",
+      "properties": {
+        "event_type": {"const": "direct_stock_edit_rejected"},
+        "properties": {
+          "type": "object", "additionalProperties": false,
+          "required": ["office", "product_id", "product_category", "programme_id", "quantity", "currency", "reason_code"],
+          "properties": {
+            "office": {"$ref": "#/definitions/office"}, "product_id": {"$ref": "#/definitions/productId"},
+            "product_category": {"$ref": "#/definitions/productCategory"}, "programme_id": {"$ref": "#/definitions/programmeId"},
+            "quantity": {"type": "integer", "minimum": 0, "description": "Stock absoluto no negativo intentado; no unidades entregadas. Si no se puede resolver, usar validacion generica, no inventar cero."},
+            "currency": {"$ref": "#/definitions/currency"},
+            "reason_code": {"const": "direct_stock_write_forbidden", "description": "Regla de negocio que rechazo la edicion directa."}
+          },
+          "allOf": [{"$ref": "#/definitions/officeCurrency"}]
+        }
+      }
+    },
+    {
+      "title": "kit_cost_variance_detected", "description": "Coste unitario de entrada confirmada varia mas que el umbral del historico producto/proveedor/moneda.",
+      "x-classification": "obligatorio", "x-category": "negocio/inventario",
+      "x-privacy": "Importes y proveedores estructurados son informacion comercial restringida; sin nombre ni contacto. Envelope pseudonimizado.",
+      "properties": {
+        "event_type": {"const": "kit_cost_variance_detected"}, "userId": {"$ref": "#/definitions/userPseudonym"},
+        "properties": {
+          "type": "object", "additionalProperties": false,
+          "required": ["office", "product_id", "product_category", "programme_id", "quantity", "currency", "order_id", "supplier_id", "unit_cost", "baseline_unit_cost", "variance_ratio", "threshold_ratio", "direction", "baseline_window_days", "baseline_order_count"],
+          "properties": {
+            "office": {"$ref": "#/definitions/office"}, "product_id": {"$ref": "#/definitions/productId"},
+            "product_category": {"$ref": "#/definitions/productCategory"}, "programme_id": {"$ref": "#/definitions/programmeId"},
+            "quantity": {"$ref": "#/definitions/quantity"}, "currency": {"$ref": "#/definitions/currency"},
+            "order_id": {"$ref": "#/definitions/orderId"}, "supplier_id": {"$ref": "#/definitions/supplierId"},
+            "unit_cost": {"$ref": "#/definitions/money"},
+            "baseline_unit_cost": {"type": "number", "exclusiveMinimum": 0, "description": "Media ponderada por cantidad de entradas anteriores del mismo producto/proveedor/moneda, excluyendo la actual."},
+            "variance_ratio": {"type": "number", "exclusiveMinimum": 0, "description": "abs(unit_cost-baseline_unit_cost)/baseline_unit_cost; 0.12 significa 12%."},
+            "threshold_ratio": {"type": "number", "exclusiveMinimum": 0, "description": "Umbral configurado; 0.10 es 10%, no porcentaje entero."},
+            "direction": {"enum": ["increase", "decrease"], "description": "Sentido de la variacion respecto a la base."},
+            "baseline_window_days": {"const": 90, "description": "Ventana propuesta de historico; pendiente de aprobacion L&D."},
+            "baseline_order_count": {"type": "integer", "minimum": 1, "description": "Numero de entradas anteriores usadas en la base."}
+          },
+          "allOf": [{"$ref": "#/definitions/officeCurrency"}]
+        }
+      }
+    },
+    {
+      "title": "inventory_order_validation_failed", "description": "Regla de formulario o esquema rechaza una orden; no incluye valores del formulario.",
+      "x-classification": "oportunidad_identificada", "x-category": "negocio/inventario",
+      "x-privacy": "Sin valores personales. Errores normalizados, nunca mensajes crudos. Dimensiones solo cuando todas se pueden resolver.",
+      "properties": {
+        "event_type": {"const": "inventory_order_validation_failed"},
+        "properties": {
+          "type": "object", "additionalProperties": false,
+          "required": ["order_type", "layer", "field", "reason_code"],
+          "properties": {
+            "order_type": {"enum": ["inbound", "outbound"], "description": "Flujo que se valida."},
+            "layer": {"enum": ["browser", "frontend", "backend"], "description": "Origen del rechazo; no mezclar reintentos entre capas."},
+            "field": {"enum": ["product_id", "quantity", "supplier_id", "assigned_to", "stock", "other"], "description": "Nombre canonico del campo, nunca su valor."},
+            "reason_code": {"enum": ["required", "invalid_type", "out_of_range", "unknown_product", "direct_stock_write_forbidden", "other"], "description": "Clase permitida de fallo; sin texto libre."},
+            "office": {"$ref": "#/definitions/office"}, "product_id": {"$ref": "#/definitions/productId"},
+            "product_category": {"$ref": "#/definitions/productCategory"}, "programme_id": {"$ref": "#/definitions/programmeId"},
+            "quantity": {"type": "integer", "description": "Cantidad intentada si es representable como entero, incluida negativa; no sustituir malformados por cero."},
+            "currency": {"$ref": "#/definitions/currency"}
+          },
+          "dependencies": {
+            "office": ["product_id", "product_category", "programme_id", "quantity", "currency"],
+            "product_id": ["office"], "product_category": ["office"], "programme_id": ["office"], "quantity": ["office"], "currency": ["office"]
+          },
+          "allOf": [{"$ref": "#/definitions/officeCurrency"}]
+        }
+      }
+    },
+    {
+      "title": "login_attempted", "description": "Formulario de login enviado; no indica existencia de cuenta.",
+      "x-classification": "oportunidad_identificada", "x-category": "autenticacion",
+      "x-privacy": "userId null, sin email, password, IP, dispositivo ni huella. sessionId aleatorio permite correlacion limitada.",
+      "properties": {
+        "event_type": {"const": "login_attempted"}, "userId": {"type": "null"},
+        "properties": {"type": "object", "additionalProperties": false, "required": ["source"], "properties": {
+          "source": {"const": "backoffice", "description": "Aplicacion que inicia el intento."}
+        }}
+      }
+    },
+    {
+      "title": "login_succeeded", "description": "Backend verifico credenciales y estado activo; nunca almacenar el token emitido.",
+      "x-classification": "oportunidad_identificada", "x-category": "autenticacion",
+      "x-privacy": "userId HMAC en envelope: PII pseudonimizada, no anonimizada; sin email, JWT ni perfil.",
+      "properties": {
+        "event_type": {"const": "login_succeeded"}, "userId": {"$ref": "#/definitions/userPseudonym"},
+        "properties": {"type": "object", "additionalProperties": false, "required": ["source", "duration_ms"], "properties": {
+          "source": {"const": "backoffice", "description": "Aplicacion solicitante."}, "duration_ms": {"$ref": "#/definitions/duration"}
+        }}
+      }
+    },
+    {
+      "title": "login_failed", "description": "Fallo de credenciales o transporte durante login; no distingue cuenta inexistente de password incorrecta.",
+      "x-classification": "oportunidad_identificada", "x-category": "autenticacion",
+      "x-privacy": "userId null. Motivo publico normalizado, sin credenciales ni evidencia de existencia de usuario.",
+      "properties": {
+        "event_type": {"const": "login_failed"}, "userId": {"type": "null"},
+        "properties": {"type": "object", "additionalProperties": false, "required": ["reason_code", "layer", "duration_ms"], "properties": {
+          "reason_code": {"enum": ["invalid_credentials", "network_error", "service_unavailable", "invalid_response", "unknown"], "description": "No distinguir usuario inexistente, inactivo y password incorrecta."},
+          "layer": {"enum": ["frontend", "backend"], "description": "Fuente de deteccion del fallo."}, "duration_ms": {"$ref": "#/definitions/duration"}
+        }}
+      }
+    },
+    {
+      "title": "session_expired", "description": "Backend verifica firma y confirma expiracion temporal; no inferir de un 401 generico.",
+      "x-classification": "oportunidad_identificada", "x-category": "autenticacion",
+      "x-privacy": "userId null por no existir autenticacion vigente. No decodificar claims sin verificar firma para enriquecer telemetria.",
+      "properties": {
+        "event_type": {"const": "session_expired"}, "userId": {"type": "null"},
+        "properties": {"type": "object", "additionalProperties": false, "required": ["reason_code", "source"], "properties": {
+          "reason_code": {"const": "token_expired", "description": "Causa temporal comprobada por backend."},
+          "source": {"const": "backend", "description": "Fuente autoritativa, no inferencia del navegador."}
+        }}
+      }
+    },
+    {
+      "title": "api_request_completed", "description": "Respuesta HTTP terminada, exitosa o rechazada; medir duracion, no payload.",
+      "x-classification": "oportunidad_identificada", "x-category": "rendimiento",
+      "x-privacy": "Ruta en allowlist de plantillas; sin path real, query, headers, IP ni body. Actor fiable pseudonimizado o null.",
+      "properties": {
+        "event_type": {"const": "api_request_completed"},
+        "properties": {"type": "object", "additionalProperties": false, "required": ["route_template", "method", "status_code", "duration_ms"], "properties": {
+          "route_template": {"$ref": "#/definitions/apiRoute"},
+          "method": {"enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"], "description": "Metodo HTTP, nunca valor dinamico."},
+          "status_code": {"type": "integer", "minimum": 100, "maximum": 599, "description": "Codigo HTTP observado; no duracion ni resultado de negocio."},
+          "duration_ms": {"$ref": "#/definitions/duration"}
+        }}
+      }
+    },
+    {
+      "title": "frontend_data_load_completed", "description": "Carga de datos alcanza ready/empty/error en una seccion, incluidos fallos de red.",
+      "x-classification": "oportunidad_identificada", "x-category": "rendimiento",
+      "x-privacy": "Solo estados y tiempos por seccion; no filas, payloads ni errores libres. Envelope pseudonimizado si autenticado.",
+      "properties": {
+        "event_type": {"const": "frontend_data_load_completed"},
+        "properties": {"type": "object", "additionalProperties": false, "required": ["section", "outcome", "duration_ms"], "properties": {
+          "section": {"$ref": "#/definitions/section"},
+          "outcome": {"enum": ["ready", "empty", "error"], "description": "Estado final utilizable, vacio o error; no filas."},
+          "duration_ms": {"$ref": "#/definitions/duration"},
+          "reason_code": {"enum": ["network_error", "invalid_response", "unauthorized", "service_unavailable", "unknown"], "description": "Opcional solo en error; codigo normalizado sin mensaje."}
+        }, "allOf": [{"if": {"properties": {"outcome": {"enum": ["ready", "empty"]}}, "required": ["outcome"]}, "then": {"not": {"required": ["reason_code"]}}}]}
+      }
+    },
+    {
+      "title": "frontend_unhandled_error", "description": "Error no capturado detectado por boundary, window.error o unhandledrejection.",
+      "x-classification": "oportunidad_identificada", "x-category": "errores",
+      "x-privacy": "Sin mensaje ni stack libre. Fingerprint de ubicacion sanitizada antes de hash; no hashear PII como sustituto de sanitizar.",
+      "properties": {
+        "event_type": {"const": "frontend_unhandled_error"},
+        "properties": {"type": "object", "additionalProperties": false, "required": ["section", "source", "error_code", "fingerprint", "app_version"], "properties": {
+          "section": {"$ref": "#/definitions/section"},
+          "source": {"enum": ["error_boundary", "window_error", "unhandled_rejection"], "description": "Detector del fallo; deduplicar detecciones del mismo incidente."},
+          "error_code": {"enum": ["render_error", "chunk_load_error", "unhandled_rejection", "unknown"], "description": "Clase permitida sin error.message."},
+          "fingerprint": {"type": "string", "pattern": "^[a-f0-9]{64}$", "description": "SHA-256 de clase y frames de codigo sanitizados, sin mensajes, URLs o valores de usuario."},
+          "app_version": {"type": "string", "pattern": "^[a-f0-9]{7,40}$", "description": "Revision de build derivada del despliegue, no entrada del usuario."}
+        }}
+      }
+    },
+    {
+      "title": "backoffice_section_viewed", "description": "Seccion mostrada tras acceso autorizado, no prefetch ni cada render.",
+      "x-classification": "oportunidad_identificada", "x-category": "navegacion",
+      "x-privacy": "Actividad laboral potencialmente sensible; userId pseudonimizado, sin URLs, filtros o contenido. Agregados por seccion.",
+      "properties": {
+        "event_type": {"const": "backoffice_section_viewed"}, "userId": {"$ref": "#/definitions/userPseudonym"},
+        "properties": {"type": "object", "additionalProperties": false, "required": ["section", "entry_type"], "properties": {
+          "section": {"$ref": "#/definitions/section"},
+          "entry_type": {"enum": ["direct", "menu", "internal_link", "history", "unknown"], "description": "Origen observable; no document.referrer completo."}
+        }}
+      }
+    }
+  ],
+  "definitions": {
+    "uuid": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", "description": "UUID v4 aleatorio en minusculas; no contiene ID de usuario ni secretos."},
+    "userPseudonym": {"type": "string", "pattern": "^u1_[a-f0-9]{64}$", "description": "HMAC-SHA256 con clave privada de telemetria y namespace de entorno sobre ID interno autenticado. No hash simple, email ni JWT."},
+    "office": {"enum": ["valencia", "miami"], "description": "Oficina operativa del producto/orden; no idioma de interfaz."},
+    "productId": {"type": "integer", "minimum": 1, "description": "ID estable de Product, mapeado explicitamente desde Asset.id; no nombre."},
+    "productCategory": {"enum": ["training_kit", "certification", "onboarding_equipment"], "description": "Categoria de negocio aprobada, no inferida de categoria tecnica o texto libre."},
+    "programmeId": {"type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$", "description": "ID del catalogo de programas/areas, por ejemplo ventas-b2b; nunca nombre de persona."},
+    "quantity": {"type": "integer", "minimum": 1, "description": "Unidades confirmadas de la orden o movimiento causante; nunca unidades inferidas de una lectura."},
+    "currency": {"enum": ["EUR", "USD"], "description": "Moneda de oficina; importes no convertidos."},
+    "orderId": {"type": "integer", "minimum": 1, "description": "ID de InboundOrder/OutboundOrder, identificado junto con event_type; no referencia al destinatario."},
+    "supplierId": {"type": "integer", "minimum": 1, "description": "Identificador estructurado del proveedor, sin razon social ni contacto."},
+    "money": {"type": "number", "minimum": 0, "description": "Coste unitario en moneda de oficina; precision decimal fijada por negocio, sin conversion."},
+    "duration": {"type": "number", "minimum": 0, "maximum": 86400000, "description": "Duracion monotona en milisegundos, no diferencia de timestamps entre maquinas."},
+    "section": {"enum": ["home", "inventory_products", "inventory_inbound", "inventory_outbound", "inventory_orders", "suppliers", "incidents", "incident_new", "account_profile", "account_password", "technical_validation", "login", "register", "password_recovery", "password_reset", "unknown"], "description": "Seccion canonica permitida; unknown evita capturar URL desconocida."},
+    "apiRoute": {"enum": ["/inventory/products", "/inventory/products/{id}", "/inventory/orders/inbound", "/inventory/orders/outbound", "/inventory/orders", "/auth/login", "/auth/me", "/auth/forgot-password", "/auth/reset-password", "/auth/change-password", "/users", "/users/{user_id}", "/profiles/me", "/suppliers", "/suppliers/{id}", "/suppliers/{id}/rate", "/suppliers/{id}/status", "/api/incidents", "/api/incidents/summary", "/api/incidents/{id}", "/api/incidents/{id}/status", "/api/incidents/analyze", "/api/incidents/results/report", "unmatched", "auxiliary"], "description": "Plantilla de router sin valores ni query; unmatched para no registrada, auxiliary para docs/estaticos."},
+    "officeCurrency": {
+      "description": "No convertir ni mezclar monedas. Si hay office, currency debe corresponder.",
+      "allOf": [
+        {"if": {"properties": {"office": {"const": "valencia"}}, "required": ["office"]}, "then": {"properties": {"currency": {"const": "EUR"}}, "required": ["currency"]}},
+        {"if": {"properties": {"office": {"const": "miami"}}, "required": ["office"]}, "then": {"properties": {"currency": {"const": "USD"}}, "required": ["currency"]}}
+      ]
+    }
+  }
+}

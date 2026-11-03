@@ -1,5 +1,25 @@
 # Progreso del proyecto
 
+## Estrategia de entrega de telemetria (2026-11-03)
+
+- Documentada decision stream/batch para los 14 eventos diseñados, con ventanas justificadas por urgencia operativa, reglas de throttle/debounce, deduplicacion y riesgos/exclusiones.
+- El contrato se renombro a `docs/telemetry/event-schemas.json`; plan y comando de validacion usan esa ruta canonica, sin cambios al contenido del esquema.
+- Pendiente: implementar captura, transporte, ACK y persistencia. Las ventanas y limites son propuestas de diseño, no SLA verificados.
+
+## Plan de telemetria: fase 2 (2026-11-03)
+
+- Definido envelope obligatorio y exportado JSON Schema draft-07 version 1.0.0 en `docs/telemetry/event-schemas.json`: cinco eventos obligatorios y nueve oportunidades del catalogo en cinco categorias.
+- Documentados tipos, propiedades requeridas/opcionales, allowlists cerradas, correlacion, pseudonimizacion y reglas semanticas fuera del esquema. El contexto se incorpora al repositorio por autorizacion del desarrollador.
+- Validacion: metaschema, 14 ejemplos aceptados, 80 casos rechazados y cobertura documental correctos; comprobacion precommit de envelope, categorias, allowlists y date-time correcta.
+- Pendiente: instrumentacion y almacenamiento, aprobacion de privacidad y resolucion de brechas de programa, categorias, umbral y costes. `event-schemas.json` contiene el contrato vigente; no se usa un archivo vacio alternativo.
+
+## Plan de telemetria: fase 1 (2026-11-03)
+
+- Catalogo documentado en `docs/telemetry/telemetry-plan.md`: cinco eventos obligatorios del contexto y 40 oportunidades adicionales con punto de captura, hipotesis y decision.
+- Mapeados once puntos del flujo autenticado de inventario, incluidos validaciones, rechazos de stock directo, confirmacion de ordenes y cruce de umbral; identificadas brechas de programa, categorias, minimo configurable y coste historico.
+- Revisadas oportunidades de autenticacion, rendimiento, errores, navegacion, proveedores, incidencias y cuenta; definidas precauciones de privacidad, deduplicacion y clasificacion de abandono.
+- Validacion documental: nombres obligatorios contrastados con el contexto, 45 eventos unicos y justificaciones completas. No se implemento captura ni se ejecutaron seeds; esquemas y contrato de eventos quedan pendientes.
+
 ## Medición de caching y optimización frontend (2026-11-02)
 
 - PostgreSQL 16 de prueba inicializado bajo el usuario `codespace` en el puerto 5433; FastAPI de prueba usó el puerto 8001 y `nexova_test`. Supabase no recibió escrituras.
