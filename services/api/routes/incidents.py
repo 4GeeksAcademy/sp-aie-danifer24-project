@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from tinydb import Query as TinyQuery
 from tinydb.table import Table
 
+from services.api.cache import TTLCache
 from services.api.dependencies import RequestTables
 from services.api.models import (
     IncidentBranch,
@@ -20,7 +21,7 @@ from services.api.models import (
     IncidentStatus,
     IncidentStatusUpdate,
 )
-from services.api.security import get_current_user
+from services.api.security import CurrentUser, get_current_user
 
 
 router = APIRouter(
@@ -28,6 +29,16 @@ router = APIRouter(
     tags=["incidents"],
     dependencies=[Depends(get_current_user)],
 )
+
+INCIDENT_CACHE_TTL_SECONDS = 30
+IncidentCacheKey = tuple[str, int, str | None, str | None, str | None, str | None]
+incident_cache: TTLCache[IncidentCacheKey, object] = TTLCache(
+    INCIDENT_CACHE_TTL_SECONDS,
+)
+
+
+def invalidate_incident_cache() -> None:
+    incident_cache.clear()
 
 
 def get_incidents_table(tables: RequestTables) -> Table:
@@ -96,17 +107,32 @@ def create_incident(*, payload: Any = Body(...), table: IncidentsTable):
     now_payload = request.model_dump(mode="json")
     now_payload.update(created_at=now, updated_at=now)
     incident_id = table.insert(now_payload)
+    invalidate_incident_cache()
     return incident_response({**now_payload, "id": incident_id})
 
 
 @router.get("", response_model=list[IncidentResponse])
 def list_incidents(
     table: IncidentsTable,
+    current_user: CurrentUser,
     status: IncidentStatus | None = None,
     origin: IncidentOrigin | None = None,
     branch: IncidentBranch | None = None,
     category: IncidentCategory | None = None,
 ):
+    cache_key = (
+        "list",
+        current_user.id,
+        status.value if status else None,
+        origin.value if origin else None,
+        branch.value if branch else None,
+        category.value if category else None,
+    )
+    generation = incident_cache.generation()
+    cached = incident_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     query = TinyQuery()
     filters = query.noop()
     for field, value in (
@@ -117,11 +143,19 @@ def list_incidents(
     ):
         if value is not None:
             filters &= query[field] == value.value
-    return [incident_response(document, document.doc_id) for document in table.search(filters)]
+    response = [incident_response(document, document.doc_id) for document in table.search(filters)]
+    incident_cache.set(cache_key, response, generation)
+    return response
 
 
 @router.get("/summary", response_model=IncidentSummaryResponse)
-def incidents_summary(table: IncidentsTable):
+def incidents_summary(table: IncidentsTable, current_user: CurrentUser):
+    cache_key = ("summary", current_user.id, None, None, None, None)
+    generation = incident_cache.generation()
+    cached = incident_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     documents = table.all()
 
     def counts(field: str, allowed_values) -> dict[str, int]:
@@ -130,13 +164,15 @@ def incidents_summary(table: IncidentsTable):
         result.pop(None, None)
         return result
 
-    return {
+    response = {
         "total": len(documents),
         "by_status": counts("status", IncidentStatus),
         "by_category": counts("category", IncidentCategory),
         "by_origin": counts("origin", IncidentOrigin),
         "by_branch": counts("branch", IncidentBranch),
     }
+    incident_cache.set(cache_key, response, generation)
+    return response
 
 
 @router.get("/{id}", response_model=IncidentResponse)
@@ -167,5 +203,6 @@ def update_incident_status(
         {"status": request.status.value, "updated_at": datetime.now(timezone.utc).isoformat()},
         doc_ids=[id],
     )
+    invalidate_incident_cache()
     updated = find_incident(table, id)
     return incident_response(updated, updated.doc_id)

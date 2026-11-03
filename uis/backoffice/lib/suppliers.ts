@@ -33,6 +33,10 @@ export interface Supplier extends SupplierInput {
   updated_at: string;
 }
 
+export function supplierErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "No se pudo completar la operación.";
+}
+
 export function isSupplier(value: unknown): value is Supplier {
   if (!value || typeof value !== "object") return false;
   const supplier = value as Partial<Supplier>;
