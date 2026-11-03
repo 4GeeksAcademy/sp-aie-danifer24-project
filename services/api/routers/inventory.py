@@ -5,6 +5,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
+from services.api.cache import TTLCache
 from services.api.dependencies import DatabaseSession
 from services.api.models import Asset, AssetEntry, AssetExit
 from services.api.schemas import (
@@ -22,6 +23,15 @@ from services.api.security import CurrentUser
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
 AssetId = Annotated[int, Path(gt=0)]
+PRODUCTS_CACHE_TTL_SECONDS = 5
+products_cache: TTLCache[str, list[AssetResponse]] = TTLCache(
+	PRODUCTS_CACHE_TTL_SECONDS,
+	max_entries=1,
+)
+
+
+def invalidate_products_cache() -> None:
+	products_cache.clear()
 
 
 def asset_response(session: Session, asset: Asset) -> AssetResponse:
@@ -48,10 +58,16 @@ def get_asset(session: Session, asset_id: int, lock: bool = False) -> Asset:
 
 @router.get("/products", response_model=list[AssetResponse])
 def list_products(session: DatabaseSession):
-	return [
+	generation = products_cache.generation()
+	cached = products_cache.get("all")
+	if cached is not None:
+		return cached
+	response = [
 		asset_response(session, asset)
 		for asset in session.exec(select(Asset).order_by(Asset.id)).all()
 	]
+	products_cache.set("all", response, generation)
+	return response
 
 
 @router.post("/products", response_model=AssetResponse, status_code=201)
@@ -63,6 +79,7 @@ def create_product(request: AssetCreate, current_user: CurrentUser, session: Dat
 	except IntegrityError:
 		session.rollback()
 		raise HTTPException(status_code=409, detail="Asset SKU already exists") from None
+	invalidate_products_cache()
 	session.refresh(asset)
 	return asset_response(session, asset)
 
@@ -78,6 +95,7 @@ def create_entry(request: AssetEntryCreate, current_user: CurrentUser, session: 
 	entry = AssetEntry(**request.model_dump(), user_uuid=str(current_user.id))
 	session.add(entry)
 	session.commit()
+	invalidate_products_cache()
 	session.refresh(entry)
 	return entry
 
@@ -94,6 +112,7 @@ def create_exit(request: AssetExitCreate, current_user: CurrentUser, session: Da
 	exit_order = AssetExit(**request.model_dump(), user_uuid=str(current_user.id))
 	session.add(exit_order)
 	session.commit()
+	invalidate_products_cache()
 	session.refresh(exit_order)
 	return exit_order
 
