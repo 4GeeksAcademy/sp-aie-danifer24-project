@@ -1,5 +1,12 @@
 # Progreso del proyecto
 
+## Plan de telemetria: fase 1 (2026-11-03)
+
+- Catalogo documentado en `docs/telemetry/telemetry-plan.md`: cinco eventos obligatorios del contexto y 40 oportunidades adicionales con punto de captura, hipotesis y decision.
+- Mapeados once puntos del flujo autenticado de inventario, incluidos validaciones, rechazos de stock directo, confirmacion de ordenes y cruce de umbral; identificadas brechas de programa, categorias, minimo configurable y coste historico.
+- Revisadas oportunidades de autenticacion, rendimiento, errores, navegacion, proveedores, incidencias y cuenta; definidas precauciones de privacidad, deduplicacion y clasificacion de abandono.
+- Validacion documental: nombres obligatorios contrastados con el contexto, 45 eventos unicos y justificaciones completas. No se implemento captura ni se ejecutaron seeds; esquemas y contrato de eventos quedan pendientes.
+
 ## Medición de caching y optimización frontend (2026-11-02)
 
 - PostgreSQL 16 de prueba inicializado bajo el usuario `codespace` en el puerto 5433; FastAPI de prueba usó el puerto 8001 y `nexova_test`. Supabase no recibió escrituras.
