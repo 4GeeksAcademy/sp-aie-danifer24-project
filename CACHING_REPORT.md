@@ -101,6 +101,20 @@ El foco es `uis/backoffice`, la interfaz Next.js que consume el inventario y el 
 
 Las dos oportunidades de lazy loading son componentes de interacción bajo demanda, no páginas completas que Next ya separa automáticamente por ruta. `useMemo` se limita al agregado lineal sobre el inventario; los cálculos triviales no se memoizaron.
 
+Beneficio frontend estimado:
+
+- `CreateSupplierDialog` y `EditRateDialog` dejan de formar parte del código que necesita ejecutarse al abrir el directorio; sus módulos solo se solicitan al iniciar alta o edición. Se difiere la descarga, parseo y ejecución de esos formularios del camino inicial. No se midieron bytes de chunks ni LCP antes/después, así que no se atribuye una reducción numérica.
+- El resumen memoizado evita recalcular `totalUnits` y `lowStockCount` en cada render por cambio de búsqueda. Antes eran dos recorridos de `n` activos por render; ahora se hace una sola reducción de `n` elementos cuando cambia la referencia de `assets`, y cero recorridos del resumen al escribir en el buscador. El filtro de resultados sigue siendo `O(n)` cuando cambia la búsqueda. No se midió tiempo de CPU; el beneficio es estructural y estimado.
+
+## Intercambio entre frescura y rendimiento
+
+| Lectura cacheada | TTL | Frescura aceptada y motivo |
+| --- | ---: | --- |
+| `GET /api/incidents` y `GET /api/incidents/summary` | 30 s | Son vistas de seguimiento, no se usan para autorizar ni validar una mutación. Las escrituras de alta y cambio de estado invalidan ambas cachés en el mismo proceso, por lo que la lectura posterior al cambio ve el dato nuevo. Se acepta que una escritura externa o atendida por otro worker pueda tardar hasta 30 s en reflejarse, a cambio de evitar escanear TinyDB en cada lectura del panel. Si se requiere visibilidad inmediata entre procesos, esta caché local debe sustituirse por invalidación compartida o un TTL menor. |
+| `GET /inventory/products` | 5 s | La pantalla es un resumen visual y no es la fuente de verdad para aceptar órdenes. Las escrituras locales de producto/entrada/salida invalidan el listado; si otra instancia escribe, la UI puede mostrar stock anterior hasta 5 s. `GET /inventory/products/{id}` y la validación de stock de salida consultan la base directamente, así que una copia obsoleta no autoriza una salida inválida. El TTL corto limita la discrepancia visual y conserva la mejora en la ruta costosa. |
+
+En todos los casos, el límite de obsolescencia aplica a expiración temporal cuando no se ejecuta una invalidación conocida; los TTL no reemplazan la invalidación. Las claves de incidencias incluyen el usuario autenticado y los filtros, evitando compartir resultados privados.
+
 ## Próximos pasos
 
 1. Instrumentar conteos de peticiones por endpoint y usuario/estado agregado (sin datos personales) para reemplazar las frecuencias estimadas por telemetría.
