@@ -1,3 +1,18 @@
+## Instrumentación amplia de telemetría de frontend (2026-11-04)
+
+- Creado `packages/shared/telemetry-service.ts`: cliente universal reutilizable en todas las apps (Website, Backoffice, Tracker) con validación estricta de eventos contra schema, cola en memoria, reintentos exponenciales, pseudonimización de userId con HMAC, y sendBeacon al cerrar sesión.
+- Creado `packages/shared/telemetry-events.ts`: funciones helpers tipadas para todos los eventos del plan (inbound/outbound orders, stock threshold, cost variance, validation failures, auth, data loads, etc.), allowlists respetadas, sin PII directa.
+- Implementados hooks React reutilizables en cada app (`lib/telemetry-hooks.tsx`): useTelemetryPageView (captura navegación), useGlobalErrorHandlers (window.onerror, unhandledrejection), TelemetryErrorBoundary (captura render errors con fingerprint SHA-256 sanitizado), useTelemetryDataLoad (cargas de datos).
+- Actualizado layout raíz en Backoffice, Website y Tracker con ClientLayout wrapper que aplica Error Boundary global y hooks de telemetría; page views se capturan automáticamente al navegar.
+- Creados proxies de telemetría en cada app (`app/api/telemetry/events/route.ts`) que reenvan eventos al backend FastAPI en desarrollo (127.0.0.1:8000) o variable de entorno `TELEMETRY_ENDPOINT` en producción.
+- Actualizado `packages/shared/telemetry.ts` para exportar TELEMETRY_SCHEMA_VERSION; refactorizado TelemetryService desde Backoffice a una clase reutilizable con soporte para configuración custom (endpoint, batchSize, retryDelays, appVersion).
+- Piso técnico transversal instrumentado: page views en secciones principales, latencias API (route_template, method, status, duration_ms), errores globales no capturados (error_boundary/window_error/unhandled_rejection), cargas de datos (section, outcome, duration_ms, reason_code).
+- Todas las métricas obligatorias del contexto (CONTEXT-06) incluidas: inbound/outbound orders, stock thresholds, direct edit rejections, cost variance, validations, login/session, data loads.
+- Validación: typecheck sin errores (Backoffice, Website); lint sin errores; build exitoso Backoffice y Website; Tracker build falla por error preexistente en services/api.ts (no relacionado a telemetría).
+- Documentado en `docs/telemetry/TELEMETRY-FRONTEND.md`: arquitectura, cómo verificar en DevTools Network, ejemplos de eventos capturados, instrucciones para instrumentar nuevos eventos, validaciones locales aplicadas.
+- Script demo creado: `scripts/telemetry-demo.sh` arranca Backend + Backoffice para verificar events en DevTools Network.
+- Pendiente: persistencia de eventos en base de datos, reportes ejecutivos, alertas por umbrales, seeds de datos de prueba para validar flujos de inventario end-to-end.
+
 ## Captura de telemetria: TelemetryService de Backoffice (2026-11-03)
 
 - Añadido `uis/backoffice/lib/telemetry.ts`: API unica `track()`, envelope automatico, allowlists y validaciones locales, cola en memoria (20 eventos/10 s), proxy same-origin, reintentos y `sendBeacon` al ocultar/cerrar.
