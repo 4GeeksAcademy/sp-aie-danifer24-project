@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, StringConstraints, field_validator, model_validator
+from services.api.inventory_catalog import BUSINESS_PRODUCT_CATEGORIES, INVENTORY_PROGRAMME_IDS
 
 
 NonEmptyString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
@@ -9,6 +10,8 @@ Office = Literal["Valencia", "Miami"]
 AssetCategory = Literal[
 	"hardware", "peripherals", "office_supplies", "training_materials"
 ]
+BusinessProductCategory = Literal.__getitem__(tuple(BUSINESS_PRODUCT_CATEGORIES))
+ProgrammeId = Literal.__getitem__(INVENTORY_PROGRAMME_IDS)
 
 
 TelemetryUUID = Annotated[str, StringConstraints(
@@ -56,6 +59,8 @@ class AssetCreate(BaseModel):
 	sku: NonEmptyString
 	category: AssetCategory
 	office: Office
+	product_category: BusinessProductCategory | None = None
+	programme_id: ProgrammeId | None = None
 
 
 class AssetResponse(AssetCreate):
@@ -65,12 +70,20 @@ class AssetResponse(AssetCreate):
 	current_stock: int = Field(ge=0)
 
 
+class AssetTelemetryMetadataUpdate(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	product_category: BusinessProductCategory
+	programme_id: ProgrammeId
+
+
 class AssetEntryCreate(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
 	asset_id: int = Field(gt=0, strict=True)
 	quantity: int = Field(gt=0, strict=True)
-	supplier: NonEmptyString
+	supplier_id: int = Field(gt=0, strict=True)
+	unit_cost: float = Field(ge=0, allow_inf_nan=False)
 	office: Office
 
 
@@ -80,6 +93,8 @@ class AssetEntryResponse(BaseModel):
 	id: int = Field(gt=0)
 	quantity: int = Field(gt=0)
 	supplier: NonEmptyString
+	supplier_id: int | None = Field(default=None, gt=0)
+	unit_cost: float | None = Field(default=None, ge=0, allow_inf_nan=False)
 	office: Office
 	created_at: datetime
 

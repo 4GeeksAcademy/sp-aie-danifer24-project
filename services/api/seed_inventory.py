@@ -9,19 +9,20 @@ from sqlmodel import SQLModel, Session, select
 
 from services.api.database import DEFAULT_DATABASE_PATH, engine
 from services.api.models import Asset, AssetEntry, AssetExit
+from services.api.inventory_catalog import BUSINESS_PRODUCT_CATEGORIES, INVENTORY_PROGRAMME_IDS
 
 
 ASSETS_SEED = [
-	("Port\u00e1til 14\" Business", "NXV-IT-001", "hardware", "Valencia"),
-	("Port\u00e1til 14\" Business", "NXV-IT-002", "hardware", "Miami"),
-	("Rat\u00f3n ergon\u00f3mico", "NXV-PER-001", "peripherals", "Valencia"),
-	("Hub USB-C", "NXV-PER-002", "peripherals", "Miami"),
-	("Resma de papel A4", "NXV-OFF-001", "office_supplies", "Valencia"),
-	("Cuaderno de formaci\u00f3n en liderazgo", "NXV-TRN-001", "training_materials", "Valencia"),
+	("Port\u00e1til 14\" Business", "NXV-IT-001", "hardware", "Valencia", "onboarding_equipment", "onboarding-soporte"),
+	("Port\u00e1til 14\" Business", "NXV-IT-002", "hardware", "Miami", "onboarding_equipment", "onboarding-soporte"),
+	("Rat\u00f3n ergon\u00f3mico", "NXV-PER-001", "peripherals", "Valencia", "onboarding_equipment", "onboarding-soporte"),
+	("Hub USB-C", "NXV-PER-002", "peripherals", "Miami", "onboarding_equipment", "onboarding-soporte"),
+	("Resma de papel A4", "NXV-OFF-001", "office_supplies", "Valencia", "training_kit", "liderazgo-basico"),
+	("Cuaderno de formaci\u00f3n en liderazgo", "NXV-TRN-001", "training_materials", "Valencia", "training_kit", "liderazgo-basico"),
+	("Kit de certificaci\u00f3n en ventas B2B", "NXV-CERT-001", "training_materials", "Valencia", "certification", "ventas-b2b"),
 ]
 ENTRIES_SEED = [
 	("NXV-IT-001", 10, "TechDistrib Valencia S.L."),
-	("NXV-IT-001", 5, "TechDistrib Valencia S.L."),
 	("NXV-PER-001", 20, "TechDistrib Valencia S.L."),
 	("NXV-OFF-001", 100, "Office Depot Miami"),
 ]
@@ -35,20 +36,35 @@ EXITS_SEED = [
 def seed_inventory(session: Session, user_uuid: str) -> dict[str, int]:
 	if not user_uuid.strip():
 		raise ValueError("A TinyDB user identifier is required")
+	initial_seed = session.exec(select(Asset.id).limit(1)).first() is None
 	inserted = {"assets": 0, "entries": 0, "exits": 0}
 	assets = {}
-	for name, sku, category, office in ASSETS_SEED:
+	for name, sku, category, office, product_category, programme_id in ASSETS_SEED:
+		if product_category not in BUSINESS_PRODUCT_CATEGORIES or programme_id not in INVENTORY_PROGRAMME_IDS:
+			raise ValueError("An inventory seed references an unknown academic catalog value")
 		asset = session.exec(
 			select(Asset).where(Asset.sku == sku).with_for_update()
 		).first()
 		if asset is None:
-			asset = Asset(name=name, sku=sku, category=category, office=office)
+			if not initial_seed:
+				continue
+			asset = Asset(
+				name=name, sku=sku, category=category, office=office,
+				product_category=product_category, programme_id=programme_id,
+			)
 			session.add(asset)
 			session.flush()
 			inserted["assets"] += 1
 		elif (asset.name, asset.category, asset.office) != (name, category, office):
 			raise ValueError("An existing seed SKU has conflicting asset data")
+		else:
+			asset.product_category = product_category
+			asset.programme_id = programme_id
 		assets[sku] = asset
+
+	# Do not create or alter movement history while refreshing an initialized demo DB.
+	if not initial_seed:
+		return inserted
 
 	for sku, quantity, supplier in ENTRIES_SEED:
 		asset = assets[sku]

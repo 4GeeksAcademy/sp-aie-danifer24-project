@@ -68,7 +68,8 @@ VALIDATION_FIELDS = {
     "address", "role", "is_active", "title", "description", "category",
     "status", "origin", "branch", "monthly_rate", "currency", "country",
     "categories", "contract_renewal_date", "contact_email", "notes", "file",
-    "sku", "office", "asset_id", "quantity", "supplier", "exit_type", "assigned_to",
+    "sku", "office", "asset_id", "quantity", "supplier", "supplier_id", "unit_cost",
+    "product_category", "programme_id", "exit_type", "assigned_to",
 }
 
 HTTP_ERROR_CODES = {

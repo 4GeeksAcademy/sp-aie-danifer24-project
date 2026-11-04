@@ -29,6 +29,8 @@ class Asset(SQLModel, table=True):
 	sku: str = SQLField(unique=True)
 	category: str
 	office: str
+	product_category: str | None = None
+	programme_id: str | None = None
 
 
 class AssetEntry(SQLModel, table=True):
@@ -41,6 +43,8 @@ class AssetEntry(SQLModel, table=True):
 	asset_id: int = SQLField(foreign_key="asset.id", index=True)
 	quantity: int = SQLField(gt=0)
 	supplier: str
+	supplier_id: int | None = None
+	unit_cost: float | None = None
 	office: str
 	created_at: datetime = SQLField(
 		default_factory=lambda: datetime.now(timezone.utc),
