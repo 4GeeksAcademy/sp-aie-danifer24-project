@@ -1,5 +1,12 @@
 # Progreso del proyecto
 
+## Captura de telemetria: stub FastAPI (2026-11-03)
+
+- Agregado `POST /telemetry/events` en router propio; acepta lotes de hasta 50 envelopes, registra cantidad y tipos sin payload/identificadores y devuelve `received`. Sin persistencia, redireccion ni dependencia de base de datos en el handler.
+- Definidos `TelemetryEvent`, `TelemetryBatch` y `TelemetryReceipt` con Pydantic; envelope obligatorio, UUID v4, timestamp UTC real, version fija, pseudonimo/null y rechazo de extras. `TELEMETRY_ENDPOINT` se lee del entorno al importar el router, sin alterar la ruta fija.
+- Validados lotes correctos/vacios, campos ausentes, IDs/fecha/version invalidos, logs sin payload e integracion en la app real bloqueando conexiones de DB. No se crearon archivos de pruebas ni se modificaron frontends.
+- Pendiente: TelemetryService de Backoffice, validacion especifica de properties/identidad, reglas de negocio y persistencia de fase posterior. El stub es publico y solo para verificacion con datos de prueba.
+
 ## Estrategia de entrega de telemetria (2026-11-03)
 
 - Documentada decision stream/batch para los 14 eventos diseñados, con ventanas justificadas por urgencia operativa, reglas de throttle/debounce, deduplicacion y riesgos/exclusiones.
