@@ -71,6 +71,10 @@ export default function OutboundOrderPage() {
       setFormError("Selecciona un producto y espera a que se consulte su stock.");
       return;
     }
+    if (!selectedAsset.product_category || !selectedAsset.programme_id) {
+      setFormError("Guarda primero la categoría de negocio y el programa del producto.");
+      return;
+    }
     if (!Number.isSafeInteger(parsedQuantity) || parsedQuantity < 1) {
       track("inventory_order_validation_failed", { order_type: "outbound", layer: "frontend", field: "quantity", reason_code: "out_of_range" });
       setQuantityError("La cantidad debe ser un entero mayor que cero.");
@@ -84,12 +88,21 @@ export default function OutboundOrderPage() {
 
     setSubmitting(true);
     try {
-      await createAssetExit({
+      const exit = await createAssetExit({
         asset_id: selectedAsset.id,
         quantity: parsedQuantity,
         exit_type: exitType,
         assigned_to: exitType === "allocation" ? assignedTo.trim() : null,
         office: selectedAsset.office,
+      });
+      track("outbound_order_created", {
+        office: selectedAsset.office.toLowerCase(),
+        product_id: selectedAsset.id,
+        product_category: selectedAsset.product_category,
+        programme_id: selectedAsset.programme_id,
+        quantity: exit.quantity,
+        currency: selectedAsset.office === "Valencia" ? "EUR" : "USD",
+        order_id: exit.id,
       });
       const newStock = selectedAsset.current_stock - parsedQuantity;
       setSelectedAsset({ ...selectedAsset, current_stock: newStock });
@@ -147,6 +160,9 @@ export default function OutboundOrderPage() {
           {stockLoading && <p className="inbound-stock" role="status"><span className="spinner" /> Consultando stock…</p>}
           {!stockLoading && stockError && <p className="notice notice-error" role="alert">{stockError}</p>}
           {selectedAsset && !stockLoading && <p className="inbound-stock">Stock disponible: <strong>{selectedAsset.current_stock}</strong> · {selectedAsset.office}</p>}
+          {selectedAsset && !stockLoading && (!selectedAsset.product_category || !selectedAsset.programme_id) && <p className="notice notice-error" role="status">
+            Este producto no tiene clasificación. <Link href="/inventory/products">Asígnala en Productos</Link> antes de registrar movimientos.
+          </p>}
 
           <label htmlFor="outbound-quantity">Cantidad
             <input id="outbound-quantity" type="number" min="1" step="1" required disabled={!selectedAsset || stockLoading} value={quantity} aria-invalid={Boolean(quantityError || quantityExceedsStock)} aria-describedby={quantityError ? "outbound-quantity-error" : quantityExceedsStock ? "outbound-stock-warning" : undefined} onChange={(event) => { setQuantity(event.target.value); setQuantityError(""); setFormError(""); setSuccess(""); }} />

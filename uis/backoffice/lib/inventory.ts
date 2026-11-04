@@ -1,4 +1,5 @@
 import { track } from "@/lib/telemetry";
+import { suppliersRequest, type Supplier } from "@/lib/suppliers";
 
 export type InventoryOffice = "Valencia" | "Miami";
 export type AssetCategory = "hardware" | "peripherals" | "office_supplies" | "training_materials";
@@ -10,6 +11,8 @@ export type Asset = {
   category: AssetCategory;
   office: InventoryOffice;
   current_stock: number;
+  product_category: "training_kit" | "certification" | "onboarding_equipment" | null;
+  programme_id: string | null;
 };
 
 export type AssetInput = Omit<Asset, "id" | "current_stock">;
@@ -17,7 +20,8 @@ export type AssetInput = Omit<Asset, "id" | "current_stock">;
 export type AssetEntryInput = {
   asset_id: number;
   quantity: number;
-  supplier: string;
+  supplier_id: number;
+  unit_cost: number;
   office: InventoryOffice;
 };
 
@@ -25,9 +29,20 @@ export type AssetEntry = {
   id: number;
   quantity: number;
   supplier: string;
+  supplier_id: number | null;
+  unit_cost: number | null;
   office: InventoryOffice;
   created_at: string;
 };
+
+export type InventoryBusinessCategory = "training_kit" | "certification" | "onboarding_equipment";
+export type InventoryProgramme = { id: string; name: string };
+
+export const INVENTORY_PROGRAMMES: InventoryProgramme[] = [
+  { id: "ventas-b2b", name: "Formación en ventas B2B" },
+  { id: "liderazgo-basico", name: "Liderazgo básico" },
+  { id: "onboarding-soporte", name: "Onboarding de soporte" },
+];
 
 export type AssetExitInput = {
   asset_id: number;
@@ -91,6 +106,8 @@ async function request<T>(path: string, options: RequestInit = {}, protectedRout
   const pathname = path.split("?")[0];
   const routeTemplate = pathname === "products" ? "/inventory/products" :
     /^products\/\d+$/.test(pathname) ? "/inventory/products/{id}" :
+    /^products\/\d+\/telemetry-metadata$/.test(pathname) ? "/inventory/products/{id}/telemetry-metadata" :
+    pathname === "programmes" ? "/inventory/programmes" :
     pathname === "orders/inbound" ? "/inventory/orders/inbound" :
     pathname === "orders/outbound" ? "/inventory/orders/outbound" :
     pathname === "orders" ? "/inventory/orders" : "unmatched";
@@ -144,6 +161,10 @@ export function listAssets(): Promise<Asset[]> {
   return request<Asset[]>("products");
 }
 
+export function listInventoryProgrammes(): Promise<InventoryProgramme[]> {
+  return request<InventoryProgramme[]>("programmes");
+}
+
 export function getAsset(id: number): Promise<Asset> {
   return request<Asset>(`products/${encodeURIComponent(id)}`);
 }
@@ -154,6 +175,20 @@ export function createAsset(input: AssetInput): Promise<Asset> {
 
 export function createAssetEntry(input: AssetEntryInput): Promise<AssetEntry> {
   return request<AssetEntry>("orders/inbound", { method: "POST", body: JSON.stringify(input) }, true);
+}
+
+export function updateAssetTelemetryMetadata(
+  id: number,
+  metadata: { product_category: InventoryBusinessCategory; programme_id: string },
+): Promise<Asset> {
+  return request<Asset>(`products/${encodeURIComponent(id)}/telemetry-metadata`, {
+    method: "PATCH",
+    body: JSON.stringify(metadata),
+  }, true);
+}
+
+export function listInventorySuppliers(): Promise<Supplier[]> {
+  return suppliersRequest<Supplier[]>("");
 }
 
 export function createAssetExit(input: AssetExitInput): Promise<AssetExit> {

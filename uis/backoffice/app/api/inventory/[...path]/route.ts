@@ -9,3 +9,4 @@ async function forward(request: Request, context: RouteContext) {
 
 export const GET = forward;
 export const POST = forward;
+export const PATCH = forward;
