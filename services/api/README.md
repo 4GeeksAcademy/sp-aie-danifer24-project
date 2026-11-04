@@ -16,7 +16,8 @@ Open `http://127.0.0.1:8000/`. The API documentation is available at `http://127
 ## Telemetry ingestion
 
 `POST /telemetry/events` accepts up to 50 raw events and validates each
-individually against `docs/telemetry/event-schemas.json`. Valid events are
+individually with the existing `TelemetryEvent` Pydantic model and against
+`docs/telemetry/event-schemas.json`. Valid events are
 written in one PostgreSQL bulk insert/transaction; invalid items are counted
 without rejecting valid neighbors. The response is
 `{"received": N, "stored": S, "rejected": R}`. Repeated `eventId` values are

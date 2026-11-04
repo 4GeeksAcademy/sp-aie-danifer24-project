@@ -3,8 +3,6 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, StringConstraints, field_validator, model_validator
 
-from services.api.telemetry_contract import validate_telemetry_contract
-
 
 NonEmptyString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 Office = Literal["Valencia", "Miami"]
@@ -39,13 +37,6 @@ class TelemetryEvent(BaseModel):
 	def validate_timestamp(cls, value: str) -> str:
 		datetime.fromisoformat(value.replace("Z", "+00:00"))
 		return value
-
-	@model_validator(mode="after")
-	def validate_event_contract(self) -> "TelemetryEvent":
-		validate_telemetry_contract(self.model_dump(mode="json"))
-		return self
-
-
 class TelemetryBatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 

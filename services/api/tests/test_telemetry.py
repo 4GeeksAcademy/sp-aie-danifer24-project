@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine, select
 
+from services.api.database import get_db
 from services.api.models import TelemetryEventRecord
 from services.api.routes.telemetry import receive_events
 from services.api.schemas import TelemetryBatch
@@ -78,4 +79,29 @@ def test_event_with_non_allowlisted_property_is_rejected():
         assert len(session.exec(select(TelemetryEventRecord)).all()) == 0
     finally:
         session.close()
+        engine.dispose()
+
+
+def test_http_endpoint_accepts_mixed_batch_and_keeps_frontend_ack_contract(api):
+    client, _, _ = api
+    from services.api.main import app
+
+    engine, _ = make_session()
+
+    def override_get_db():
+        with Session(engine) as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_get_db
+    invalid_event = {**VALID_EVENT, "eventId": "not-a-uuid"}
+    try:
+        response = client.post("/telemetry/events", json={"events": [VALID_EVENT, invalid_event]})
+
+        assert response.status_code == 200
+        assert response.json() == {"received": 2, "stored": 1, "rejected": 1}
+        # Existing TelemetryService checks response.ok and receipt.received only.
+        assert 200 <= response.status_code < 300
+        assert response.json()["received"] == 2
+    finally:
+        app.dependency_overrides.pop(get_db, None)
         engine.dispose()

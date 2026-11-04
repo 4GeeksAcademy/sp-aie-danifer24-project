@@ -19,7 +19,9 @@
 - Aplicada `services/api/migrations/001_telemetry_events.sql` a Supabase. Verificado: índice GIN de `tags` y B-tree de timestamp/event_type; índices compuestos preexistentes preservados; RLS activada; roles `anon` y `authenticated` sin grants, `service_role` limitado a SELECT/INSERT; triggers UPDATE/DELETE/TRUNCATE activos; tabla sigue con 0 filas.
 - Probados los tres triggers de inmutabilidad mediante operaciones temporales con rollback; ninguna fila de prueba quedó persistida.
 - Verificación local: suite backend 60 passed y 7 subtests, un warning preexistente de Starlette/httpx; `uv lock --check`, `compileall`, `git diff --check` y revisión del editor correctos.
-- Pendiente: revisión final del diff/alcance y confirmación de despliegue del backend. No se creó commit.
+- Ajuste posterior: `TelemetryEvent` se conserva idéntico al modelo Pydantic previo; la validación del JSON Schema canónico se ejecuta por evento en el handler. Añadida prueba HTTP que confirma respuesta 200 y ACK `{received, stored, rejected}` compatible con el TelemetryService.
+- Verificación final: suite backend 61 passed y 7 subtests; un warning preexistente de Starlette/httpx; `compileall`, `git diff --check` y revisión del editor sin errores.
+- Pendiente: desplegar backend actualizado. Corrección del handler/documentación/tests pendiente de commit.
 
 ## Captura de telemetria: TelemetryService de Backoffice (2026-11-03)
 

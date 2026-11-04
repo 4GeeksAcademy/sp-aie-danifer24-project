@@ -15,6 +15,7 @@ from sqlmodel import Session
 from services.api.database import get_db
 from services.api.models import TelemetryEventRecord
 from services.api.schemas import TelemetryBatch, TelemetryEvent, TelemetryReceipt
+from services.api.telemetry_contract import validate_telemetry_contract
 
 
 load_dotenv(Path(__file__).resolve().parents[3] / ".env")
@@ -31,6 +32,7 @@ def receive_events(batch: TelemetryBatch, session: Session = Depends(get_db)) ->
     for raw_event in batch.events:
         try:
             event = TelemetryEvent.model_validate(raw_event)
+            validate_telemetry_contract(event.model_dump(mode="json"))
         except (ValidationError, ValueError, TypeError):
             rejected += 1
             continue
@@ -61,8 +63,8 @@ def receive_events(batch: TelemetryBatch, session: Session = Depends(get_db)) ->
         else:
             raise RuntimeError(f"Unsupported telemetry database dialect: {dialect}")
 
-        result = session.execute(statement)
         try:
+            result = session.execute(statement)
             session.commit()
         except Exception:
             session.rollback()
