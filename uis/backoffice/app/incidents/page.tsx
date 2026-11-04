@@ -22,6 +22,7 @@ import {
   type IncidentStatus,
   type IncidentSummary,
 } from "../../lib/incidents";
+import { track } from "../../lib/telemetry";
 
 const EMPTY_FILTERS = { status: "", origin: "", branch: "" };
 
@@ -76,6 +77,7 @@ export default function IncidentsPage() {
   }
 
   const loadIncidents = useCallback(async (signal: AbortSignal) => {
+    const startedAt = performance.now();
     try {
       const result = await listIncidents({
         status: filters.status as IncidentStatus || undefined,
@@ -83,9 +85,23 @@ export default function IncidentsPage() {
         branch: filters.branch as IncidentBranch || undefined,
       });
       if (!Array.isArray(result) || !result.every(isIncident)) throw new Error("El servicio devolvió una lista no válida.");
-      if (!signal.aborted) setLoadState((current) => ({ ...current, error: "", incidents: result }));
+      if (!signal.aborted) {
+        setLoadState((current) => ({ ...current, error: "", incidents: result }));
+        track("frontend_data_load_completed", {
+          section: "incidents",
+          outcome: result.length ? "ready" : "empty",
+          duration_ms: Math.round(performance.now() - startedAt),
+        });
+      }
     } catch (caught) {
-      if (!signal.aborted) setLoadState((current) => ({ ...current, error: readableError(caught) }));
+      if (!signal.aborted) {
+        setLoadState((current) => ({ ...current, error: readableError(caught) }));
+        track("frontend_data_load_completed", {
+          section: "incidents",
+          outcome: "error",
+          duration_ms: Math.round(performance.now() - startedAt),
+        });
+      }
     } finally {
       if (!signal.aborted) setLoadState((current) => ({ ...current, loading: false }));
     }
@@ -100,12 +116,27 @@ export default function IncidentsPage() {
   useEffect(() => {
     const controller = new AbortController();
     async function loadSummary() {
+      const startedAt = performance.now();
       try {
         const result = await getIncidentSummary();
         if (!isIncidentSummary(result)) throw new Error("El servicio devolvió métricas no válidas.");
-        if (!controller.signal.aborted) setSummaryLoad({ summary: result, state: "ready" });
+        if (!controller.signal.aborted) {
+          setSummaryLoad({ summary: result, state: "ready" });
+          track("frontend_data_load_completed", {
+            section: "incidents",
+            outcome: result.total ? "ready" : "empty",
+            duration_ms: Math.round(performance.now() - startedAt),
+          });
+        }
       } catch {
-        if (!controller.signal.aborted) setSummaryLoad((current) => ({ ...current, state: "error" }));
+        if (!controller.signal.aborted) {
+          setSummaryLoad((current) => ({ ...current, state: "error" }));
+          track("frontend_data_load_completed", {
+            section: "incidents",
+            outcome: "error",
+            duration_ms: Math.round(performance.now() - startedAt),
+          });
+        }
       } finally {
         if (!controller.signal.aborted) {
           setSummaryLoad((current) => current.state === "loading" ? { ...current, state: "error" } : current);

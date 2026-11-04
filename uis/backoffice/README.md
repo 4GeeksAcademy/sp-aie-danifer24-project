@@ -24,6 +24,34 @@ npm test
 npm run build
 ```
 
+## Telemetría de Backoffice (temporal)
+
+Todo el tracking del Backoffice entra por `lib/telemetry.ts` y su función
+`track()`. En despliegues con el proxy same-origin, deja
+`NEXT_PUBLIC_TELEMETRY_ENDPOINT` sin definir o configúralo como
+`/api/telemetry/events`; el proxy envía a `TELEMETRY_ENDPOINT` del entorno
+servidor. En desarrollo, si este último no está definido, se usa
+`http://127.0.0.1:8000/telemetry/events`. En producción el proxy falla cerrado
+con 503 si no hay destino configurado.
+
+La identidad de telemetría requiere `TELEMETRY_PSEUDONYM_KEY` (clave dedicada,
+al menos 32 bytes) y `TELEMETRY_ENVIRONMENT` en FastAPI. No se usa el JWT ni el
+ID interno como `userId`; sin pseudónimo disponible, `track()` omite los eventos
+que el contrato marca como dependientes del usuario. Mantén la clave solo en el
+entorno servidor; no la declares con prefijo `NEXT_PUBLIC_`.
+
+El servicio crea el envelope y aplica una allowlist local, acumula hasta 20
+eventos o 10 segundos y reintenta tres veces. `sendBeacon` al ocultar/cerrar la
+página es de mejor esfuerzo, no garantía de persistencia. El receptor actual es
+un stub temporal, sin autenticación ni almacenamiento.
+
+La captura existente cubre login, navegación autorizada, cargas de datos,
+respuestas HTTP y validaciones. No se emiten aún los cinco eventos obligatorios
+de negocio: la API carece de programa/categoría contractual, coste, mínimo
+configurable y detección explícita de edición directa rechazada. No rellenar esos
+campos con valores inferidos ni declarar la cobertura completa. La instrumentación
+no se comparte con Website, Application ni Talent Pipeline Tracker.
+
 ## Estructura principal
 
 - `app/page.tsx`: centro de operaciones y accesos a las áreas internas.

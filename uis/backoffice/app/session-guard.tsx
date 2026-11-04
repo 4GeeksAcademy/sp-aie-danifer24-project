@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { clearSessionToken, InvalidSessionError, validateSession } from "../../../packages/shared/auth/session";
+import { track } from "@/lib/telemetry";
 
 export default function SessionGuard({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -12,12 +13,30 @@ export default function SessionGuard({ children }: { children: ReactNode }) {
 
 function ProtectedSession({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [result, setResult] = useState<{ error: string } | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const trackedView = useRef(false);
 
   useEffect(() => {
     const controller = new AbortController();
     let generation = 0;
+    function trackAuthorizedView() {
+      if (trackedView.current) return;
+      trackedView.current = true;
+      const section = pathname === "/" ? "home" :
+        pathname === "/inventory/products" ? "inventory_products" :
+        pathname === "/inventory/orders/inbound" ? "inventory_inbound" :
+        pathname === "/inventory/orders/outbound" ? "inventory_outbound" :
+        pathname === "/inventory/orders" ? "inventory_orders" :
+        pathname === "/suppliers" ? "suppliers" :
+        pathname === "/incidents" ? "incidents" :
+        pathname === "/incidents/new" ? "incident_new" :
+        pathname === "/account/profile" ? "account_profile" :
+        pathname.startsWith("/account/") ? "account_password" :
+        pathname === "/validacion-tecnica" ? "technical_validation" : "unknown";
+      track("backoffice_section_viewed", { section, entry_type: "unknown" });
+    }
     function rejectSession() {
       generation += 1;
       setResult(null);
@@ -27,7 +46,10 @@ function ProtectedSession({ children }: { children: ReactNode }) {
       const current = ++generation;
       try {
         await validateSession(controller.signal);
-        if (!controller.signal.aborted && current === generation) setResult({ error: "" });
+        if (!controller.signal.aborted && current === generation) {
+          trackAuthorizedView();
+          setResult({ error: "" });
+        }
       } catch (error) {
         if (controller.signal.aborted || current !== generation) return;
         if (error instanceof InvalidSessionError) rejectSession();
@@ -50,7 +72,7 @@ function ProtectedSession({ children }: { children: ReactNode }) {
       window.removeEventListener("storage", refreshSession);
       window.removeEventListener("focus", refreshSession);
     };
-  }, [router, attempt]);
+  }, [router, attempt, pathname]);
 
   if (!result) return <main className="auth-page"><p role="status">Verificando sesión...</p></main>;
   if (result.error) return <main className="auth-page"><p role="alert">{result.error}</p><button onClick={() => { setResult(null); setAttempt((current) => current + 1); }}>Reintentar</button></main>;

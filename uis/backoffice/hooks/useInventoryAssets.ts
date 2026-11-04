@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { listAssets, readableInventoryError, type Asset } from "../lib/inventory";
+import { listAssets, readableInventoryError, InventoryApiError, type Asset } from "../lib/inventory";
+import { track } from "../lib/telemetry";
 
 function isAsset(value: unknown): value is Asset {
   if (!value || typeof value !== "object") return false;
@@ -27,16 +28,38 @@ export function useInventoryAssets() {
 
   useEffect(() => {
     let active = true;
+    const startedAt = performance.now();
+    const section = window.location.pathname === "/inventory/orders/inbound" ? "inventory_inbound" :
+      window.location.pathname === "/inventory/orders/outbound" ? "inventory_outbound" : "inventory_products";
 
     listAssets()
       .then((result) => {
         if (!Array.isArray(result) || !result.every(isAsset)) {
           throw new Error("El servicio devolvió una lista de productos no válida.");
         }
-        if (active) setAssets(result);
+        if (active) {
+          setAssets(result);
+          track("frontend_data_load_completed", {
+            section,
+            outcome: result.length ? "ready" : "empty",
+            duration_ms: Math.round(performance.now() - startedAt),
+          });
+        }
       })
       .catch((caught: unknown) => {
-        if (active) setError(readableInventoryError(caught));
+        if (active) {
+          setError(readableInventoryError(caught));
+          track("frontend_data_load_completed", {
+            section,
+            outcome: "error",
+            duration_ms: Math.round(performance.now() - startedAt),
+            reason_code: caught instanceof InventoryApiError && (caught.status === 401 || caught.status === 403)
+              ? "unauthorized"
+              : caught instanceof InventoryApiError && caught.status !== undefined && caught.status >= 500
+                ? "service_unavailable"
+                : "network_error",
+          });
+        }
       })
       .finally(() => {
         if (active) setLoading(false);

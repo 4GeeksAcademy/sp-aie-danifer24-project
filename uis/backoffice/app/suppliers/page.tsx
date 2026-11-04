@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { AlertCircle, ArrowUpRight, Building2, CheckCircle2, Clock3, Pencil, Plus, RefreshCw, Search, X } from "lucide-react";
 import { categories, isSupplier, isSupplierList, money, renewalSoon, supplierErrorMessage, suppliersRequest, type Category, type Supplier } from "@/lib/suppliers";
+import { track } from "@/lib/telemetry";
 
 const dialogLoading = () => <div className="loading-state" role="status"><span className="spinner" />Cargando formulario…</div>;
 const CreateSupplierDialog = dynamic(() => import("@/components/suppliers/CreateSupplierDialog"), { ssr: false, loading: dialogLoading });
@@ -29,25 +30,53 @@ export default function SuppliersPage() {
 
   useEffect(() => {
     const controller = new AbortController();
+    const startedAt = performance.now();
     suppliersRequest<Supplier[]>("", { signal: controller.signal })
       .then((data) => {
         if (!isSupplierList(data)) throw new Error("El directorio devolvió una respuesta no válida. Inténtalo de nuevo.");
         setSuppliers(data);
         setError("");
+        track("frontend_data_load_completed", {
+          section: "suppliers",
+          outcome: data.length ? "ready" : "empty",
+          duration_ms: Math.round(performance.now() - startedAt),
+        });
       })
-      .catch((error) => { if (!controller.signal.aborted) setError(supplierErrorMessage(error)); })
+      .catch((error) => {
+        if (!controller.signal.aborted) {
+          setError(supplierErrorMessage(error));
+          track("frontend_data_load_completed", {
+            section: "suppliers",
+            outcome: "error",
+            duration_ms: Math.round(performance.now() - startedAt),
+          });
+        }
+      })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, []);
 
   async function reload() {
+    const startedAt = performance.now();
     setLoading(true); setError(""); setNotice("");
     try {
       const data = await suppliersRequest<Supplier[]>();
       if (!isSupplierList(data)) throw new Error("El directorio devolvió una respuesta no válida. Inténtalo de nuevo.");
       setSuppliers(data);
+      track("frontend_data_load_completed", {
+        section: "suppliers",
+        outcome: data.length ? "ready" : "empty",
+        duration_ms: Math.round(performance.now() - startedAt),
+      });
     }
-    catch (error) { setError(supplierErrorMessage(error)); }
+    catch (error) {
+      setError(supplierErrorMessage(error));
+      track("frontend_data_load_completed", {
+        section: "suppliers",
+        outcome: "error",
+        duration_ms: Math.round(performance.now() - startedAt),
+      });
+    }
     finally { setLoading(false); }
   }
 

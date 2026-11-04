@@ -1,3 +1,5 @@
+import { track } from "@/lib/telemetry";
+
 export type InventoryOffice = "Valencia" | "Miami";
 export type AssetCategory = "hardware" | "peripherals" | "office_supplies" | "training_materials";
 
@@ -85,6 +87,14 @@ function getErrorMessage(payload: unknown, fallback: string): string {
 }
 
 async function request<T>(path: string, options: RequestInit = {}, protectedRoute = false): Promise<T> {
+  const startedAt = performance.now();
+  const pathname = path.split("?")[0];
+  const routeTemplate = pathname === "products" ? "/inventory/products" :
+    /^products\/\d+$/.test(pathname) ? "/inventory/products/{id}" :
+    pathname === "orders/inbound" ? "/inventory/orders/inbound" :
+    pathname === "orders/outbound" ? "/inventory/orders/outbound" :
+    pathname === "orders" ? "/inventory/orders" : "unmatched";
+  const method = (options.method ?? "GET").toUpperCase();
   const headers = new Headers(options.headers);
   headers.set("Accept", "application/json");
   if (options.body) headers.set("Content-Type", "application/json");
@@ -105,6 +115,12 @@ async function request<T>(path: string, options: RequestInit = {}, protectedRout
   } catch {
     throw new InventoryApiError("No se pudo conectar con el servicio de inventario. Comprueba tu conexión e inténtalo de nuevo.");
   }
+  track("api_request_completed", {
+    route_template: routeTemplate,
+    method,
+    status_code: response.status,
+    duration_ms: Math.round(performance.now() - startedAt),
+  });
 
   if (response.status === 401 || response.status === 403) {
     if (typeof window !== "undefined") window.dispatchEvent(new Event("nexova:unauthorized"));

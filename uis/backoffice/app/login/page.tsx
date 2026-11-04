@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, ArrowRight, LoaderCircle, LockKeyhole } from "lucide-react";
 import { loginRequest, storeAccessToken } from "@/lib/auth";
+import { track } from "@/lib/telemetry";
 
 export default function LoginPage() {
   return <Suspense fallback={<p className="notice" role="status">Cargando...</p>}><LoginForm /></Suspense>;
@@ -19,13 +20,17 @@ function LoginForm() {
     event.preventDefault();
     if (busy) return;
     const form = new FormData(event.currentTarget);
+    const startedAt = performance.now();
     setBusy(true);
     setError("");
+    track("login_attempted", { source: "backoffice" });
     try {
       const token = await loginRequest(String(form.get("email") ?? ""), String(form.get("password") ?? ""));
       storeAccessToken(token);
+      track("login_succeeded", { source: "backoffice", duration_ms: Math.round(performance.now() - startedAt) });
       router.replace("/");
     } catch (error) {
+      track("login_failed", { reason_code: "unknown", layer: "frontend", duration_ms: Math.round(performance.now() - startedAt) });
       setError(error instanceof Error ? error.message : "No se pudo iniciar sesión.");
     } finally {
       setBusy(false);

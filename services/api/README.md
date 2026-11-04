@@ -30,6 +30,11 @@ TELEMETRY_ENDPOINT=http://127.0.0.1:8000/telemetry/events
 The router reads this setting at startup (unset means `None`) to establish the
 configuration pattern; it does not change the fixed route or redirect requests.
 This is a backend setting, not the future frontend `NEXT_PUBLIC_TELEMETRY_ENDPOINT`.
+`GET /auth/me` exposes the user's telemetry pseudonym only when the backend has
+`TELEMETRY_PSEUDONYM_KEY` configured with at least 32 bytes of secret material.
+Generate a dedicated key with `openssl rand -hex 32`, store it only in the backend
+environment, and set `TELEMETRY_ENVIRONMENT` distinctly per environment. Without
+the key, `telemetry_user_id` is `null`; the API never falls back to the raw user ID.
 
 The reusable Pydantic `TelemetryEvent` model in `services/api/schemas.py`
 requires all eight envelope fields: `eventId`, `timestamp`, `sessionId`,
@@ -45,7 +50,8 @@ identity nor persistence. It validates only the envelope, not each event's
 properties allowlist, event membership or business rules from
 `docs/telemetry/event-schemas.json`. Use controlled test data only and do not
 expose it as a production collector. Full validation and storage are deferred
-to the next phase; no frontend instrumentation is included in this change.
+to the next phase. Only Backoffice has a TelemetryService; it routes through
+`/api/telemetry/events` and sends batches to the configured endpoint.
 
 ## Users and authentication
 
