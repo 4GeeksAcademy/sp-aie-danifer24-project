@@ -13,13 +13,23 @@ uvicorn services.api.main:app --reload
 
 Open `http://127.0.0.1:8000/`. The API documentation is available at `http://127.0.0.1:8000/docs`.
 
-## Temporary telemetry receiver
+## Telemetry ingestion
 
-`POST /telemetry/events` accepts an object with an `events` array (up to 50
-events) and returns HTTP 200 with `{"received": N}`. Empty batches return zero.
-It logs only the batch count and each `event_type`, through the Uvicorn logger
-`uvicorn.error.telemetry`; no event payload, session/user identifiers or tokens
-are logged. It does not open a database, persist events or forward traffic.
+`POST /telemetry/events` accepts up to 50 raw events and validates each
+individually with the existing `TelemetryEvent` Pydantic model and against
+`docs/telemetry/event-schemas.json`. Valid events are
+written in one PostgreSQL bulk insert/transaction; invalid items are counted
+without rejecting valid neighbors. The response is
+`{"received": N, "stored": S, "rejected": R}`. Repeated `eventId` values are
+idempotently ignored, not counted as invalid. The validated `properties` object
+is stored in JSONB `tags`, alongside fixed event type, timestamp and service
+columns. The table has B-tree indexes on timestamp and event type and a GIN
+index on tags.
+
+The table is append-only: a PostgreSQL trigger rejects every UPDATE or DELETE,
+and row-level security keeps browser roles out. Apply
+`services/api/migrations/001_telemetry_events.sql` to Supabase before deploying
+the collector. The endpoint URL is unchanged; the frontend is untouched.
 
 Configure the backend environment, or the root `.env`, before starting FastAPI:
 
@@ -36,22 +46,10 @@ Generate a dedicated key with `openssl rand -hex 32`, store it only in the backe
 environment, and set `TELEMETRY_ENVIRONMENT` distinctly per environment. Without
 the key, `telemetry_user_id` is `null`; the API never falls back to the raw user ID.
 
-The reusable Pydantic `TelemetryEvent` model in `services/api/schemas.py`
-requires all eight envelope fields: `eventId`, `timestamp`, `sessionId`,
-`userId`, `event_type`, `schemaVersion`, `requestId`, and `properties`.
-UUIDs must be lowercase v4 strings, timestamp must be a real ISO 8601 UTC
-date/time ending in `Z`, and schemaVersion is `1.0.0`. Session and user fields
-must be present but may be null; a non-null userId must match the planned HMAC
-pseudonym format. Properties must be a JSON object; extra envelope/batch keys
-are rejected. Invalid batches return HTTP 422, without partial acceptance.
-
-This verification stub is unauthenticated: a successful response proves neither
-identity nor persistence. It validates only the envelope, not each event's
-properties allowlist, event membership or business rules from
-`docs/telemetry/event-schemas.json`. Use controlled test data only and do not
-expose it as a production collector. Full validation and storage are deferred
-to the next phase. Only Backoffice has a TelemetryService; it routes through
-`/api/telemetry/events` and sends batches to the configured endpoint.
+The Pydantic `TelemetryEvent` validates the envelope and canonical event
+contract. The batch envelope remains loosely typed so malformed event values
+can be rejected individually. The Backoffice TelemetryService routes through
+`/api/telemetry/events` and expects `received` to match the submitted batch.
 
 ## Users and authentication
 

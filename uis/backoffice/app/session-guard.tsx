@@ -74,7 +74,17 @@ function ProtectedSession({ children }: { children: ReactNode }) {
     };
   }, [router, attempt, pathname]);
 
-  if (!result) return <main className="auth-page"><p role="status">Verificando sesión...</p></main>;
+  if (!result) return (
+    <main className="session-verifying" role="status" aria-live="polite" aria-label="Verificando sesión">
+      <section className="session-verifying-card">
+        <span className="session-verifying-spinner" aria-hidden="true" />
+        <div>
+          <strong>Comprobando tu acceso</strong>
+          <p>Un momento, estamos preparando tu espacio de trabajo.</p>
+        </div>
+      </section>
+    </main>
+  );
   if (result.error) return <main className="auth-page"><p role="alert">{result.error}</p><button onClick={() => { setResult(null); setAttempt((current) => current + 1); }}>Reintentar</button></main>;
   return <><div className="session-actions"><button type="button" onClick={() => { clearSessionToken(); router.replace("/login"); }}>Cerrar sesión</button></div>{children}</>;
 }

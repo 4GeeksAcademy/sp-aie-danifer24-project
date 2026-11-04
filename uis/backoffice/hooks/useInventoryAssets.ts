@@ -16,6 +16,8 @@ function isAsset(value: unknown): value is Asset {
       || asset.category === "office_supplies"
       || asset.category === "training_materials")
     && (asset.office === "Valencia" || asset.office === "Miami")
+    && (asset.product_category === null || asset.product_category === "training_kit" || asset.product_category === "certification" || asset.product_category === "onboarding_equipment")
+    && (asset.programme_id === null || typeof asset.programme_id === "string")
     && typeof asset.current_stock === "number"
     && Number.isFinite(asset.current_stock);
 }

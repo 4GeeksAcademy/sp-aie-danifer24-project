@@ -13,7 +13,8 @@ from pydantic import (
 	field_validator,
 	model_validator,
 )
-from sqlalchemy import CheckConstraint, DateTime
+from sqlalchemy import CheckConstraint, DateTime, Index, JSON
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field as SQLField, SQLModel
 
 
@@ -28,6 +29,8 @@ class Asset(SQLModel, table=True):
 	sku: str = SQLField(unique=True)
 	category: str
 	office: str
+	product_category: str | None = None
+	programme_id: str | None = None
 
 
 class AssetEntry(SQLModel, table=True):
@@ -40,6 +43,8 @@ class AssetEntry(SQLModel, table=True):
 	asset_id: int = SQLField(foreign_key="asset.id", index=True)
 	quantity: int = SQLField(gt=0)
 	supplier: str
+	supplier_id: int | None = None
+	unit_cost: float | None = None
 	office: str
 	created_at: datetime = SQLField(
 		default_factory=lambda: datetime.now(timezone.utc),
@@ -70,6 +75,27 @@ class AssetExit(SQLModel, table=True):
 		sa_type=DateTime(timezone=True),
 	)
 	user_uuid: str
+
+
+class TelemetryEventRecord(SQLModel, table=True):
+	"""Append-only telemetry event with contract properties stored in JSONB tags."""
+
+	__tablename__ = "telemetry_events"
+	__table_args__ = (
+		Index("ix_telemetry_events_timestamp", "timestamp"),
+		Index("ix_telemetry_events_event_type", "event_type"),
+		Index("ix_telemetry_events_tags_gin", "tags", postgresql_using="gin"),
+	)
+
+	event_id: str = SQLField(primary_key=True, max_length=36)
+	event_type: str = SQLField(max_length=128)
+	timestamp: datetime = SQLField(sa_type=DateTime(timezone=True))
+	service: str = SQLField(max_length=64)
+	tags: dict = SQLField(sa_type=JSON().with_variant(JSONB(), "postgresql"))
+	session_id: str | None = SQLField(default=None, max_length=36)
+	user_id: str | None = SQLField(default=None, max_length=67)
+	schema_version: str = SQLField(max_length=16)
+	request_id: str = SQLField(max_length=36)
 
 
 class SupplierCountry(str, Enum):

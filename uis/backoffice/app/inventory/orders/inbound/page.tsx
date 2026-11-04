@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   createAssetEntry,
+  listInventorySuppliers,
   readableInventoryError,
 } from "../../../../lib/inventory";
+import type { Supplier } from "../../../../lib/suppliers";
 import { useInventoryAssets } from "../../../../hooks/useInventoryAssets";
 import { track } from "../../../../lib/telemetry";
 
@@ -13,7 +15,10 @@ export default function InboundOrderPage() {
   const { assets, setAssets, loading, error: loadError, retryLoading } = useInventoryAssets();
   const [assetId, setAssetId] = useState("");
   const [quantity, setQuantity] = useState("1");
-  const [supplier, setSupplier] = useState("");
+  const [supplierId, setSupplierId] = useState("");
+  const [unitCost, setUnitCost] = useState("");
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [supplierError, setSupplierError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
   const [success, setSuccess] = useState("");
@@ -22,6 +27,12 @@ export default function InboundOrderPage() {
     () => assets.find((asset) => String(asset.id) === assetId) ?? null,
     [assets, assetId],
   );
+  const matchingSuppliers = suppliers.filter((item) => item.status === "active"
+    && item.currency === (selectedAsset?.office === "Valencia" ? "EUR" : "USD"));
+
+  useEffect(() => {
+    listInventorySuppliers().then(setSuppliers).catch(() => setSupplierError("No se pudieron cargar proveedores activos."));
+  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -39,19 +50,41 @@ export default function InboundOrderPage() {
       setFormError("La cantidad debe ser un entero mayor que cero.");
       return;
     }
-    if (!supplier.trim()) {
+    const selectedSupplier = matchingSuppliers.find((item) => String(item.id) === supplierId);
+    if (!selectedSupplier) {
       track("inventory_order_validation_failed", { order_type: "inbound", layer: "frontend", field: "other", reason_code: "required" });
-      setFormError("Indica el proveedor de la entrada.");
+      setFormError("Selecciona un proveedor activo con moneda compatible con la oficina.");
+      return;
+    }
+    const parsedUnitCost = Number(unitCost);
+    if (!Number.isFinite(parsedUnitCost) || parsedUnitCost < 0) {
+      setFormError("Indica un coste unitario válido (cero o mayor).");
+      return;
+    }
+    if (!selectedAsset.product_category || !selectedAsset.programme_id) {
+      setFormError("Guarda primero la categoría de negocio y el programa del producto.");
       return;
     }
 
     setSubmitting(true);
     try {
-      await createAssetEntry({
+      const entry = await createAssetEntry({
         asset_id: selectedAsset.id,
         quantity: parsedQuantity,
-        supplier: supplier.trim(),
+        supplier_id: selectedSupplier.id,
+        unit_cost: parsedUnitCost,
         office: selectedAsset.office,
+      });
+      track("inbound_order_created", {
+        office: selectedAsset.office.toLowerCase(),
+        product_id: selectedAsset.id,
+        product_category: selectedAsset.product_category,
+        programme_id: selectedAsset.programme_id,
+        quantity: entry.quantity,
+        currency: selectedSupplier.currency,
+        order_id: entry.id,
+        supplier_id: entry.supplier_id,
+        unit_cost: entry.unit_cost,
       });
       setAssets((current) => current.map((asset) => asset.id === selectedAsset.id
         ? { ...asset, current_stock: asset.current_stock + parsedQuantity }
@@ -59,7 +92,8 @@ export default function InboundOrderPage() {
       setSuccess(`Entrada registrada: ${parsedQuantity} unidades de ${selectedAsset.name}.`);
       setAssetId("");
       setQuantity("1");
-      setSupplier("");
+      setSupplierId("");
+      setUnitCost("");
     } catch (error) {
       setFormError(readableInventoryError(error));
     } finally {
@@ -102,14 +136,25 @@ export default function InboundOrderPage() {
 
           {selectedAsset && <p className="inbound-stock">Stock actual: <strong>{selectedAsset.current_stock}</strong> · {selectedAsset.office}</p>}
 
+          {selectedAsset && (!selectedAsset.product_category || !selectedAsset.programme_id) && <p className="notice notice-error" role="status">
+            Este producto no tiene clasificación. <Link href="/inventory/products">Asígnala en Productos</Link> antes de registrar movimientos.
+          </p>}
+
           <div className="inbound-fields">
             <label htmlFor="inbound-quantity">Cantidad recibida
               <input id="inbound-quantity" type="number" min="1" step="1" required value={quantity} onChange={(event) => setQuantity(event.target.value)} />
             </label>
-            <label htmlFor="inbound-supplier">Proveedor
-              <input id="inbound-supplier" type="text" maxLength={200} required value={supplier} onChange={(event) => setSupplier(event.target.value)} />
+            <label htmlFor="inbound-supplier">Proveedor activo
+              <select id="inbound-supplier" required value={supplierId} onChange={(event) => setSupplierId(event.target.value)}>
+                <option value="">Selecciona un proveedor</option>
+                {matchingSuppliers.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.currency}</option>)}
+              </select>
+            </label>
+            <label htmlFor="inbound-unit-cost">Coste unitario ({selectedAsset?.office === "Valencia" ? "EUR" : "USD"})
+              <input id="inbound-unit-cost" type="number" min="0" step="0.01" required value={unitCost} onChange={(event) => setUnitCost(event.target.value)} />
             </label>
           </div>
+          {supplierError && <p className="notice notice-error" role="alert">{supplierError}</p>}
 
           {formError && <p className="notice notice-error" role="alert">{formError}</p>}
           {success && <p className="notice notice-success" role="status">{success}</p>}

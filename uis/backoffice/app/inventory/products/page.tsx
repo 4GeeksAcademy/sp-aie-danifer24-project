@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import Link from "next/link";
 import { useInventoryAssets } from "../../../hooks/useInventoryAssets";
-import type { Asset } from "../../../lib/inventory";
+import { INVENTORY_PROGRAMMES, type Asset } from "../../../lib/inventory";
+import { AssetTelemetryMetadataEditor } from "../../../components/inventory/AssetTelemetryMetadataEditor";
 
 const CATEGORY_LABELS: Record<Asset["category"], string> = {
   hardware: "Hardware",
@@ -22,8 +23,13 @@ function stockState(stock: number): { label: string; className: string; symbol: 
 }
 
 export default function InventoryProductsPage() {
-  const { assets, loading, error, retryLoading } = useInventoryAssets();
+  const { assets, setAssets, loading, error, retryLoading } = useInventoryAssets();
   const [search, setSearch] = useState("");
+  const [classifyingAssetId, setClassifyingAssetId] = useState<number | null>(null);
+
+  function updateAsset(updated: Asset) {
+    setAssets((current) => current.map((asset) => asset.id === updated.id ? { ...asset, ...updated } : asset));
+  }
 
   const filteredAssets = useMemo(() => {
     const term = search.trim().toLocaleLowerCase("es");
@@ -78,15 +84,22 @@ export default function InventoryProductsPage() {
         {!loading && !error && filteredAssets.length > 0 && (
           <div className="inventory-table-wrap">
             <table className="inventory-table">
-              <thead><tr><th scope="col">Producto</th><th scope="col">Categoría</th><th scope="col">Oficina</th><th scope="col">Stock actual</th></tr></thead>
+              <thead><tr><th scope="col">Producto</th><th scope="col">Categoría</th><th scope="col">Programa</th><th scope="col">Oficina</th><th scope="col">Stock actual</th><th scope="col">Clasificación</th></tr></thead>
               <tbody>{filteredAssets.map((asset) => {
                 const state = stockState(asset.current_stock);
-                return <tr key={asset.id}>
-                  <th scope="row"><span className="inventory-product-name">{asset.name}</span><span className="inventory-sku">{asset.sku}</span></th>
-                  <td>{CATEGORY_LABELS[asset.category] ?? asset.category}</td>
-                  <td>{asset.office}</td>
-                  <td><span className={`stock-indicator ${state.className}`}><span aria-hidden="true">{state.symbol}</span><strong>{asset.current_stock}</strong><span>{state.label}</span></span></td>
-                </tr>;
+                const editing = classifyingAssetId === asset.id;
+                const programmeName = INVENTORY_PROGRAMMES.find((programme) => programme.id === asset.programme_id)?.name;
+                return <Fragment key={asset.id}>
+                  <tr>
+                    <th scope="row"><span className="inventory-product-name">{asset.name}</span><span className="inventory-sku">{asset.sku}</span></th>
+                    <td>{CATEGORY_LABELS[asset.category] ?? asset.category}</td>
+                    <td>{asset.programme_id ? programmeName ?? asset.programme_id : <span className="inventory-unclassified">Sin asignar</span>}</td>
+                    <td>{asset.office}</td>
+                    <td><span className={`stock-indicator ${state.className}`}><span aria-hidden="true">{state.symbol}</span><strong>{asset.current_stock}</strong><span>{state.label}</span></span></td>
+                    <td><button className="btn btn-outline" type="button" aria-expanded={editing} onClick={() => setClassifyingAssetId(editing ? null : asset.id)}>{asset.product_category ? "Editar" : "Asignar"}</button></td>
+                  </tr>
+                  {editing && <tr className="inventory-classification-row"><td colSpan={6}><AssetTelemetryMetadataEditor key={`${asset.id}-${asset.product_category ?? "none"}-${asset.programme_id ?? "none"}`} asset={asset} onSaved={updateAsset} /></td></tr>}
+                </Fragment>;
               })}</tbody>
             </table>
           </div>
