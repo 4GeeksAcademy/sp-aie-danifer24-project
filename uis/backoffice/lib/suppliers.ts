@@ -1,4 +1,5 @@
 import { clearStoredAccessToken, getStoredAccessToken } from "@/lib/auth";
+import { track } from "@/lib/telemetry";
 
 export const categories = {
   job_boards: "Portales de empleo",
@@ -86,6 +87,13 @@ function apiError(status: number, payload: unknown): string {
 }
 
 export async function suppliersRequest<T>(path = "", options?: RequestInit): Promise<T> {
+  const startedAt = performance.now();
+  const pathname = path.split("?")[0];
+  const routeTemplate = pathname === "" ? "/suppliers" :
+    /^\/\d+$/.test(pathname) ? "/suppliers/{id}" :
+    /^\/\d+\/rate$/.test(pathname) ? "/suppliers/{id}/rate" :
+    /^\/\d+\/status$/.test(pathname) ? "/suppliers/{id}/status" : "unmatched";
+  const method = (options?.method ?? "GET").toUpperCase();
   let response: Response;
   try {
     const headers = new Headers(options?.headers);
@@ -102,6 +110,12 @@ export async function suppliersRequest<T>(path = "", options?: RequestInit): Pro
     if (error instanceof DOMException && error.name === "AbortError") throw error;
     throw new Error("No se pudo conectar con el directorio. Inténtalo de nuevo.");
   }
+  track("api_request_completed", {
+    route_template: routeTemplate,
+    method,
+    status_code: response.status,
+    duration_ms: Math.round(performance.now() - startedAt),
+  });
   if (!response.ok) {
     if (response.status === 401 && typeof window !== "undefined") {
       clearStoredAccessToken();

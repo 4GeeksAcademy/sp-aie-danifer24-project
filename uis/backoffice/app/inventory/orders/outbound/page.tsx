@@ -11,6 +11,7 @@ import {
   type AssetExitInput,
 } from "../../../../lib/inventory";
 import { useInventoryAssets } from "../../../../hooks/useInventoryAssets";
+import { track } from "../../../../lib/telemetry";
 
 export default function OutboundOrderPage() {
   const { assets, setAssets, loading, error: loadError, retryLoading } = useInventoryAssets();
@@ -66,14 +67,17 @@ export default function OutboundOrderPage() {
     setSuccess("");
 
     if (!selectedAsset) {
+      track("inventory_order_validation_failed", { order_type: "outbound", layer: "frontend", field: "product_id", reason_code: "required" });
       setFormError("Selecciona un producto y espera a que se consulte su stock.");
       return;
     }
     if (!Number.isSafeInteger(parsedQuantity) || parsedQuantity < 1) {
+      track("inventory_order_validation_failed", { order_type: "outbound", layer: "frontend", field: "quantity", reason_code: "out_of_range" });
       setQuantityError("La cantidad debe ser un entero mayor que cero.");
       return;
     }
     if (exitType === "allocation" && !assignedTo.trim()) {
+      track("inventory_order_validation_failed", { order_type: "outbound", layer: "frontend", field: "assigned_to", reason_code: "required" });
       setFormError("Indica a quién se asignará el producto.");
       return;
     }
@@ -97,6 +101,7 @@ export default function OutboundOrderPage() {
       setAssignedTo("");
     } catch (error) {
       if (error instanceof InventoryApiError && error.status === 400) {
+        track("inventory_order_validation_failed", { order_type: "outbound", layer: "backend", field: "stock", reason_code: "out_of_range" });
         setQuantityError(readableInventoryError(error));
       } else {
         setFormError(readableInventoryError(error));
@@ -125,7 +130,13 @@ export default function OutboundOrderPage() {
         {loading && <div className="loading-state" role="status"><span className="spinner" /> Cargando productos…</div>}
         {!loading && loadError && <div className="empty-state inventory-error" role="alert"><span className="state-icon">!</span><h3>No se pudieron cargar los productos</h3><p>{loadError}</p><button className="btn btn-dark" type="button" onClick={retryLoading}>Reintentar</button></div>}
         {!loading && !loadError && assets.length === 0 && <div className="empty-state"><span className="state-icon">—</span><h3>No hay productos disponibles</h3><p>Registra un producto antes de crear una salida.</p><Link className="btn btn-outline" href="/inventory/products">Ver productos</Link></div>}
-        {!loading && !loadError && assets.length > 0 && <form className="inventory-order-page-form" onSubmit={submit}>
+        {!loading && !loadError && assets.length > 0 && <form className="inventory-order-page-form" onInvalidCapture={(event) => {
+          const target = event.target;
+          if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) return;
+          const field = target.id === "outbound-asset" ? "product_id" : target.id === "outbound-quantity" ? "quantity" : target.id === "outbound-assigned-to" ? "assigned_to" : "other";
+          const reason_code = target.validity.valueMissing ? "required" : target.validity.badInput ? "invalid_type" : "out_of_range";
+          track("inventory_order_validation_failed", { order_type: "outbound", layer: "browser", field, reason_code });
+        }} onSubmit={submit}>
           <label htmlFor="outbound-asset">Producto
             <select id="outbound-asset" required value={assetId} onChange={(event) => selectAsset(event.target.value)}>
               <option value="">Selecciona un producto</option>

@@ -1,3 +1,5 @@
+import { track } from "@/lib/telemetry";
+
 export const INCIDENT_STATUSES = ["open", "in_progress", "resolved", "discarded"] as const;
 export const INCIDENT_ORIGINS = ["customer", "branch", "internal"] as const;
 export const INCIDENT_BRANCHES = ["central", "valencia_operations", "miami_office", "remote"] as const;
@@ -108,6 +110,15 @@ export class IncidentApiError extends Error {
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const startedAt = performance.now();
+  const pathname = path.split("?")[0];
+  const routeTemplate = pathname === API_ROOT ? API_ROOT :
+    pathname === `${API_ROOT}/summary` ? `${API_ROOT}/summary` :
+    new RegExp(`^${API_ROOT}/\\d+$`).test(pathname) ? `${API_ROOT}/{id}` :
+    new RegExp(`^${API_ROOT}/\\d+/status$`).test(pathname) ? `${API_ROOT}/{id}/status` :
+    pathname === `${API_ROOT}/analyze` ? `${API_ROOT}/analyze` :
+    pathname === `${API_ROOT}/results/report` ? `${API_ROOT}/results/report` : "unmatched";
+  const method = (options.method ?? "GET").toUpperCase();
   const headers = new Headers(options.headers);
   headers.set("Content-Type", "application/json");
   const token = typeof window === "undefined" ? null : readSessionToken();
@@ -119,6 +130,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   } catch {
     throw new IncidentApiError("No se pudo conectar con el servicio. Comprueba tu conexión e inténtalo de nuevo.");
   }
+  track("api_request_completed", {
+    route_template: routeTemplate,
+    method,
+    status_code: response.status,
+    duration_ms: Math.round(performance.now() - startedAt),
+  });
 
   if (response.status === 401 || response.status === 403) {
     if (typeof window !== "undefined") window.dispatchEvent(new Event("nexova:unauthorized"));

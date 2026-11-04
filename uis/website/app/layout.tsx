@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
+import WebsiteClientLayout from "./client-layout";
 
 export const metadata: Metadata = {
   title: "Nexova | Consultoria de Talento",
@@ -15,7 +16,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es">
-      <body>{children}</body>
+      <body>
+        <WebsiteClientLayout>
+          {children}
+        </WebsiteClientLayout>
+      </body>
     </html>
   );
 }

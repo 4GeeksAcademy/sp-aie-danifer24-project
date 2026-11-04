@@ -411,6 +411,10 @@ class AuthMeResponse(BaseModel):
 	email: str
 	role: UserRole
 	profile: ProfileResponse
+	telemetry_user_id: str | None = Field(
+		default=None,
+		pattern=r"^u1_[a-f0-9]{64}$",
+	)
 
 
 class ForgotPasswordRequest(BaseModel):

@@ -13,6 +13,46 @@ uvicorn services.api.main:app --reload
 
 Open `http://127.0.0.1:8000/`. The API documentation is available at `http://127.0.0.1:8000/docs`.
 
+## Temporary telemetry receiver
+
+`POST /telemetry/events` accepts an object with an `events` array (up to 50
+events) and returns HTTP 200 with `{"received": N}`. Empty batches return zero.
+It logs only the batch count and each `event_type`, through the Uvicorn logger
+`uvicorn.error.telemetry`; no event payload, session/user identifiers or tokens
+are logged. It does not open a database, persist events or forward traffic.
+
+Configure the backend environment, or the root `.env`, before starting FastAPI:
+
+```dotenv
+TELEMETRY_ENDPOINT=http://127.0.0.1:8000/telemetry/events
+```
+
+The router reads this setting at startup (unset means `None`) to establish the
+configuration pattern; it does not change the fixed route or redirect requests.
+This is a backend setting, not the future frontend `NEXT_PUBLIC_TELEMETRY_ENDPOINT`.
+`GET /auth/me` exposes the user's telemetry pseudonym only when the backend has
+`TELEMETRY_PSEUDONYM_KEY` configured with at least 32 bytes of secret material.
+Generate a dedicated key with `openssl rand -hex 32`, store it only in the backend
+environment, and set `TELEMETRY_ENVIRONMENT` distinctly per environment. Without
+the key, `telemetry_user_id` is `null`; the API never falls back to the raw user ID.
+
+The reusable Pydantic `TelemetryEvent` model in `services/api/schemas.py`
+requires all eight envelope fields: `eventId`, `timestamp`, `sessionId`,
+`userId`, `event_type`, `schemaVersion`, `requestId`, and `properties`.
+UUIDs must be lowercase v4 strings, timestamp must be a real ISO 8601 UTC
+date/time ending in `Z`, and schemaVersion is `1.0.0`. Session and user fields
+must be present but may be null; a non-null userId must match the planned HMAC
+pseudonym format. Properties must be a JSON object; extra envelope/batch keys
+are rejected. Invalid batches return HTTP 422, without partial acceptance.
+
+This verification stub is unauthenticated: a successful response proves neither
+identity nor persistence. It validates only the envelope, not each event's
+properties allowlist, event membership or business rules from
+`docs/telemetry/event-schemas.json`. Use controlled test data only and do not
+expose it as a production collector. Full validation and storage are deferred
+to the next phase. Only Backoffice has a TelemetryService; it routes through
+`/api/telemetry/events` and sends batches to the configured endpoint.
+
 ## Users and authentication
 
 Copy `.env.example` to `.env`, set `JWT_SECRET_KEY` to a secret generated with

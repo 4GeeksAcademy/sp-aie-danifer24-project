@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, StringConstraints, field_validator, model_validator
 
 
 NonEmptyString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
@@ -9,6 +9,44 @@ Office = Literal["Valencia", "Miami"]
 AssetCategory = Literal[
 	"hardware", "peripherals", "office_supplies", "training_materials"
 ]
+
+
+TelemetryUUID = Annotated[str, StringConstraints(
+	pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+)]
+TelemetryUserId = Annotated[str, StringConstraints(pattern=r"^u1_[a-f0-9]{64}$")]
+TelemetryTimestamp = Annotated[str, StringConstraints(
+	pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$",
+)]
+
+
+class TelemetryEvent(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	eventId: TelemetryUUID
+	timestamp: TelemetryTimestamp
+	sessionId: TelemetryUUID | None
+	userId: TelemetryUserId | None
+	event_type: Annotated[str, StringConstraints(pattern=r"^[a-z]+(?:_[a-z]+)+$", max_length=128)]
+	schemaVersion: Literal["1.0.0"]
+	requestId: TelemetryUUID
+	properties: dict[str, JsonValue]
+
+	@field_validator("timestamp")
+	@classmethod
+	def validate_timestamp(cls, value: str) -> str:
+		datetime.fromisoformat(value.replace("Z", "+00:00"))
+		return value
+
+
+class TelemetryBatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	events: list[TelemetryEvent] = Field(max_length=50)
+
+
+class TelemetryReceipt(BaseModel):
+	received: int = Field(ge=0)
 
 
 class AssetCreate(BaseModel):

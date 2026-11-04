@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AlertCircle, CheckCircle2, LoaderCircle, RefreshCw, Save } from "lucide-react";
 import { AccountSessionError, getCurrentAccount, updateMyProfile, type CurrentAccount, type Profile } from "@/lib/account";
+import { track } from "@/lib/telemetry";
 
 function profileFields(profile?: Profile | null) {
   return { name: profile?.name ?? "", phone: profile?.phone ?? "", address: profile?.address ?? "" };
@@ -22,17 +23,30 @@ export default function AccountProfilePage() {
 
   useEffect(() => {
     const controller = new AbortController();
+    const startedAt = performance.now();
     getCurrentAccount(controller.signal)
       .then((data) => {
         if (controller.signal.aborted) return;
         if (typeof data?.email !== "string" || !data.profile) throw new Error("El servicio devolvió datos de perfil incompletos. Inténtalo de nuevo.");
         setAccount(data);
         setFields(profileFields(data?.profile));
+        track("frontend_data_load_completed", {
+          section: "account_profile",
+          outcome: "ready",
+          duration_ms: Math.round(performance.now() - startedAt),
+        });
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
         if (error instanceof AccountSessionError) router.replace("/login");
-        else setError(error instanceof Error ? error.message : "No se pudo cargar tu perfil.");
+        else {
+          setError(error instanceof Error ? error.message : "No se pudo cargar tu perfil.");
+          track("frontend_data_load_completed", {
+            section: "account_profile",
+            outcome: "error",
+            duration_ms: Math.round(performance.now() - startedAt),
+          });
+        }
       })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();

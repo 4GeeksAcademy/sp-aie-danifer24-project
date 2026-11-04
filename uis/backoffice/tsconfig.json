@@ -20,7 +20,8 @@
     ],
     "paths": {
       "@/*": ["./*"],
-      "@legacy/*": ["../../src/*"]
+      "@legacy/*": ["../../src/*"],
+      "@packages/shared/*": ["../../packages/shared/*"]
     }
   },
   "include": [

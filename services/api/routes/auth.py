@@ -8,6 +8,7 @@ from services.api.services.profiles import get_profile_by_user_id
 from services.api.services.users import get_user_by_email
 from services.api.services.email import send_reset_email
 from services.api.services.passwords import InvalidResetTokenError, change_password, create_reset_token, password_matches, reset_password
+from services.api.services.telemetry import telemetry_user_id
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -65,6 +66,7 @@ def retrieve_authenticated_user(tables: UserTables, current_user: CurrentUser):
 	return AuthMeResponse(
 		email=current_user.email,
 		role=current_user.role,
+		telemetry_user_id=telemetry_user_id(current_user.id),
 		profile={
 			"name": profile.name,
 			"phone": profile.phone,

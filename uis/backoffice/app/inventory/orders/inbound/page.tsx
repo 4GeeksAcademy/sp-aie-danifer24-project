@@ -7,6 +7,7 @@ import {
   readableInventoryError,
 } from "../../../../lib/inventory";
 import { useInventoryAssets } from "../../../../hooks/useInventoryAssets";
+import { track } from "../../../../lib/telemetry";
 
 export default function InboundOrderPage() {
   const { assets, setAssets, loading, error: loadError, retryLoading } = useInventoryAssets();
@@ -29,14 +30,17 @@ export default function InboundOrderPage() {
 
     const parsedQuantity = Number(quantity);
     if (!selectedAsset) {
+      track("inventory_order_validation_failed", { order_type: "inbound", layer: "frontend", field: "product_id", reason_code: "required" });
       setFormError("Selecciona un producto.");
       return;
     }
     if (!Number.isSafeInteger(parsedQuantity) || parsedQuantity < 1) {
+      track("inventory_order_validation_failed", { order_type: "inbound", layer: "frontend", field: "quantity", reason_code: "out_of_range" });
       setFormError("La cantidad debe ser un entero mayor que cero.");
       return;
     }
     if (!supplier.trim()) {
+      track("inventory_order_validation_failed", { order_type: "inbound", layer: "frontend", field: "other", reason_code: "required" });
       setFormError("Indica el proveedor de la entrada.");
       return;
     }
@@ -82,7 +86,13 @@ export default function InboundOrderPage() {
         {loading && <div className="loading-state" role="status"><span className="spinner" /> Cargando productos…</div>}
         {!loading && loadError && <div className="empty-state inventory-error" role="alert"><span className="state-icon">!</span><h3>No se pudieron cargar los productos</h3><p>{loadError}</p><button className="btn btn-dark" type="button" onClick={retryLoading}>Reintentar</button></div>}
         {!loading && !loadError && assets.length === 0 && <div className="empty-state"><span className="state-icon">—</span><h3>No hay productos disponibles</h3><p>Registra un producto antes de crear una entrada.</p><Link className="btn btn-outline" href="/inventory/products">Ver productos</Link></div>}
-        {!loading && !loadError && assets.length > 0 && <form className="inventory-entry-form" onSubmit={submit}>
+        {!loading && !loadError && assets.length > 0 && <form className="inventory-entry-form" onInvalidCapture={(event) => {
+          const target = event.target;
+          if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) return;
+          const field = target.id === "inbound-asset" ? "product_id" : target.id === "inbound-quantity" ? "quantity" : target.id === "inbound-supplier" ? "supplier_id" : "other";
+          const reason_code = target.validity.valueMissing ? "required" : target.validity.badInput ? "invalid_type" : "out_of_range";
+          track("inventory_order_validation_failed", { order_type: "inbound", layer: "browser", field, reason_code });
+        }} onSubmit={submit}>
           <label htmlFor="inbound-asset">Producto
             <select id="inbound-asset" required value={assetId} onChange={(event) => { setAssetId(event.target.value); setFormError(""); setSuccess(""); }}>
               <option value="">Selecciona un producto</option>
