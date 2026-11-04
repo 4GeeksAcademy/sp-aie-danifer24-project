@@ -2,29 +2,28 @@
 
 ## Estado Actual (2026-11-04)
 
-Se ha completado una **instrumentación amplia de telemetría** que cubre:
+Hay una primera implementación cliente, **parcial y best-effort**, que usa el contrato `docs/telemetry/event-schemas.json`. No equivale a cobertura completa ni a persistencia. La validación de código también descarta eventos que no cumplen el contrato; una llamada a `track()` no garantiza que un evento se haya emitido.
 
 ### ✅ Piso Técnico Transversal (en todas las apps)
 
 1. **Page Views** (`backoffice_section_viewed`)
-   - Se registra automáticamente cuando navegas a secciones principales
-   - Captura: sección, tipo de entrada (direct/internal_link)
-   - Apps: Backoffice, Website, Tracker
+  - Se registra en Backoffice tras validar la sesión, con sección canónica y `entry_type: unknown` cuando no se conoce el origen.
+  - No se emite para Website o Tracker: el contrato exige un `userId` autenticado y su origen de navegación no está resuelto.
 
-2. **Latencias de API** (`api_request_completed`)
-   - Capturadas automáticamente en todas las llamadas HTTP
-   - Métrica: route_template, método HTTP, status code, duración en ms
-   - Invocado: Backoffice (inventory, auth, incidents, suppliers)
+2. **Respuestas HTTP** (`api_request_completed`)
+  - Emitidas en los clientes centrales de inventario, incidencias y proveedores del Backoffice.
+  - No cubre todas las llamadas HTTP ni los fallos de transporte: el evento requiere un código HTTP real (100–599); no se inventa `status_code: 0` cuando no hubo respuesta.
 
 3. **Errores No Capturados** (`frontend_unhandled_error`)
-   - Error Boundary: captura render errors en componentes
-   - window.onerror: errores globales de script
-   - unhandledrejection: promesas rechazadas sin manejo
-   - Métrica: fingerprint SHA-256 sanitizado, fuente (error_boundary/window_error/unhandled_rejection), app_version
+  - Error Boundary y listeners globales están instalados en Backoffice, Website y Tracker.
+  - El fingerprint se calcula en el navegador usando Web Crypto y solo a partir de la clase de error y nombres de bundle saneados; no se hashean mensajes ni stacks crudos.
+  - Se omite el evento si no existe una revisión de build hexadecimal de 7–40 caracteres, porque `unknown` no es válido para el schema.
 
-### ✅ Métricas Obligatorias de Negocio (Inventario)
+### ⏳ Métricas de Inventario y otros eventos de negocio
 
-Definidas en `packages/shared/telemetry-events.ts`:
+Los cinco eventos obligatorios están definidos en el contrato, pero **no se emiten todavía**. Su fuente debe ser el backend después del commit o cuando confirme el rechazo/cruce de negocio; no se deben simular desde el navegador. Faltan metadatos/modelo indicados en `telemetry-plan.md` (programa, categoría de negocio, coste, umbral y detección explícita de edición directa).
+
+El evento de oportunidad `inventory_order_validation_failed` se emite desde algunas validaciones de formularios de Backoffice, sin valores del formulario ni PII. Los eventos de login se emiten desde Backoffice; `session_expired` no se infiere de cualquier 401.
 
 1. **inbound_order_created** - Orden de entrada confirmada
 2. **outbound_order_created** - Orden de salida confirmada
@@ -34,23 +33,23 @@ Definidas en `packages/shared/telemetry-events.ts`:
 6. **inventory_order_validation_failed** - Validación fallida en formulario
 7. **login_attempted** / **login_succeeded** / **login_failed** - Autenticación
 8. **session_expired** - Sesión expirada
-9. **frontend_data_load_completed** - Carga de datos completada (ready/empty/error)
+9. **frontend_data_load_completed** - Contrato/helper disponibles; no hay instrumentación general activa de cargas
 
-Todas las métricas incluyen validaciones estrictas:
+Los eventos implementados pasan por validaciones estrictas antes de encolarse:
 - Allowlist de propiedades por evento
 - Enums cerrados para valores permitidos
 - Validación de moneda por oficina (EUR/Valencia, USD/Miami)
-- Sin PII directa (solo userId pseudonimizado con HMAC)
+- Sin propiedades no permitidas; el `userId` pseudonimizado HMAC lo entrega el backend y no se calcula en cliente
 
 ### 📦 Arquitectura
 
 **packages/shared/**
-- `telemetry-service.ts` - Cliente universal de telemetría, validación, cola en memoria, reintentos
+- `telemetry-service.ts` - Cliente universal de telemetría, validación, cola en memoria, reintentos best-effort y tentativa `sendBeacon` al ocultar/cerrar la página
 - `telemetry-events.ts` - Funciones helpers para eventos de negocio
 
 **uis/backoffice/, uis/website/, apps/talent-pipeline-tracker/**
-- `lib/telemetry-hooks.tsx` - Hooks React para capturar page views, errores, cargas
-- `app/client-layout.tsx` - ClientLayout que envuelve la app con Error Boundary y hooks
+- `lib/telemetry-hooks.tsx` - Error Boundary/listeners y utilidades de API/carga; no hay captura general activa de cargas ni page views públicos
+- `app/client-layout.tsx` - ClientLayout que envuelve la app con Error Boundary y listeners globales
 - `app/api/telemetry/events/route.ts` - Proxy Next.js que reenvia eventos al backend
 
 **services/api/**
@@ -141,10 +140,12 @@ El `TelemetryService` aplica **antes** de enviar:
 - ✅ Enums cerrados (solo valores permitidos)
 - ✅ Validaciones numéricas (rango, SafeInteger, etc.)
 - ✅ Correlación moneda-oficina (EUR en Valencia, USD en Miami)
-- ✅ UserId pseudonimizado (HMAC-SHA256 con clave privada)
-- ✅ SessionId aleatorio persistente en sesión
-- ✅ Reintentos exponenciales (500ms, 1s, 2s)
-- ✅ sendBeacon() al cerrar/ocultar página
+- ✅ Formato del `userId` pseudonimizado suministrado por el backend; no se calcula ni firma en el cliente
+- SessionId UUID aleatorio guardado en `sessionStorage` mientras la sesión del navegador esté disponible
+- Reintentos exponenciales acotados (500ms, 1s, 2s); la cola es en memoria y no sobrevive a una recarga
+- `sendBeacon()` intenta enviar al ocultar/cerrar la página; `true` solo indica aceptación local del navegador, no ACK del servidor
+
+La validación es estructural y no sustituye la verificación semántica/catálogos del backend. Los eventos inválidos se descartan silenciosamente para no interferir con la aplicación; los errores de telemetría no deben bloquear el trabajo del usuario.
 
 ### 📡 Backend Recibe
 
@@ -164,4 +165,4 @@ El endpoint `POST /telemetry/events` en FastAPI:
 
 ---
 
-**Validado:** TypeScript, ESLint, Build (Backoffice, Website), Network en DevTools
+**Estado de verificación:** TypeScript/ESLint/Build deben ejecutarse tras los cambios actuales. La prueba Network solo confirma el POST/ACK del stub; no demuestra persistencia, entrega durable ni que todos los eventos se emitan.

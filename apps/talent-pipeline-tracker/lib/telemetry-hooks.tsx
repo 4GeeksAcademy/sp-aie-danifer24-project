@@ -4,39 +4,19 @@
 
 "use client";
 
-import { useEffect, ReactNode, useCallback } from "react";
-import { usePathname } from "next/navigation";
-import crypto from "crypto";
+import { useEffect, ReactNode } from "react";
+import { createErrorFingerprint, getTelemetryAppVersion } from "@packages/shared/telemetry-sanitization";
 import { telemetryService } from "@packages/shared/telemetry-service";
 
-export function useTelemetryPageView(sectionMap?: Record<string, string>) {
-  const pathname = usePathname();
-  const defaultMap: Record<string, string> = {
-    "/": "home",
-    "/candidates": "candidates",
-  };
-
-  const map = sectionMap ?? defaultMap;
-
-  useEffect(() => {
-    const section = map[pathname] ?? "unknown";
-    const entryType = pathname === "/" ? "direct" : "internal_link";
-
-    telemetryService.track("backoffice_section_viewed", {
-      section,
-      entry_type: entryType,
-    });
-  }, [pathname, map]);
-}
-
 export function useGlobalErrorHandlers(appVersion?: string) {
-  const version = appVersion ?? process.env.NEXT_PUBLIC_BUILD_SHA?.slice(0, 7) ?? "unknown";
+  const version = appVersion ?? getTelemetryAppVersion();
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const handleWindowError = (event: ErrorEvent) => {
-      const fingerprint = createErrorFingerprint(event.error?.stack ?? event.message ?? "unknown");
+    const handleWindowError = async (event: ErrorEvent) => {
+      const fingerprint = await createErrorFingerprint(event.error);
+      if (!fingerprint || !version) return;
       telemetryService.track("frontend_unhandled_error", {
         section: "unknown",
         source: "window_error",
@@ -46,9 +26,9 @@ export function useGlobalErrorHandlers(appVersion?: string) {
       });
     };
 
-    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      const message = event.reason?.message ?? String(event.reason) ?? "unknown";
-      const fingerprint = createErrorFingerprint(message);
+    const handleUnhandledRejection = async (event: PromiseRejectionEvent) => {
+      const fingerprint = await createErrorFingerprint(event.reason);
+      if (!fingerprint || !version) return;
       telemetryService.track("frontend_unhandled_error", {
         section: "unknown",
         source: "unhandled_rejection",
@@ -68,16 +48,6 @@ export function useGlobalErrorHandlers(appVersion?: string) {
   }, [version]);
 }
 
-function createErrorFingerprint(stackOrMessage: string): string {
-  const sanitized = (stackOrMessage ?? "unknown")
-    .split("\n")
-    .slice(0, 3)
-    .map((line) => line.replace(/\d+/g, "N").replace(/\//g, "/").replace(/\\/g, "\\"))
-    .join(" | ");
-  const hash = crypto.createHash("sha256").update(sanitized).digest("hex");
-  return hash;
-}
-
 interface ErrorBoundaryProps {
   children: ReactNode;
   section?: string;
@@ -90,12 +60,9 @@ interface ErrorBoundaryState {
 }
 
 export class TelemetryErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  private appVersion: string;
-
   constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false, error: null };
-    this.appVersion = process.env.NEXT_PUBLIC_BUILD_SHA?.slice(0, 7) ?? process.env.NEXT_PUBLIC_BUILD_ID?.slice(0, 7) ?? "unknown";
   }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
@@ -103,25 +70,19 @@ export class TelemetryErrorBoundary extends React.Component<ErrorBoundaryProps, 
   }
 
   componentDidCatch(error: Error) {
-    const section = this.props.section ?? "unknown";
-    const fingerprint = this.createFingerprint(error);
+    void this.trackError(error);
+  }
+
+  private async trackError(error: Error) {
+    const [fingerprint, appVersion] = await Promise.all([createErrorFingerprint(error), getTelemetryAppVersion()]);
+    if (!fingerprint || !appVersion) return;
     telemetryService.track("frontend_unhandled_error", {
-      section,
+      section: "unknown",
       source: "error_boundary",
       error_code: "render_error",
       fingerprint,
-      app_version: this.appVersion,
+      app_version: appVersion,
     });
-  }
-
-  private createFingerprint(error: Error): string {
-    const sanitized = (error.stack ?? error.message ?? "unknown")
-      .split("\n")
-      .slice(0, 3)
-      .map((line) => line.replace(/\d+/g, "N").replace(/\//g, "/").replace(/\\/g, "\\"))
-      .join(" | ");
-    const hash = crypto.createHash("sha256").update(sanitized).digest("hex");
-    return hash;
   }
 
   render() {

@@ -17,8 +17,10 @@ npm --prefix uis/backoffice run dev -- --port 3001
 
 1. http://127.0.0.1:3001
 2. F12 → Network → Filtrar por "telemetry"
-3. Navegar entre secciones
-4. Ver requests POST a `/api/telemetry/events` con status **200**
+3. Iniciar sesión y abrir una sección protegida de Backoffice, o ejecutar una acción que tenga instrumentación explícita.
+4. Ver requests POST a `/api/telemetry/events`. El proxy de desarrollo puede devolver **200** con un ACK del stub.
+
+No todas las navegaciones ni llamadas HTTP generan eventos. El `200` y la respuesta `{"received": N}` solo indican que el stub recibió el batch; no prueban persistencia ni entrega durable. Las vistas de sección se registran tras validar sesión. Los eventos obligatorios de inventario aún no se emiten.
 
 ### 3. Ejemplo de respuesta esperada
 
@@ -114,29 +116,26 @@ fetch('/api/telemetry/events', {
 
 ---
 
-## Validaciones aplicadas automáticamente
+## Validaciones del cliente (alcance limitado)
 
-✅ **Allowlist:** Solo propiedades permitidas  
-✅ **Enums:** Solo valores cerrados  
-✅ **Tipos:** string, number, boolean, null  
-✅ **Tamaño:** strings máx 200 caracteres  
-✅ **Moneda:** EUR si office=valencia, USD si office=miami  
-✅ **Sin PII:** Nombres, emails, tokens rechazados  
-✅ **UserId:** Pseudonimizado con HMAC-SHA256  
+El cliente valida las propiedades, tipos, enums, límites y correlación de moneda/oficina de los eventos implementados. Rechaza propiedades desconocidas y descarta eventos que no pasan la validación; no es un saneador general de PII. La validación de servidor y el schema siguen siendo necesarios.
+
+`userId` es un pseudónimo HMAC generado por el backend y obtenido del endpoint de identidad autenticada; no se calcula ni firma en el navegador. La pseudonimización no equivale a anonimización.
+
+La cola/reintentos están en memoria y son best-effort. `sendBeacon()` solo intenta enviar al ocultar/cerrar la página; su aceptación local no confirma recepción del servidor.
 
 ---
 
 ## Referencia: Event Types disponibles
 
-| Event | Props | Obliga UserId |
-|-------|-------|--------------|
-| `backoffice_section_viewed` | section, entry_type | ✅ |
-| `api_request_completed` | route_template, method, status_code, duration_ms | ❌ |
-| `frontend_unhandled_error` | section, source, error_code, fingerprint, app_version | ❌ |
-| `inbound_order_created` | office, product_id, ... | ✅ |
-| `outbound_order_created` | office, product_id, ... | ✅ |
-| `login_attempted` | source | ❌ |
-| `login_succeeded` | source, duration_ms | ✅ |
-| `login_failed` | reason_code, layer, duration_ms | ❌ |
+| Event | Estado/captura actual |
+|-------|-------------------------|
+| `backoffice_section_viewed` | Backoffice, tras validar sesión; requiere identidad pseudonimizada |
+| `api_request_completed` | Algunas llamadas centrales de inventario, incidencias y proveedores; no cobertura global |
+| `frontend_unhandled_error` | Error Boundary y listeners globales en las tres apps; puede omitirse si falta fingerprint o versión válida |
+| `inventory_order_validation_failed` | Algunas validaciones de formularios de Backoffice |
+| `login_attempted`, `login_succeeded`, `login_failed` | Flujos de login instrumentados de Backoffice |
+| Eventos obligatorios de inventario | Definidos en contrato, pero no emitidos aún; deben originarse en backend |
+| `frontend_data_load_completed` | Definido/validado, pero sin instrumentación activa general |
 
 Referencia completa: [TELEMETRY-FRONTEND.md](./TELEMETRY-FRONTEND.md)

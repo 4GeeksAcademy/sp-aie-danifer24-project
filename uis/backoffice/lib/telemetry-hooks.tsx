@@ -5,45 +5,9 @@
 
 "use client";
 
-import { useEffect, ReactNode, useCallback } from "react";
-import { usePathname } from "next/navigation";
-import crypto from "crypto";
+import { useEffect, ReactNode, useCallback, useRef } from "react";
+import { createErrorFingerprint, getTelemetryAppVersion } from "@packages/shared/telemetry-sanitization";
 import { telemetryService } from "@packages/shared/telemetry-service";
-
-/**
- * Hook: Capturar page views cuando accedes a secciones principales
- */
-export function useTelemetryPageView(sectionMap?: Record<string, string>) {
-  const pathname = usePathname();
-  const defaultMap: Record<string, string> = {
-    "/": "home",
-    "/inventory/products": "inventory_products",
-    "/inventory/orders/inbound": "inventory_inbound",
-    "/inventory/orders/outbound": "inventory_outbound",
-    "/inventory/orders": "inventory_orders",
-    "/suppliers": "suppliers",
-    "/incidents": "incidents",
-    "/incidents/new": "incident_new",
-    "/account/profile": "account_profile",
-    "/account/change-password": "account_password",
-    "/login": "login",
-    "/register": "register",
-    "/forgot-password": "password_recovery",
-    "/reset-password": "password_reset",
-  };
-
-  const map = sectionMap ?? defaultMap;
-
-  useEffect(() => {
-    const section = map[pathname] ?? "unknown";
-    const entryType = pathname === "/" ? "direct" : "internal_link";
-
-    telemetryService.track("backoffice_section_viewed", {
-      section,
-      entry_type: entryType,
-    });
-  }, [pathname, map]);
-}
 
 /**
  * Hook: Capturar latencias de llamadas API
@@ -63,13 +27,7 @@ export function useApiTelemetry() {
         });
         return response;
       } catch (error) {
-        const duration = Math.round(performance.now() - startTime);
-        telemetryService.track("api_request_completed", {
-          route_template: routeTemplate,
-          method: method.toUpperCase(),
-          status_code: 0,
-          duration_ms: duration,
-        });
+        // No HTTP response exists, so this is not api_request_completed.
         throw error;
       }
     };
@@ -80,7 +38,7 @@ export function useApiTelemetry() {
  * Hook: Capturar cargas de datos en secciones
  */
 export function useTelemetryDataLoad(section: string) {
-  const startTimeRef = { current: null as number | null };
+  const startTimeRef = useRef<number | null>(null);
 
   return {
     onLoadStart: () => {
@@ -114,12 +72,9 @@ interface ErrorBoundaryState {
 }
 
 export class TelemetryErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  private appVersion: string;
-
   constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false, error: null };
-    this.appVersion = process.env.NEXT_PUBLIC_BUILD_SHA?.slice(0, 7) ?? process.env.NEXT_PUBLIC_BUILD_ID?.slice(0, 7) ?? "unknown";
   }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
@@ -127,25 +82,19 @@ export class TelemetryErrorBoundary extends React.Component<ErrorBoundaryProps, 
   }
 
   componentDidCatch(error: Error) {
-    const section = this.props.section ?? "unknown";
-    const fingerprint = this.createFingerprint(error);
+    void this.trackError(error);
+  }
+
+  private async trackError(error: Error) {
+    const [fingerprint, appVersion] = await Promise.all([createErrorFingerprint(error), getTelemetryAppVersion()]);
+    if (!fingerprint || !appVersion) return;
     telemetryService.track("frontend_unhandled_error", {
-      section,
+      section: "unknown",
       source: "error_boundary",
       error_code: "render_error",
       fingerprint,
-      app_version: this.appVersion,
+      app_version: appVersion,
     });
-  }
-
-  private createFingerprint(error: Error): string {
-    const sanitized = (error.stack ?? error.message ?? "unknown")
-      .split("\n")
-      .slice(0, 3)
-      .map((line) => line.replace(/\d+/g, "N").replace(/\//g, "/").replace(/\\/g, "\\"))
-      .join(" | ");
-    const hash = crypto.createHash("sha256").update(sanitized).digest("hex");
-    return hash;
   }
 
   render() {
@@ -160,13 +109,14 @@ export class TelemetryErrorBoundary extends React.Component<ErrorBoundaryProps, 
  * Hook: Capturar errores globales no capturados
  */
 export function useGlobalErrorHandlers(appVersion?: string) {
-  const version = appVersion ?? process.env.NEXT_PUBLIC_BUILD_SHA?.slice(0, 7) ?? "unknown";
+  const version = appVersion ?? getTelemetryAppVersion();
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const handleWindowError = (event: ErrorEvent) => {
-      const fingerprint = createErrorFingerprint(event.error?.stack ?? event.message ?? "unknown");
+    const handleWindowError = async (event: ErrorEvent) => {
+      const fingerprint = await createErrorFingerprint(event.error);
+      if (!fingerprint || !version) return;
       telemetryService.track("frontend_unhandled_error", {
         section: "unknown",
         source: "window_error",
@@ -176,9 +126,9 @@ export function useGlobalErrorHandlers(appVersion?: string) {
       });
     };
 
-    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      const message = event.reason?.message ?? String(event.reason) ?? "unknown";
-      const fingerprint = createErrorFingerprint(message);
+    const handleUnhandledRejection = async (event: PromiseRejectionEvent) => {
+      const fingerprint = await createErrorFingerprint(event.reason);
+      if (!fingerprint || !version) return;
       telemetryService.track("frontend_unhandled_error", {
         section: "unknown",
         source: "unhandled_rejection",
@@ -196,16 +146,6 @@ export function useGlobalErrorHandlers(appVersion?: string) {
       window.removeEventListener("unhandledrejection", handleUnhandledRejection);
     };
   }, [version]);
-}
-
-function createErrorFingerprint(stackOrMessage: string): string {
-  const sanitized = (stackOrMessage ?? "unknown")
-    .split("\n")
-    .slice(0, 3)
-    .map((line) => line.replace(/\d+/g, "N").replace(/\//g, "/").replace(/\\/g, "\\"))
-    .join(" | ");
-  const hash = crypto.createHash("sha256").update(sanitized).digest("hex");
-  return hash;
 }
 
 import React from "react";

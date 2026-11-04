@@ -208,6 +208,7 @@ async function authenticatedUserId(): Promise<string | null> {
 function cleanProperties(eventType: string, properties: Record<string, unknown>): Record<string, TelemetryValue> | null {
   const allowlist = allowedProperties[eventType];
   if (!allowlist || !properties || typeof properties !== "object" || Array.isArray(properties)) return null;
+  if (Object.keys(properties).some((key) => !allowlist.includes(key))) return null;
   const result: Record<string, TelemetryValue> = {};
   for (const key of allowlist) {
     if (!(key in properties)) continue;
@@ -217,6 +218,9 @@ function cleanProperties(eventType: string, properties: Record<string, unknown>)
       const enumValues = propertyEnums[`${eventType}.${key}`];
       if (enumValues && !enumValues.includes(value as string | number)) return null;
       if (typeof value === "number" && !validNumber(eventType, key, value)) return null;
+      if (key === "programme_id" && (typeof value !== "string" || !/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(value) || value.length > 64)) return null;
+      if (key === "fingerprint" && (typeof value !== "string" || !/^[a-f0-9]{64}$/.test(value))) return null;
+      if (key === "app_version" && (typeof value !== "string" || !/^[a-f0-9]{7,40}$/.test(value))) return null;
       result[key] = value as TelemetryValue;
     } else {
       return null;
@@ -225,6 +229,7 @@ function cleanProperties(eventType: string, properties: Record<string, unknown>)
   if (requiredProperties[eventType].some((key) => !(key in result))) return null;
   if (result.office === "valencia" && result.currency !== "EUR") return null;
   if (result.office === "miami" && result.currency !== "USD") return null;
+  if (eventType === "frontend_data_load_completed" && result.outcome !== "error" && "reason_code" in result) return null;
   return result;
 }
 
