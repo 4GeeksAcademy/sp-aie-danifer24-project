@@ -33,6 +33,14 @@
 
 # Progreso del proyecto
 
+## Pipeline de analisis de telemetria operacional (2026-11-04)
+
+- Creado `services/telemetry/analisys.py` con metricas Pandas independientes y sin mutacion del DataFrame: volumen de eventos por tipo/dia UTC, volumen de solicitudes API por ruta/metodo/dia, tasa de errores HTTP 5xx por ruta/dia, latencia API media/maxima por ruta/dia y errores de carga frontend por seccion/motivo/dia.
+- Los eventos se filtran por `event_type`, sus `tags` se normalizan y los timestamps se convierten a datetime UTC antes de agrupar; las salidas son listas de diccionarios serializables. No se usan loops para calcular metricas ni dimensiones de negocio.
+- Declarada Pandas en `pyproject.toml` y `services/api/requirements.txt`, con resolucion reflejada en `uv.lock`.
+- Pruebas en `services/telemetry/tests/test_analisys.py`: seis casos correctos, incluidos limite de dia UTC, tasa 5xx, errores frontend, determinismo, no mutacion e input vacio.
+- Pendiente: implementar carga acotada por rango/event_type desde SQL y `GET /telemetry/report` con cache; este avance solo cubre el pipeline solicitado en fase 1 y sus funciones consumen un DataFrame ya cargado.
+
 ## Captura de telemetria: TelemetryService de Backoffice (2026-11-03)
 
 - Añadido `uis/backoffice/lib/telemetry.ts`: API unica `track()`, envelope automatico, allowlists y validaciones locales, cola en memoria (20 eventos/10 s), proxy same-origin, tres reintentos exponenciales y `sendBeacon` al ocultar/cerrar.
