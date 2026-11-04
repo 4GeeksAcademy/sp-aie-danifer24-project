@@ -13,6 +13,14 @@
 - Script demo creado: `scripts/telemetry-demo.sh` arranca Backend + Backoffice para verificar events en DevTools Network.
 - Pendiente: persistencia de eventos en base de datos, reportes ejecutivos, alertas por umbrales, seeds de datos de prueba para validar flujos de inventario end-to-end.
 
+## Persistencia de telemetría en Supabase (2026-11-04)
+
+- Implementado `POST /telemetry/events` con validación individual de cada evento contra `docs/telemetry/event-schemas.json`, persistencia bulk, idempotencia por `eventId` y respuesta `received/stored/rejected`; `properties` se conserva en `tags` JSONB. Frontend intacto.
+- Aplicada `services/api/migrations/001_telemetry_events.sql` a Supabase. Verificado: índice GIN de `tags` y B-tree de timestamp/event_type; índices compuestos preexistentes preservados; RLS activada; roles `anon` y `authenticated` sin grants, `service_role` limitado a SELECT/INSERT; triggers UPDATE/DELETE/TRUNCATE activos; tabla sigue con 0 filas.
+- Probados los tres triggers de inmutabilidad mediante operaciones temporales con rollback; ninguna fila de prueba quedó persistida.
+- Verificación local: suite backend 60 passed y 7 subtests, un warning preexistente de Starlette/httpx; `uv lock --check`, `compileall`, `git diff --check` y revisión del editor correctos.
+- Pendiente: revisión final del diff/alcance y confirmación de despliegue del backend. No se creó commit.
+
 ## Captura de telemetria: TelemetryService de Backoffice (2026-11-03)
 
 - Añadido `uis/backoffice/lib/telemetry.ts`: API unica `track()`, envelope automatico, allowlists y validaciones locales, cola en memoria (20 eventos/10 s), proxy same-origin, reintentos y `sendBeacon` al ocultar/cerrar.
