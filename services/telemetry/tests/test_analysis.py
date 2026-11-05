@@ -1,6 +1,6 @@
 import pandas as pd
 
-from services.telemetry.analisys import (
+from services.telemetry.analysis import (
     api_request_latency,
     api_request_server_errors,
     api_request_volume,

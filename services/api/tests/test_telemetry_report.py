@@ -127,7 +127,7 @@ def test_report_rejects_invalid_or_reversed_ranges(api):
 
 
 def test_error_rate_by_type_counts_catalogued_operational_errors():
-    from services.telemetry.analisys import error_rate_by_type
+    from services.telemetry.analysis import error_rate_by_type
 
     start = datetime(2026, 11, 1, tzinfo=UTC)
     end = datetime(2026, 11, 2, tzinfo=UTC)
@@ -139,7 +139,7 @@ def test_error_rate_by_type_counts_catalogued_operational_errors():
             {"timestamp": start, "event_type": "frontend_unhandled_error", "tags": {}},
         ]
     )
-    with patch("services.telemetry.analisys._load_events", return_value=frame):
+    with patch("services.telemetry.analysis._load_events", return_value=frame):
         result = error_rate_by_type(object(), start, end)
 
     assert result == [

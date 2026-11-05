@@ -17,7 +17,7 @@ from services.api.database import get_db
 from services.api.models import TelemetryEventRecord
 from services.api.schemas import TelemetryBatch, TelemetryEvent, TelemetryReceipt
 from services.api.telemetry_contract import validate_telemetry_contract
-from services.telemetry.analisys import error_rate_by_type, events_per_day
+from services.telemetry.analysis import error_rate_by_type, events_per_day
 
 
 load_dotenv(Path(__file__).resolve().parents[3] / ".env")
