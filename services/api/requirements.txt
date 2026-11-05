@@ -1,6 +1,7 @@
 fastapi>=0.115,<1.0
 jsonschema[format]>=4.23,<5.0
 libpass[bcrypt]>=1.9.3
+pandas>=2.2,<4.0
 pydantic>=2.0,<3.0
 python-dotenv>=1.0,<2.0
 python-jose[cryptography]>=3.5.0

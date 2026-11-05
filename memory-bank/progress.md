@@ -33,6 +33,24 @@
 
 # Progreso del proyecto
 
+## Reporte operacional de telemetria (2026-11-04)
+
+- Verificado y corregido el nombre del modulo a `services/telemetry/analysis.py` y el test a `test_analysis.py`; el endpoint `GET /telemetry/report` permanece en `services/api/routes/telemetry.py`.
+- Añadido `GET /telemetry/report` con `start_date`/`end_date` ISO 8601 opcionales, normalizacion a UTC, periodo predeterminado de siete dias y validacion de rango no vacio.
+- Implementado cache in-process con TTL de 60 segundos, clave por parametros de ventana normalizados (incluidos parametros omitidos) y respuestas copiadas al entrar/salir del cache.
+- El endpoint delega el calculo en `services/telemetry/analysis.py`. `events_per_day` y `error_rate_by_type` cargan solo columnas necesarias con filtros SQL de timestamp `[inicio, fin)` y event_type para errores; calculan grupos diarios tras convertir timestamps a datetime UTC.
+- El JSON contiene `period.from/to` y `metrics.events_per_day` / `metrics.error_rate_by_type`. La tasa tecnica clasifica HTTP 5xx, cargas frontend con outcome error y eventos frontend no manejados; no incluye metricas de negocio.
+- Pruebas nuevas verifican limites temporales, resultado JSON, cache con fechas explicitas y predeterminadas, fechas invalidas/invertidas y tasas por catalogo. Suite backend completa: 67 tests y 7 subtests correctos; un warning preexistente de Starlette/httpx.
+- Pendiente: commit de esta fase; cambios ajenos preexistentes permanecen fuera de alcance.
+
+## Pipeline de analisis de telemetria operacional (2026-11-04)
+
+- Creado `services/telemetry/analysis.py` con metricas Pandas independientes y sin mutacion del DataFrame: volumen de eventos por tipo/dia UTC, volumen de solicitudes API por ruta/metodo/dia, tasa de errores HTTP 5xx por ruta/dia, latencia API media/maxima por ruta/dia y errores de carga frontend por seccion/motivo/dia.
+- Los eventos se filtran por `event_type`, sus `tags` se normalizan y los timestamps se convierten a datetime UTC antes de agrupar; las salidas son listas de diccionarios serializables. No se usan loops para calcular metricas ni dimensiones de negocio.
+- Declarada Pandas en `pyproject.toml` y `services/api/requirements.txt`, con resolucion reflejada en `uv.lock`.
+- Pruebas en `services/telemetry/tests/test_analysis.py`: seis casos correctos, incluidos limite de dia UTC, tasa 5xx, errores frontend, determinismo, no mutacion e input vacio.
+- Pendiente: implementar carga acotada por rango/event_type desde SQL y `GET /telemetry/report` con cache; este avance solo cubre el pipeline solicitado en fase 1 y sus funciones consumen un DataFrame ya cargado.
+
 ## Captura de telemetria: TelemetryService de Backoffice (2026-11-03)
 
 - Añadido `uis/backoffice/lib/telemetry.ts`: API unica `track()`, envelope automatico, allowlists y validaciones locales, cola en memoria (20 eventos/10 s), proxy same-origin, tres reintentos exponenciales y `sendBeacon` al ocultar/cerrar.
