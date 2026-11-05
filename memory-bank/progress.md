@@ -33,6 +33,29 @@
 
 # Progreso del proyecto
 
+## API de reporting para el pipeline de desempeño (2026-11-05)
+
+- Añadido `services/reporting/` como módulo separado de `services/telemetry/`, con router autenticado por la dependencia existente `get_current_user` y schemas Pydantic para auditoría, disparo manual y feed de KPIs. Registrado en `services/api/main.py`; se conserva el envelope de errores común.
+- Implementados `GET /reporting/pipeline-runs/latest`, `POST /reporting/pipeline-runs` y `GET /reporting/weekly-office-program-performance`. El último run incluye `flow_run_id` (el pipeline usa el mismo identificador Prefect en `run_id`); el feed entrega `{week_start, entries}` con las dimensiones y métricas del briefing.
+- Consultas SQL de reporting encapsuladas en `data/pipelines/reporting_store.py`; el disparo delegado a `data/pipelines/prefect_client.py` solicita el deployment configurado por `BUSINESS_PERFORMANCE_DEPLOYMENT` (por defecto `weekly-office-program-performance/weekly`) y no ejecuta ETL dentro de FastAPI. Prefect se declara también para la imagen/runtime de API.
+- Pruebas autenticadas nuevas cubren 401 sin token, respuesta y 404 de auditoría, 202 y errores 422/503 al disparar, serialización/contenido del feed KPI y solicitud mockeada al deployment configurable. No se ejecutó un deployment real.
+- Validación: suite conjunta API + pipeline, 86 pruebas y 7 subtests correctos; `compileall`, `uv lock --check` y `git diff --check` correctos. Persiste un warning no bloqueante preexistente de Starlette/httpx.
+- Pendiente antes de desplegar: configurar `BUSINESS_PERFORMANCE_DEPLOYMENT` con un deployment Prefect realmente creado, y suministrar a la API acceso de solo lectura a reporting además de las credenciales/URL del servidor Prefect. No se verificó una llamada externa al deployment ni se ejecutó ETL.
+
+## Fase 4: ejecución por CLI y frecuencia de reporting (2026-11-05)
+
+- Confirmado el punto de entrada `if __name__ == "__main__": main()` en `data/pipelines/pipeline.py` y documentado el comando directo `uv run python data/pipelines/pipeline.py [YYYY-MM-DD]` en comentario y `data/pipelines/PIPELINE_DESIGN.md`.
+- Documentada la frecuencia prevista: consolidación semanal cada lunes por la mañana UTC. La hora exacta queda por configurar en el deployment/scheduler de Prefect; el CLI manual no crea un calendario.
+- Validación local: `uv run python data/pipelines/pipeline.py --help`, 11 pruebas, `compileall`, `uv lock --check` y `git diff --check` correctos.
+- Pendiente verificar ejecución ETL completa contra Supabase: el `.env` actual solo expone por nombre `DATABASE_URL`, no `TELEMETRY_DATABASE_URL`, `REPORTING_DATABASE_URL` ni `TELEMETRY_DATABASE_READ_ONLY`. No se ejecutó una carga parcial ni se asumieron credenciales/roles; hacen falta variables de origen y destino con permisos adecuados.
+
+## Fase 3: idempotencia y auditoría del pipeline Prefect
+
+- La carga reconcilia la partición semanal dentro de una transacción protegida por lock: hace `UPSERT` usando la restricción única `(office, programme_id, week_start)` y elimina únicamente claves obsoletas. Las filas con métricas idénticas conservan su `id` y `computed_at`, por lo que reruns idénticos no cambian el resultado de destino.
+- `reporting.pipeline_runs` registra inicio UTC, fin, cantidad procesada y estado final. En fallos críticos guarda tipo y detalle sanitizado (enmascara contraseñas PostgreSQL y limita el mensaje); la carga actualiza datos y auditoría de éxito en la misma transacción. Fallos del artefacto de evaluación, que es opcional, se registran en el log sin cambiar el éxito ETL.
+- Añadidas pruebas para la sanitización del error y la estrategia de upsert/reconciliación. Validación focal: 11 pruebas correctas; también pasan `compileall`, `uv lock --check`, CLI `--help` y `git diff --check`.
+- Pendiente: aplicar la migración y validar contra PostgreSQL en un entorno autorizado; no se conectó a una base ni se ejecutó la migración. Las pruebas de la estrategia SQL son unitarias/inspección de fuente, no una prueba de integración.
+
 ## Fase 2: resiliencia del pipeline Prefect (2026-11-05)
 
 - Añadida política de reintentos documentada para cada task con acceso externo: inicio de auditoría (1 reintento/1 s), extracción (3 reintentos/1, 5 y 15 s), carga idempotente (3 reintentos/1, 5 y 15 s) y persistencia de fallo (2 reintentos/1 y 5 s). Los comentarios explican la tolerancia a fallos transitorios, seguridad de repetición y límites de espera.
