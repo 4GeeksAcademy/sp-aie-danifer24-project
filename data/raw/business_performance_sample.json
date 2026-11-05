@@ -1,0 +1,25 @@
+[
+  {
+    "event_id": "sample-inbound-1",
+    "event_type": "inbound_order_created",
+    "timestamp": "2026-11-02T09:00:00Z",
+    "tags": {
+      "office": "valencia",
+      "programme_id": "ventas-b2b",
+      "currency": "EUR",
+      "unit_cost": 12.5,
+      "quantity": 4
+    }
+  },
+  {
+    "event_id": "sample-outbound-1",
+    "event_type": "outbound_order_created",
+    "timestamp": "2026-11-03T10:00:00Z",
+    "tags": {
+      "office": "valencia",
+      "programme_id": "ventas-b2b",
+      "currency": "EUR",
+      "quantity": 2
+    }
+  }
+]

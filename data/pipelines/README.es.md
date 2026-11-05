@@ -1,8 +1,25 @@
-# Carpeta `data/pipelines`
+# Pipeline semanal de desempeño de negocio Nexova
 
-Esta carpeta agrupa **todos los pipelines de datos del monorepo** relacionados con la compañía: procesos de ingesta, ETL/ELT, limpieza, transformación y carga hacia sistemas analíticos o de producción.
+`pipeline.py` es el punto de entrada Prefect 3 del flow `weekly_office_program_performance`. Contiene tasks independientes para resolver la semana, registrar la corrida, extraer eventos, transformar KPIs, publicar la partición y crear un resumen opcional de evaluación.
 
-Cada subcarpeta o archivo dentro de `data/pipelines/` debe representar **un pipeline o conjunto de jobs** (por ejemplo `sales-etl`, `telemetry-stream`, `customer-segmentation`) e incluir la configuración necesaria (scripts, orquestación, conectores, esquemas, etc.).
+## Ejecución local
 
-- **Propósito principal**: unificar en un único lugar la lógica de movimiento y transformación de datos que soporta las aplicaciones y analíticas de la compañía.
-- **Recomendación**: documenta aquí los pipelines que vayas añadiendo, describiendo su objetivo, orígenes/destinos de datos, dependencias y cómo ejecutarlos en desarrollo, pruebas y producción.
+Primero aplica `migrations/001_reporting_weekly_office_program_performance.sql` a PostgreSQL. Configura credenciales separadas:
+
+- `TELEMETRY_DATABASE_URL`: rol PostgreSQL de solo lectura para `public.telemetry_events`.
+- `TELEMETRY_DATABASE_READ_ONLY=true`: confirmación explícita de que el rol de origen es de solo lectura.
+- `REPORTING_DATABASE_URL`: credenciales PostgreSQL con escritura en el esquema `reporting`.
+
+Ejecuta:
+
+```bash
+uv run python -m data.pipelines.pipeline [YYYY-MM-DD]
+# o, con el proyecto instalado:
+uv run business-performance-pipeline [YYYY-MM-DD]
+```
+
+La fecha opcional debe ser lunes ISO. Sin fecha, se usa la última semana UTC completada. El artefacto de evaluación se guarda en `data/eval/` y no es crítico.
+
+Cada registro de auditoría se vincula al ID de la corrida Prefect. La extracción consulta solo los cuatro tipos de evento aprobados. La transformación usa el catálogo Nexova y moneda local de cada oficina; la carga reemplaza transaccionalmente la partición semanal. La fuente de telemetría nunca se modifica. La task de transformación cachea resultados una hora; extracción y carga tienen reintentos Prefect.
+
+Los datos sintéticos están en `data/raw/business_performance_sample.json`; las pruebas de transformación, en `data/pipelines/tests/`.

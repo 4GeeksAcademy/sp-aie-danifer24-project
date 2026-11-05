@@ -33,6 +33,59 @@
 
 # Progreso del proyecto
 
+## API de reporting para el pipeline de desempeño (2026-11-05)
+
+- Añadido `services/reporting/` como módulo separado de `services/telemetry/`, con router autenticado por la dependencia existente `get_current_user` y schemas Pydantic para auditoría, disparo manual y feed de KPIs. Registrado en `services/api/main.py`; se conserva el envelope de errores común.
+- Implementados `GET /reporting/pipeline-runs/latest`, `POST /reporting/pipeline-runs` y `GET /reporting/weekly-office-program-performance`. El último run incluye `flow_run_id` (el pipeline usa el mismo identificador Prefect en `run_id`); el feed entrega `{week_start, entries}` con las dimensiones y métricas del briefing.
+- Consultas SQL de reporting encapsuladas en `data/pipelines/reporting_store.py`; el disparo delegado a `data/pipelines/prefect_client.py` solicita el deployment configurado por `BUSINESS_PERFORMANCE_DEPLOYMENT` (por defecto `weekly-office-program-performance/weekly`) y no ejecuta ETL dentro de FastAPI. Prefect se declara también para la imagen/runtime de API.
+- Pruebas autenticadas nuevas cubren 401 sin token, respuesta y 404 de auditoría, 202 y errores 422/503 al disparar, serialización/contenido del feed KPI y solicitud mockeada al deployment configurable. No se ejecutó un deployment real.
+- Validación: suite conjunta API + pipeline, 86 pruebas y 7 subtests correctos; `compileall`, `uv lock --check` y `git diff --check` correctos. Persiste un warning no bloqueante preexistente de Starlette/httpx.
+- Pendiente antes de desplegar: configurar `BUSINESS_PERFORMANCE_DEPLOYMENT` con un deployment Prefect realmente creado, y suministrar a la API acceso de solo lectura a reporting además de las credenciales/URL del servidor Prefect. No se verificó una llamada externa al deployment ni se ejecutó ETL.
+
+## Fase 4: ejecución por CLI y frecuencia de reporting (2026-11-05)
+
+- Confirmado el punto de entrada `if __name__ == "__main__": main()` en `data/pipelines/pipeline.py` y documentado el comando directo `uv run python data/pipelines/pipeline.py [YYYY-MM-DD]` en comentario y `data/pipelines/PIPELINE_DESIGN.md`.
+- Documentada la frecuencia prevista: consolidación semanal cada lunes por la mañana UTC. La hora exacta queda por configurar en el deployment/scheduler de Prefect; el CLI manual no crea un calendario.
+- Validación local: `uv run python data/pipelines/pipeline.py --help`, 11 pruebas, `compileall`, `uv lock --check` y `git diff --check` correctos.
+- Pendiente verificar ejecución ETL completa contra Supabase: el `.env` actual solo expone por nombre `DATABASE_URL`, no `TELEMETRY_DATABASE_URL`, `REPORTING_DATABASE_URL` ni `TELEMETRY_DATABASE_READ_ONLY`. No se ejecutó una carga parcial ni se asumieron credenciales/roles; hacen falta variables de origen y destino con permisos adecuados.
+
+## Fase 3: idempotencia y auditoría del pipeline Prefect
+
+- La carga reconcilia la partición semanal dentro de una transacción protegida por lock: hace `UPSERT` usando la restricción única `(office, programme_id, week_start)` y elimina únicamente claves obsoletas. Las filas con métricas idénticas conservan su `id` y `computed_at`, por lo que reruns idénticos no cambian el resultado de destino.
+- `reporting.pipeline_runs` registra inicio UTC, fin, cantidad procesada y estado final. En fallos críticos guarda tipo y detalle sanitizado (enmascara contraseñas PostgreSQL y limita el mensaje); la carga actualiza datos y auditoría de éxito en la misma transacción. Fallos del artefacto de evaluación, que es opcional, se registran en el log sin cambiar el éxito ETL.
+- Añadidas pruebas para la sanitización del error y la estrategia de upsert/reconciliación. Validación focal: 11 pruebas correctas; también pasan `compileall`, `uv lock --check`, CLI `--help` y `git diff --check`.
+- Pendiente: aplicar la migración y validar contra PostgreSQL en un entorno autorizado; no se conectó a una base ni se ejecutó la migración. Las pruebas de la estrategia SQL son unitarias/inspección de fuente, no una prueba de integración.
+
+## Fase 2: resiliencia del pipeline Prefect (2026-11-05)
+
+- Añadida política de reintentos documentada para cada task con acceso externo: inicio de auditoría (1 reintento/1 s), extracción (3 reintentos/1, 5 y 15 s), carga idempotente (3 reintentos/1, 5 y 15 s) y persistencia de fallo (2 reintentos/1 y 5 s). Los comentarios explican la tolerancia a fallos transitorios, seguridad de repetición y límites de espera.
+- El flow captura explícitamente con `return_state=True` el estado de la carga, lee el error y lo vuelve a lanzar tras intentar marcar la corrida como `Failed`; evita perder la auditoría por propagación automática de Prefect.
+- Documentada la caché de transformación: `task_input_hash` incluye la tanda completa de eventos y `week_start`, con TTL de una hora para reutilizar cálculos idénticos sin mantenerlos obsoletos demasiado tiempo.
+- Añadida cobertura de metadatos de retries/cache y del re-lanzamiento de error desde un estado Prefect fallido. Validación focal: 9 pruebas de pipeline correctas.
+- Pendiente: integración real con PostgreSQL y manejo de resultados en almacenamiento Prefect de producción; no se conectó a bases durante esta fase.
+
+## Implementación Prefect del pipeline de desempeño de negocio (2026-11-05)
+
+- Implementado `data/pipelines/pipeline.py` con el flow Prefect 3 `weekly_office_program_performance` y tasks independientes para resolver semana, crear registro de corrida, extraer eventos, transformar KPIs, publicar la partición y generar un artefacto opcional de evaluación. El identificador de auditoría enlaza al `flow_run_id`.
+- La extracción usa exclusivamente `TELEMETRY_DATABASE_URL`, exige `TELEMETRY_DATABASE_READ_ONLY=true` y ejecuta un SELECT acotado por semana UTC y los cuatro tipos aprobados. La protección de solo lectura también requiere que el rol PostgreSQL esté configurado realmente sin permisos de escritura.
+- `data/process/business_performance.py` valida cada evento independientemente, deduplica IDs, comprueba semana/dimensiones/moneda/costos y suma con `Decimal`; eventos inválidos se cuentan como rechazados sin impedir el resto. El material se calcula como `unit_cost × quantity`; entregas, faltantes y variaciones se cuentan por evento según el briefing.
+- La task de transformación conserva resultados exitosos en caché por una hora; extracción y carga tienen reintentos limitados. La publicación reemplaza atómicamente la partición semanal bajo advisory lock y solo confirma la auditoría al completar la transacción. Fallos críticos intentan dejar estado `Failed`; la escritura del resumen en `data/eval/` es opcional y no bloquea el ETL.
+- Añadidos migración de destino/auditoría en `data/pipelines/migrations/001_reporting_weekly_office_program_performance.sql`, fixture sintético `data/raw/business_performance_sample.json`, tests y guías operativas en inglés/español. `pyproject.toml` declara Prefect y el CLI `business-performance-pipeline`; `uv.lock` está actualizado.
+- Validación: 8 pruebas de pipeline, 67 pruebas backend y 7 subtests correctos; `compileall`, `uv lock --check`, CLI `--help`, `git diff --check` y diagnósticos del editor sin errores. Backend mantiene un warning no bloqueante preexistente de deprecación Starlette/httpx.
+- Pendiente antes de uso: aplicar la migración en una base de reporting; configurar URLs/roles separados con mínimo privilegio; ejecutar integración controlada para comprobar permisos y SQL contra PostgreSQL, comportamiento de reintentos/cache y carga transaccional. No se conectó ninguna base en esta fase. No se implementaron aquí los endpoints de reporting del diseño.
+- Los cambios ajenos preexistentes en `uis/backoffice/next-env.d.ts` y `temp_pipeline_implem.md` permanecen fuera de alcance. No se creó commit.
+
+## Diseño del pipeline de desempeño de negocio (2026-11-05)
+
+- Creado `data/pipelines/PIPELINE_DESIGN.md` como diseño, sin código de orquestación. Define el Reporte Semanal de Desempeño por Oficina y Programa para Laura y Elena, los cuatro KPIs y sus eventos obligatorios, la granularidad ISO semanal UTC y el destino exacto `reporting.weekly_office_program_performance`.
+- El diseño no usa etiquetas de fase. Especifica el flow Prefect `weekly_office_program_performance`, sus estados `Running`/`Completed`/`Failed`, tasks, Blocks de configuración y secretos, y la separación estricta entre el API HTTP y ETL.
+- Define tres endpoints futuros en `services/reporting/` y su delegación: estado más reciente y feed de KPIs a `data/pipelines/reporting_store.py`, y disparo manual a `data/pipelines/prefect_client.py`. Ningún endpoint ejecuta ETL en FastAPI; `GET /telemetry/report` y `services/telemetry/analysis.py` quedan separados e intactos.
+- Usa el vocabulario canónico Nexova (`office`: `valencia`/`miami`; `programme_id`: `ventas-b2b`, `liderazgo-basico`, `onboarding-soporte`; KPIs `total_material_cost`, `kits_delivered_count`, `shortage_events_count`, `cost_variance_events_count`; monedas `EUR`/`USD`).
+- La publicación semanal es idempotente por `(office, programme_id, week_start)` y reemplaza la partición completa en una transacción atómica; documenta recuperación ante fallos, checkpoints, eventos tardíos, concurrencia y auditoría de cada corrida/partición con conteos, timestamps, estado, intento y error sanitizado.
+- Confirmado en `docs/telemetry/event-schemas.json` que `inbound_order_created` ya incluye `unit_cost`; no se modificó el esquema ni el reporte técnico. La definición de kits entregados sigue el briefing (conteo de eventos outbound), con nota pendiente de validar si negocio quiere contar unidades (`quantity`).
+- Validación documental: `git diff --check` y comprobaciones dirigidas de rutas, delegaciones, vocabulario, idempotencia, auditoría y límites ETL sin errores. No aplican lint ni pruebas de código porque solo se modificó diseño documental.
+- Pendiente: revisión del diseño y, en una fase posterior, implementación del pipeline y los endpoints sin tocar `services/telemetry/analysis.py` ni `GET /telemetry/report`.
+
 ## Reporte operacional de telemetria (2026-11-04)
 
 - Verificado y corregido el nombre del modulo a `services/telemetry/analysis.py` y el test a `test_analysis.py`; el endpoint `GET /telemetry/report` permanece en `services/api/routes/telemetry.py`.
