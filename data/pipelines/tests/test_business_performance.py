@@ -222,6 +222,9 @@ def test_pipeline_has_explicit_etl_subflow_boundaries():
 
     parent_source = inspect.getsource(weekly_office_program_performance.fn)
     assert parent_source.index("extract_events_subflow(resolved_week)") < parent_source.index("transform_business_kpis_subflow(extracted, resolved_week)")
-    assert parent_source.index("transform_business_kpis_subflow(extracted, resolved_week)") < parent_source.index("load_week_partition_subflow.with_options")
-    assert "evaluation_artifact_subflow.with_options(" in parent_source
-    assert "return_state=True, raise_on_failure=False" in parent_source
+    assert parent_source.index("transform_business_kpis_subflow(extracted, resolved_week)") < parent_source.index("load_week_partition_subflow(")
+    assert "evaluation_artifact_subflow(" in parent_source
+    assert "load_week_partition_subflow(" in parent_source
+    assert "aggregate, run_id, return_state=True" in parent_source
+    assert "evaluation_artifact_subflow(" in parent_source
+    assert "aggregate, rows_written, run_id, return_state=True" in parent_source

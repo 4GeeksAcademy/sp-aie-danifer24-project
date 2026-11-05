@@ -363,9 +363,9 @@ def weekly_office_program_performance(week_start: date | str | None = None) -> d
         aggregate = transform_business_kpis_subflow(extracted, resolved_week)
         # Capture the load subflow's terminal state so the parent can persist
         # the failed audit status before re-raising.
-        load_state = load_week_partition_subflow.with_options(
-            return_state=True, raise_on_failure=False
-        )(aggregate, run_id)
+        load_state = load_week_partition_subflow(
+            aggregate, run_id, return_state=True
+        )
         rows_written = _result_or_raise(load_state)
     except Exception as exc:
         try:
@@ -378,9 +378,9 @@ def weekly_office_program_performance(week_start: date | str | None = None) -> d
 
     # Evaluation artifacts are useful but must never block KPI publication.
     try:
-        artifact = evaluation_artifact_subflow.with_options(
-            return_state=True, raise_on_failure=False
-        )(aggregate, rows_written, run_id)
+        artifact = evaluation_artifact_subflow(
+            aggregate, rows_written, run_id, return_state=True
+        )
         if artifact.is_failed():
             failure = artifact.result(raise_on_failure=False)
             detail = (
