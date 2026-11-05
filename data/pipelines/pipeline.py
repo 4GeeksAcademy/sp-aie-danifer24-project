@@ -14,6 +14,7 @@ from typing import Any
 
 from prefect import flow, get_run_logger, task
 from prefect.context import get_run_context
+from prefect.states import State
 from prefect.tasks import task_input_hash
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import URL, make_url
@@ -56,6 +57,8 @@ def resolve_week(week_start: date | str | None = None) -> date:
     return _resolve_week_start(week_start)
 
 
+# One retry after one second handles a transient reporting DB connection failure
+# without adding a long delay before any business data has been processed.
 @task(name="start-pipeline-run", retries=1, retry_delay_seconds=1)
 def start_pipeline_run(week_start: date, run_id: str) -> str:
     """Create an idempotent audit row linked to this Prefect flow run."""
@@ -83,6 +86,8 @@ def start_pipeline_run(week_start: date, run_id: str) -> str:
         engine.dispose()
 
 
+# Three retries with backoff cover brief source DB/network incidents and cap extra
+# waiting at 21 seconds; this source operation is read-only and safe to repeat.
 @task(name="extract-events", retries=3, retry_delay_seconds=[1, 5, 15])
 def extract_events(week_start: date) -> list[dict[str, Any]]:
     """Read required business events from telemetry_events without mutations."""
@@ -109,6 +114,9 @@ def extract_events(week_start: date) -> list[dict[str, Any]]:
         engine.dispose()
 
 
+# task_input_hash fingerprints the complete records + week_start inputs, so only
+# identical batches share a result; one hour bounds staleness while avoiding costly
+# repeated aggregation for retries/re-runs of the same extracted batch.
 @task(
     name="transform-business-kpis",
     retries=0,
@@ -125,6 +133,8 @@ def transform_business_kpis(
     return {"rows": rows, **counts, "week_start": week_start}
 
 
+# Three retries with 1/5/15-second backoff handle temporary reporting DB outages;
+# transactional, idempotent partition replacement makes repeating the load safe.
 @task(name="load-week-partition", retries=3, retry_delay_seconds=[1, 5, 15])
 def load_week_partition(aggregate: dict[str, Any], run_id: str) -> int:
     """Atomically replace the weekly reporting partition using PostgreSQL."""
@@ -199,6 +209,8 @@ def load_week_partition(aggregate: dict[str, Any], run_id: str) -> int:
         engine.dispose()
 
 
+# Two short retries give the audit DB a chance to recover without masking the
+# original pipeline failure or delaying its propagation for long.
 @task(name="mark-pipeline-run-failed", retries=2, retry_delay_seconds=[1, 5])
 def mark_pipeline_run_failed(run_id: str, error: Exception) -> None:
     """Persist a sanitized failure status without logging exception payloads."""
@@ -242,6 +254,16 @@ def write_evaluation_artifact(aggregate: dict[str, Any], rows_written: int, run_
     return str(path)
 
 
+def _result_or_raise(state: State[Any]) -> Any:
+    """Return a successful task result or re-raise its captured failure."""
+    if state.is_failed():
+        result = state.result(raise_on_failure=False)
+        if isinstance(result, BaseException):
+            raise result
+        raise RuntimeError("Pipeline load task failed without an exception result")
+    return state.result()
+
+
 @flow(name="weekly_office_program_performance", log_prints=True)
 def weekly_office_program_performance(week_start: date | str | None = None) -> dict[str, Any]:
     """Extract, transform, and load the selected weekly reporting partition."""
@@ -252,7 +274,10 @@ def weekly_office_program_performance(week_start: date | str | None = None) -> d
     try:
         extracted = extract_events(resolved_week)
         aggregate = transform_business_kpis(extracted, resolved_week)
-        rows_written = load_week_partition(aggregate, run_id)
+        # Capture this task's terminal state so the flow can persist the failed audit
+        # status before re-raising, instead of allowing Prefect to short-circuit.
+        load_state = load_week_partition.with_options(return_state=True)(aggregate, run_id)
+        rows_written = _result_or_raise(load_state)
     except Exception as exc:
         try:
             mark_pipeline_run_failed(run_id, exc)

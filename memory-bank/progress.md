@@ -33,6 +33,14 @@
 
 # Progreso del proyecto
 
+## Fase 2: resiliencia del pipeline Prefect (2026-11-05)
+
+- Añadida política de reintentos documentada para cada task con acceso externo: inicio de auditoría (1 reintento/1 s), extracción (3 reintentos/1, 5 y 15 s), carga idempotente (3 reintentos/1, 5 y 15 s) y persistencia de fallo (2 reintentos/1 y 5 s). Los comentarios explican la tolerancia a fallos transitorios, seguridad de repetición y límites de espera.
+- El flow captura explícitamente con `return_state=True` el estado de la carga, lee el error y lo vuelve a lanzar tras intentar marcar la corrida como `Failed`; evita perder la auditoría por propagación automática de Prefect.
+- Documentada la caché de transformación: `task_input_hash` incluye la tanda completa de eventos y `week_start`, con TTL de una hora para reutilizar cálculos idénticos sin mantenerlos obsoletos demasiado tiempo.
+- Añadida cobertura de metadatos de retries/cache y del re-lanzamiento de error desde un estado Prefect fallido. Validación focal: 9 pruebas de pipeline correctas.
+- Pendiente: integración real con PostgreSQL y manejo de resultados en almacenamiento Prefect de producción; no se conectó a bases durante esta fase.
+
 ## Implementación Prefect del pipeline de desempeño de negocio (2026-11-05)
 
 - Implementado `data/pipelines/pipeline.py` con el flow Prefect 3 `weekly_office_program_performance` y tasks independientes para resolver semana, crear registro de corrida, extraer eventos, transformar KPIs, publicar la partición y generar un artefacto opcional de evaluación. El identificador de auditoría enlaza al `flow_run_id`.

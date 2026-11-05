@@ -122,13 +122,39 @@ def test_week_start_must_be_monday():
 def test_pipeline_tasks_configure_retries_and_one_hour_transform_cache():
     from datetime import timedelta
 
-    from data.pipelines.pipeline import extract_events, load_week_partition, transform_business_kpis
+    from data.pipelines.pipeline import (
+        extract_events,
+        load_week_partition,
+        mark_pipeline_run_failed,
+        start_pipeline_run,
+        transform_business_kpis,
+    )
 
+    assert start_pipeline_run.retries == 1
+    assert start_pipeline_run.retry_delay_seconds == 1
     assert extract_events.retries == 3
+    assert extract_events.retry_delay_seconds == [1, 5, 15]
     assert load_week_partition.retries == 3
+    assert load_week_partition.retry_delay_seconds == [1, 5, 15]
+    assert mark_pipeline_run_failed.retries == 2
+    assert mark_pipeline_run_failed.retry_delay_seconds == [1, 5]
+    assert transform_business_kpis.cache_key_fn is not None
     assert transform_business_kpis.cache_expiration == timedelta(hours=1)
     assert extract_events.fn.__name__ == "extract_events"
     assert load_week_partition.fn.__name__ == "load_week_partition"
+
+
+def test_explicitly_captured_failed_task_state_reraises_original_exception():
+    import pytest
+    from prefect.states import Failed
+
+    from data.pipelines.pipeline import _result_or_raise
+
+    error = RuntimeError("reporting database unavailable")
+    failed_state = Failed(data=error)
+
+    with pytest.raises(RuntimeError, match="reporting database unavailable"):
+        _result_or_raise(failed_state)
 
 
 def test_extraction_requires_explicit_read_only_guard(monkeypatch):
