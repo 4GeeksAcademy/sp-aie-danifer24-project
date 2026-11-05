@@ -193,3 +193,35 @@ def test_extraction_requires_explicit_read_only_guard(monkeypatch):
     monkeypatch.delenv("TELEMETRY_DATABASE_READ_ONLY", raising=False)
     with pytest.raises(RuntimeError, match="TELEMETRY_DATABASE_READ_ONLY=true"):
         extract_events.fn(date(2026, 11, 2))
+
+
+def test_pipeline_has_explicit_etl_subflow_boundaries():
+    import inspect
+
+    from prefect.flows import Flow
+    from data.pipelines.pipeline import (
+        evaluation_artifact_subflow,
+        extract_events_subflow,
+        load_week_partition_subflow,
+        transform_business_kpis_subflow,
+        weekly_office_program_performance,
+    )
+
+    for subflow in (
+        extract_events_subflow,
+        transform_business_kpis_subflow,
+        load_week_partition_subflow,
+        evaluation_artifact_subflow,
+    ):
+        assert isinstance(subflow, Flow)
+
+    assert list(inspect.signature(extract_events_subflow.fn).parameters) == ["week_start"]
+    assert list(inspect.signature(transform_business_kpis_subflow.fn).parameters) == ["events", "week_start"]
+    assert list(inspect.signature(load_week_partition_subflow.fn).parameters) == ["aggregate", "run_id"]
+    assert list(inspect.signature(evaluation_artifact_subflow.fn).parameters) == ["aggregate", "rows_written", "run_id"]
+
+    parent_source = inspect.getsource(weekly_office_program_performance.fn)
+    assert parent_source.index("extract_events_subflow(resolved_week)") < parent_source.index("transform_business_kpis_subflow(extracted, resolved_week)")
+    assert parent_source.index("transform_business_kpis_subflow(extracted, resolved_week)") < parent_source.index("load_week_partition_subflow.with_options")
+    assert "evaluation_artifact_subflow.with_options(" in parent_source
+    assert "return_state=True, raise_on_failure=False" in parent_source

@@ -310,8 +310,36 @@ def write_evaluation_artifact(aggregate: dict[str, Any], rows_written: int, run_
     return str(path)
 
 
+@flow(name="extract-business-events")
+def extract_events_subflow(week_start: date) -> list[dict[str, Any]]:
+    """Extract the selected week's source events."""
+    return extract_events(week_start)
+
+
+@flow(name="transform-business-kpis")
+def transform_business_kpis_subflow(
+    events: list[dict[str, Any]], week_start: date
+) -> dict[str, Any]:
+    """Validate and aggregate the explicit extracted event batch."""
+    return transform_business_kpis(events, week_start)
+
+
+@flow(name="load-weekly-kpis")
+def load_week_partition_subflow(aggregate: dict[str, Any], run_id: str) -> int:
+    """Publish the explicit aggregate and audit run identifier."""
+    return load_week_partition(aggregate, run_id)
+
+
+@flow(name="write-evaluation-artifact")
+def evaluation_artifact_subflow(
+    aggregate: dict[str, Any], rows_written: int, run_id: str
+) -> str:
+    """Write the optional evaluation artifact for a completed load."""
+    return write_evaluation_artifact(aggregate, rows_written, run_id)
+
+
 def _result_or_raise(state: State[Any]) -> Any:
-    """Return a successful task result or re-raise its captured failure."""
+    """Return a successful task/flow result or re-raise its captured failure."""
     if state.is_failed():
         result = state.result(raise_on_failure=False)
         if isinstance(result, BaseException):
@@ -330,12 +358,14 @@ def weekly_office_program_performance(week_start: date | str | None = None) -> d
     processed_records = 0
     try:
         start_pipeline_run(resolved_week, run_id, started_at)
-        extracted = extract_events(resolved_week)
+        extracted = extract_events_subflow(resolved_week)
         processed_records = len(extracted)
-        aggregate = transform_business_kpis(extracted, resolved_week)
-        # Capture this task's terminal state so the flow can persist the failed audit
-        # status before re-raising, instead of allowing Prefect to short-circuit.
-        load_state = load_week_partition.with_options(return_state=True)(aggregate, run_id)
+        aggregate = transform_business_kpis_subflow(extracted, resolved_week)
+        # Capture the load subflow's terminal state so the parent can persist
+        # the failed audit status before re-raising.
+        load_state = load_week_partition_subflow.with_options(
+            return_state=True, raise_on_failure=False
+        )(aggregate, run_id)
         rows_written = _result_or_raise(load_state)
     except Exception as exc:
         try:
@@ -348,7 +378,7 @@ def weekly_office_program_performance(week_start: date | str | None = None) -> d
 
     # Evaluation artifacts are useful but must never block KPI publication.
     try:
-        artifact = write_evaluation_artifact.with_options(
+        artifact = evaluation_artifact_subflow.with_options(
             return_state=True, raise_on_failure=False
         )(aggregate, rows_written, run_id)
         if artifact.is_failed():

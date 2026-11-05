@@ -33,6 +33,15 @@
 
 # Progreso del proyecto
 
+## Subflows ETL del pipeline de desempeño (2026-11-05)
+
+- Refactorizado `weekly_office_program_performance` para invocar secuencialmente los subflows Prefect `extract_events_subflow(week_start) -> events`, `transform_business_kpis_subflow(events, week_start) -> aggregate` y `load_week_partition_subflow(aggregate, run_id) -> rows_written`. Los contratos son explícitos y las tasks originales siguen conservando retries, caché y lógica de auditoría/idempotencia.
+- Extraído `evaluation_artifact_subflow(aggregate, rows_written, run_id) -> path` como paso opcional. El flow principal lo invoca con `return_state=True, raise_on_failure=False`; un fallo del artefacto se registra como warning y no altera una publicación correcta. La carga igualmente expone su estado al padre para persistir el estado `Failed` antes de relanzar fallos críticos.
+- Añadida prueba de topología: valida que las cuatro etapas son flows Prefect, sus entradas declaradas y orden de llamada. README y diseño de pipeline actualizados.
+- Validación: `uv run pytest data/pipelines/tests -q` (12 passed), CLI `--help`, `compileall`, `uv lock --check` y `git diff --check` correctos. No se ejecutó ETL ni se conectó a bases de datos.
+- Pendiente: desplegar/ejecutar el flow compuesto contra Prefect y PostgreSQL en entorno autorizado; no se creó commit.
+
+
 ## API de reporting para el pipeline de desempeño (2026-11-05)
 
 - Añadido `services/reporting/` como módulo separado de `services/telemetry/`, con router autenticado por la dependencia existente `get_current_user` y schemas Pydantic para auditoría, disparo manual y feed de KPIs. Registrado en `services/api/main.py`; se conserva el envelope de errores común.
