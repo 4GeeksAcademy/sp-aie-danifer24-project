@@ -36,9 +36,12 @@
 ## Diseño del pipeline de desempeño de negocio (2026-11-05)
 
 - Creado `data/pipelines/PIPELINE_DESIGN.md` como diseño, sin código de orquestación. Define el Reporte Semanal de Desempeño por Oficina y Programa para Laura y Elena, los cuatro KPIs y sus eventos obligatorios, la granularidad ISO semanal UTC y el destino exacto `reporting.weekly_office_program_performance`.
-- Documentadas las etapas Prefect, endpoints futuros bajo `services/reporting/`, el estado actual y brecha respecto del reporte técnico, además de estrategias para duplicados, cargas parciales, eventos tardíos, observabilidad, checkpoints, buffer/reintentos y concurrencia.
+- El diseño no usa etiquetas de fase. Especifica el flow Prefect `weekly_office_program_performance`, sus estados `Running`/`Completed`/`Failed`, tasks, Blocks de configuración y secretos, y la separación estricta entre el API HTTP y ETL.
+- Define tres endpoints futuros en `services/reporting/` y su delegación: estado más reciente y feed de KPIs a `data/pipelines/reporting_store.py`, y disparo manual a `data/pipelines/prefect_client.py`. Ningún endpoint ejecuta ETL en FastAPI; `GET /telemetry/report` y `services/telemetry/analysis.py` quedan separados e intactos.
+- Usa el vocabulario canónico Nexova (`office`: `valencia`/`miami`; `programme_id`: `ventas-b2b`, `liderazgo-basico`, `onboarding-soporte`; KPIs `total_material_cost`, `kits_delivered_count`, `shortage_events_count`, `cost_variance_events_count`; monedas `EUR`/`USD`).
+- La publicación semanal es idempotente por `(office, programme_id, week_start)` y reemplaza la partición completa en una transacción atómica; documenta recuperación ante fallos, checkpoints, eventos tardíos, concurrencia y auditoría de cada corrida/partición con conteos, timestamps, estado, intento y error sanitizado.
 - Confirmado en `docs/telemetry/event-schemas.json` que `inbound_order_created` ya incluye `unit_cost`; no se modificó el esquema ni el reporte técnico. La definición de kits entregados sigue el briefing (conteo de eventos outbound), con nota pendiente de validar si negocio quiere contar unidades (`quantity`).
-- Validación documental: `git diff --check` y diagnóstico del editor sin errores. No se ejecutaron pruebas de código porque no se implementó código.
+- Validación documental: `git diff --check` y comprobaciones dirigidas de rutas, delegaciones, vocabulario, idempotencia, auditoría y límites ETL sin errores. No aplican lint ni pruebas de código porque solo se modificó diseño documental.
 - Pendiente: revisión del diseño y, en una fase posterior, implementación del pipeline y los endpoints sin tocar `services/telemetry/analysis.py` ni `GET /telemetry/report`.
 
 ## Reporte operacional de telemetria (2026-11-04)
