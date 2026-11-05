@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
@@ -60,7 +61,7 @@ def resolve_week(week_start: date | str | None = None) -> date:
 # One retry after one second handles a transient reporting DB connection failure
 # without adding a long delay before any business data has been processed.
 @task(name="start-pipeline-run", retries=1, retry_delay_seconds=1)
-def start_pipeline_run(week_start: date, run_id: str) -> str:
+def start_pipeline_run(week_start: date, run_id: str, started_at: datetime) -> str:
     """Create an idempotent audit row linked to this Prefect flow run."""
     reporting_url = _database_url("REPORTING_DATABASE_URL")
     engine = create_engine(reporting_url, pool_pre_ping=True)
@@ -70,10 +71,10 @@ def start_pipeline_run(week_start: date, run_id: str) -> str:
                 text(
                     """INSERT INTO reporting.pipeline_runs
                        (run_id, flow_name, status, week_start, started_at)
-                       VALUES (:run_id, 'weekly_office_program_performance', 'Running', :week_start, now())
+                       VALUES (:run_id, 'weekly_office_program_performance', 'Running', :week_start, :started_at)
                        ON CONFLICT (run_id) DO NOTHING"""
                 ),
-                {"run_id": run_id, "week_start": week_start},
+                {"run_id": run_id, "week_start": week_start, "started_at": started_at},
             )
             audit_row = connection.execute(
                 text("SELECT status, week_start FROM reporting.pipeline_runs WHERE run_id = :run_id"),
@@ -155,7 +156,7 @@ def load_week_partition(aggregate: dict[str, Any], run_id: str) -> int:
         "currency",
     )
     insert_sql = text(
-        """INSERT INTO reporting.weekly_office_program_performance
+        """INSERT INTO reporting.weekly_office_program_performance AS target_row
            (office, programme_id, week_start, total_material_cost,
             kits_delivered_count, shortage_events_count,
             cost_variance_events_count, currency, computed_at)
@@ -168,7 +169,14 @@ def load_week_partition(aggregate: dict[str, Any], run_id: str) -> int:
              shortage_events_count = EXCLUDED.shortage_events_count,
              cost_variance_events_count = EXCLUDED.cost_variance_events_count,
              currency = EXCLUDED.currency,
-             computed_at = now()"""
+             computed_at = now()
+           WHERE (target_row.total_material_cost, target_row.kits_delivered_count,
+                  target_row.shortage_events_count, target_row.cost_variance_events_count,
+                  target_row.currency)
+             IS DISTINCT FROM
+                 (EXCLUDED.total_material_cost, EXCLUDED.kits_delivered_count,
+                  EXCLUDED.shortage_events_count, EXCLUDED.cost_variance_events_count,
+                  EXCLUDED.currency)"""
     )
     try:
         with engine.begin() as connection:
@@ -176,10 +184,29 @@ def load_week_partition(aggregate: dict[str, Any], run_id: str) -> int:
                 text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
                 {"lock_key": f"weekly-office-program-performance:{week_start}"},
             )
-            connection.execute(
-                text("DELETE FROM reporting.weekly_office_program_performance WHERE week_start = :week_start"),
-                {"week_start": week_start},
-            )
+            existing_keys = {
+                (row.office, row.programme_id)
+                for row in connection.execute(
+                    text(
+                        """SELECT office, programme_id
+                           FROM reporting.weekly_office_program_performance
+                           WHERE week_start = :week_start"""
+                    ),
+                    {"week_start": week_start},
+                )
+            }
+            desired_keys = {(row["office"], row["programme_id"]) for row in rows}
+            # Prune only stale dimension keys; unchanged unique rows retain their
+            # identifiers and computed_at on identical reruns.
+            for office, programme_id in existing_keys - desired_keys:
+                connection.execute(
+                    text(
+                        """DELETE FROM reporting.weekly_office_program_performance
+                           WHERE week_start = :week_start AND office = :office
+                             AND programme_id = :programme_id"""
+                    ),
+                    {"week_start": week_start, "office": office, "programme_id": programme_id},
+                )
             for row in rows:
                 connection.execute(insert_sql, {key: row[key] for key in columns})
             audit_update = connection.execute(
@@ -209,26 +236,55 @@ def load_week_partition(aggregate: dict[str, Any], run_id: str) -> int:
         engine.dispose()
 
 
+def _sanitize_error_message(error: Exception) -> str:
+    """Keep useful failure context while masking credentials in PostgreSQL URLs."""
+    message = str(error)
+    message = re.sub(
+        r"(postgres(?:ql)?(?:\+[^:/@\s]+)?://[^:/@\s]+:)[^@/\s]+@",
+        r"\1***@",
+        message,
+        flags=re.IGNORECASE,
+    )
+    return f"{type(error).__name__}: {message}"[:500]
+
+
 # Two short retries give the audit DB a chance to recover without masking the
 # original pipeline failure or delaying its propagation for long.
 @task(name="mark-pipeline-run-failed", retries=2, retry_delay_seconds=[1, 5])
-def mark_pipeline_run_failed(run_id: str, error: Exception) -> None:
-    """Persist a sanitized failure status without logging exception payloads."""
+def mark_pipeline_run_failed(
+    run_id: str,
+    week_start: date,
+    started_at: datetime,
+    processed_records: int,
+    error: Exception,
+) -> None:
+    """Persist timestamps, processed count, final status, and sanitized error."""
     reporting_url = _database_url("REPORTING_DATABASE_URL")
     engine = create_engine(reporting_url, pool_pre_ping=True)
     try:
         with engine.begin() as connection:
             connection.execute(
                 text(
-                    """UPDATE reporting.pipeline_runs
-                       SET status = 'Failed', ended_at = now(),
-                           error_code = :error_code, error_message = :error_message
-                       WHERE run_id = :run_id AND status = 'Running'"""
+                    """INSERT INTO reporting.pipeline_runs
+                       (run_id, flow_name, status, week_start, started_at, ended_at,
+                        processed_records, error_code, error_message)
+                       VALUES (:run_id, 'weekly_office_program_performance', 'Failed',
+                               :week_start, :started_at, now(), :processed_records,
+                               :error_code, :error_message)
+                       ON CONFLICT (run_id) DO UPDATE SET
+                           status = 'Failed', ended_at = now(),
+                           processed_records = EXCLUDED.processed_records,
+                           error_code = EXCLUDED.error_code,
+                           error_message = EXCLUDED.error_message
+                       WHERE reporting.pipeline_runs.status = 'Running'"""
                 ),
                 {
                     "run_id": run_id,
+                    "week_start": week_start,
+                    "started_at": started_at,
+                    "processed_records": processed_records,
                     "error_code": type(error).__name__[:64],
-                    "error_message": "Pipeline stage failed; inspect sanitized Prefect task logs.",
+                    "error_message": _sanitize_error_message(error),
                 },
             )
     finally:
@@ -270,9 +326,12 @@ def weekly_office_program_performance(week_start: date | str | None = None) -> d
     logger = get_run_logger()
     resolved_week = resolve_week(week_start)
     run_id = str(get_run_context().flow_run.id)
-    start_pipeline_run(resolved_week, run_id)
+    started_at = datetime.now(timezone.utc)
+    processed_records = 0
     try:
+        start_pipeline_run(resolved_week, run_id, started_at)
         extracted = extract_events(resolved_week)
+        processed_records = len(extracted)
         aggregate = transform_business_kpis(extracted, resolved_week)
         # Capture this task's terminal state so the flow can persist the failed audit
         # status before re-raising, instead of allowing Prefect to short-circuit.
@@ -280,7 +339,9 @@ def weekly_office_program_performance(week_start: date | str | None = None) -> d
         rows_written = _result_or_raise(load_state)
     except Exception as exc:
         try:
-            mark_pipeline_run_failed(run_id, exc)
+            mark_pipeline_run_failed(
+                run_id, resolved_week, started_at, processed_records, exc
+            )
         except Exception as audit_exc:
             logger.error("Could not persist failed run status: %s", type(audit_exc).__name__)
         raise
@@ -291,13 +352,22 @@ def weekly_office_program_performance(week_start: date | str | None = None) -> d
             return_state=True, raise_on_failure=False
         )(aggregate, rows_written, run_id)
         if artifact.is_failed():
-            logger.warning("Optional evaluation artifact task failed; continuing pipeline")
+            failure = artifact.result(raise_on_failure=False)
+            detail = (
+                _sanitize_error_message(failure)
+                if isinstance(failure, Exception)
+                else "Optional evaluation artifact failed without an exception detail"
+            )
+            logger.warning("Optional evaluation artifact failed; continuing pipeline: %s", detail)
             artifact = None
         else:
             # return_state=True returns a Prefect State, not the task's path.
             artifact = artifact.result()
     except Exception as exc:  # Optional task failures are intentionally isolated.
-        logger.warning("Optional evaluation artifact failed: %s", type(exc).__name__)
+        logger.warning(
+            "Optional evaluation artifact failed: %s",
+            _sanitize_error_message(exc),
+        )
         artifact = None
 
     return {
@@ -312,6 +382,7 @@ def weekly_office_program_performance(week_start: date | str | None = None) -> d
     }
 
 
+# Direct CLI: ``uv run python data/pipelines/pipeline.py [YYYY-MM-DD]``.
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run weekly Nexova business performance pipeline")
     parser.add_argument("week_start", nargs="?", help="ISO week Monday (YYYY-MM-DD); defaults to the last completed week")

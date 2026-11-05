@@ -157,6 +157,34 @@ def test_explicitly_captured_failed_task_state_reraises_original_exception():
         _result_or_raise(failed_state)
 
 
+def test_failure_audit_message_keeps_context_but_masks_database_password():
+    from data.pipelines.pipeline import _sanitize_error_message
+
+    message = _sanitize_error_message(
+        RuntimeError(
+            "connection failed for postgresql://reporter:s3cr3t@db.example/reporting"
+        )
+    )
+
+    assert "RuntimeError" in message
+    assert "connection failed" in message
+    assert "reporter:***@db.example" in message
+    assert "s3cr3t" not in message
+
+
+def test_week_load_uses_unique_key_upsert_and_preserves_unchanged_values():
+    import inspect
+
+    from data.pipelines.pipeline import load_week_partition
+
+    loader_source = inspect.getsource(load_week_partition.fn)
+
+    assert "ON CONFLICT (office, programme_id, week_start) DO UPDATE" in loader_source
+    assert "IS DISTINCT FROM" in loader_source
+    assert "existing_keys - desired_keys" in loader_source
+    assert "DELETE FROM reporting.weekly_office_program_performance WHERE week_start" not in loader_source
+
+
 def test_extraction_requires_explicit_read_only_guard(monkeypatch):
     import pytest
 

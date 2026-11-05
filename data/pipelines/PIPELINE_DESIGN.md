@@ -40,7 +40,17 @@ El pipeline produce exactamente estos cuatro KPIs del briefing:
 
 La única fuente v1 es `telemetry_events`, consultada en modo solo lectura desde PostgreSQL. Cada fila contiene columnas relacionales `event_id`, `event_type`, `timestamp`, `request_id` y `tags` JSONB; `tags` conserva el objeto `properties` del evento, incluidos `office`, `programme_id`, `currency`, `quantity` y, para entradas, `unit_cost`. La extracción devuelve registros estructurados (filas SQL con los campos requeridos y propiedades normalizadas), no archivos ni eventos tomados de `GET /telemetry/report`. Se filtran los cuatro tipos acordados por el intervalo UTC de la semana y se valida el contrato antes de agregar.
 
-La fuente se actualiza conforme a la cadencia de captura definida por el briefing de telemetría: `inbound_order_created` y `outbound_order_created` por lotes cada 15 minutos; `stock_threshold_triggered` en stream con objetivo de hasta 60 segundos; y `kit_cost_variance_detected` por lotes cada hora. El pipeline de negocio consolida semanalmente, el lunes por la mañana. Una reejecución manual o reconciliación puede volver a leer una semana anterior para incorporar eventos tardíos; no se asume que la captura y el reporte semanal tengan la misma frecuencia.
+La fuente se actualiza conforme a la cadencia de captura definida por el briefing de telemetría: `inbound_order_created` y `outbound_order_created` por lotes cada 15 minutos; `stock_threshold_triggered` en stream con objetivo de hasta 60 segundos; y `kit_cost_variance_detected` por lotes cada hora. El pipeline de negocio consolida semanalmente, el lunes por la mañana (UTC). La hora exacta de despliegue debe configurarse en el scheduler/deployment de Prefect; este diseño no fija una hora como SLA. Una reejecución manual o reconciliación puede volver a leer una semana anterior para incorporar eventos tardíos; no se asume que la captura y el reporte semanal tengan la misma frecuencia.
+
+### Ejecución operativa y CLI
+
+`data/pipelines/pipeline.py` puede ejecutarse directamente desde la raíz del repositorio, con las variables de entorno `TELEMETRY_DATABASE_URL`, `TELEMETRY_DATABASE_READ_ONLY=true` y `REPORTING_DATABASE_URL` configuradas:
+
+```bash
+uv run python data/pipelines/pipeline.py [YYYY-MM-DD]
+```
+
+La fecha opcional debe ser el lunes de la semana ISO que se recalculará. Si se omite, el flow procesa la última semana UTC completada. Esta invocación ejecuta el flow completo; `--help` muestra la interfaz sin conectar a las bases de datos. Para automatización recurrente, el deployment de Prefect debe programarse semanalmente cada lunes por la mañana UTC; una ejecución CLI no instala ni activa por sí sola ese calendario.
 
 ### Flujo de datos
 
