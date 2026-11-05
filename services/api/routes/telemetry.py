@@ -2,20 +2,22 @@
 
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import ValidationError
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlmodel import Session
 
+from services.api.cache import TTLCache
 from services.api.database import get_db
 from services.api.models import TelemetryEventRecord
 from services.api.schemas import TelemetryBatch, TelemetryEvent, TelemetryReceipt
 from services.api.telemetry_contract import validate_telemetry_contract
+from services.telemetry.analisys import error_rate_by_type, events_per_day
 
 
 load_dotenv(Path(__file__).resolve().parents[3] / ".env")
@@ -23,6 +25,46 @@ TELEMETRY_ENDPOINT = os.environ.get("TELEMETRY_ENDPOINT")
 
 router = APIRouter(prefix="/telemetry", tags=["telemetry"])
 logger = logging.getLogger("uvicorn.error.telemetry")
+report_cache: TTLCache[tuple[str, str], dict] = TTLCache(ttl_seconds=60)
+
+
+def _as_utc(value: datetime) -> datetime:
+    """Normalize parsed ISO timestamps, treating timezone-naive values as UTC."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+@router.get("/report")
+def get_telemetry_report(
+    start_date: datetime | None = Query(default=None),
+    end_date: datetime | None = Query(default=None),
+    session: Session = Depends(get_db),
+) -> dict:
+    """Serve cached operational telemetry metrics for one half-open UTC window."""
+    now = datetime.now(timezone.utc)
+    start = _as_utc(start_date) if start_date is not None else now - timedelta(days=7)
+    end = _as_utc(end_date) if end_date is not None else now
+    if start >= end:
+        raise HTTPException(status_code=422, detail="start_date debe ser anterior a end_date.")
+
+    cache_key = (
+        _as_utc(start_date).isoformat() if start_date is not None else "<default-start>",
+        _as_utc(end_date).isoformat() if end_date is not None else "<default-end>",
+    )
+    cached = report_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    report = {
+        "period": {"from": start.isoformat(), "to": end.isoformat()},
+        "metrics": {
+            "events_per_day": events_per_day(session, start, end),
+            "error_rate_by_type": error_rate_by_type(session, start, end),
+        },
+    }
+    report_cache.set(cache_key, report, report_cache.generation())
+    return report
 
 
 @router.post("/events", response_model=TelemetryReceipt)

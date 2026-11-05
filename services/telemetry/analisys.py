@@ -8,13 +8,90 @@ separate layers.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 import pandas as pd
+from sqlmodel import Session, select
+
+from services.api.models import TelemetryEventRecord
 
 
 API_REQUEST_EVENT = "api_request_completed"
 FRONTEND_LOAD_EVENT = "frontend_data_load_completed"
+FRONTEND_UNHANDLED_ERROR_EVENT = "frontend_unhandled_error"
+ERROR_RATE_EVENT_TYPES = (
+    API_REQUEST_EVENT,
+    FRONTEND_LOAD_EVENT,
+    FRONTEND_UNHANDLED_ERROR_EVENT,
+)
+
+
+def _load_events(
+    session: Session,
+    start_date: datetime,
+    end_date: datetime,
+    event_types: tuple[str, ...] | None = None,
+) -> pd.DataFrame:
+    """Load only timestamp-bounded telemetry rows required by a metric."""
+    statement = select(
+        TelemetryEventRecord.timestamp,
+        TelemetryEventRecord.event_type,
+        TelemetryEventRecord.tags,
+    ).where(
+        TelemetryEventRecord.timestamp >= start_date,
+        TelemetryEventRecord.timestamp < end_date,
+    )
+    if event_types is not None:
+        statement = statement.where(TelemetryEventRecord.event_type.in_(event_types))
+    rows = session.exec(statement).all()
+    return pd.DataFrame.from_records(
+        (row._mapping for row in rows),
+        columns=["timestamp", "event_type", "tags"],
+    )
+
+
+def events_per_day(
+    session: Session,
+    start_date: datetime,
+    end_date: datetime,
+) -> list[dict[str, Any]]:
+    """Count persisted events by UTC day and event type within SQL date bounds."""
+    return event_type_volume(_load_events(session, start_date, end_date))
+
+
+def error_rate_by_type(
+    session: Session,
+    start_date: datetime,
+    end_date: datetime,
+) -> list[dict[str, Any]]:
+    """Calculate technical error rates for captured API and frontend events."""
+    frame = _load_events(session, start_date, end_date, ERROR_RATE_EVENT_TYPES)
+    if frame.empty:
+        return []
+
+    frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True, errors="coerce")
+    frame = frame.dropna(subset=["timestamp", "event_type"])
+    frame["date"] = frame["timestamp"].dt.date
+    tags = pd.json_normalize(frame["tags"].map(lambda value: value if isinstance(value, dict) else {}))
+    tags.index = frame.index
+    frame = frame.join(tags, suffixes=("", "_tag"))
+    frame["status_code"] = pd.to_numeric(
+        frame.get("status_code", pd.Series(index=frame.index, dtype="object")),
+        errors="coerce",
+    )
+    frame["is_error"] = (
+        (frame["event_type"].eq(API_REQUEST_EVENT) & frame["status_code"].ge(500))
+        | (frame["event_type"].eq(FRONTEND_LOAD_EVENT) & frame.get("outcome", pd.Series(index=frame.index, dtype="object")).eq("error"))
+        | frame["event_type"].eq(FRONTEND_UNHANDLED_ERROR_EVENT)
+    )
+    grouped = (
+        frame.groupby(["date", "event_type"], as_index=False)
+        .agg(event_count=("event_type", "count"), error_count=("is_error", "sum"))
+        .sort_values(["date", "event_type"])
+    )
+    grouped["error_rate"] = grouped["error_count"] / grouped["event_count"]
+    return _records(grouped.set_index(["date", "event_type"]))
 
 
 def _prepare_events(events: pd.DataFrame, event_type: str) -> pd.DataFrame:

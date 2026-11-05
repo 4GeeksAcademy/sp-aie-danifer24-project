@@ -33,6 +33,15 @@
 
 # Progreso del proyecto
 
+## Reporte operacional de telemetria (2026-11-04)
+
+- Añadido `GET /telemetry/report` con `start_date`/`end_date` ISO 8601 opcionales, normalizacion a UTC, periodo predeterminado de siete dias y validacion de rango no vacio.
+- Implementado cache in-process con TTL de 60 segundos, clave por parametros de ventana normalizados (incluidos parametros omitidos) y respuestas copiadas al entrar/salir del cache.
+- El endpoint delega el calculo en `services/telemetry/analisys.py`. `events_per_day` y `error_rate_by_type` cargan solo columnas necesarias con filtros SQL de timestamp `[inicio, fin)` y event_type para errores; calculan grupos diarios tras convertir timestamps a datetime UTC.
+- El JSON contiene `period.from/to` y `metrics.events_per_day` / `metrics.error_rate_by_type`. La tasa tecnica clasifica HTTP 5xx, cargas frontend con outcome error y eventos frontend no manejados; no incluye metricas de negocio.
+- Pruebas nuevas verifican limites temporales, resultado JSON, cache con fechas explicitas y predeterminadas, fechas invalidas/invertidas y tasas por catalogo. Suite backend completa: 67 tests y 7 subtests correctos; un warning preexistente de Starlette/httpx.
+- Pendiente: commit de esta fase; cambios ajenos preexistentes permanecen fuera de alcance.
+
 ## Pipeline de analisis de telemetria operacional (2026-11-04)
 
 - Creado `services/telemetry/analisys.py` con metricas Pandas independientes y sin mutacion del DataFrame: volumen de eventos por tipo/dia UTC, volumen de solicitudes API por ruta/metodo/dia, tasa de errores HTTP 5xx por ruta/dia, latencia API media/maxima por ruta/dia y errores de carga frontend por seccion/motivo/dia.
