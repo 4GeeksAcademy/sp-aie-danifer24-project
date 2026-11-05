@@ -33,6 +33,17 @@
 
 # Progreso del proyecto
 
+## Implementación Prefect del pipeline de desempeño de negocio (2026-11-05)
+
+- Implementado `data/pipelines/pipeline.py` con el flow Prefect 3 `weekly_office_program_performance` y tasks independientes para resolver semana, crear registro de corrida, extraer eventos, transformar KPIs, publicar la partición y generar un artefacto opcional de evaluación. El identificador de auditoría enlaza al `flow_run_id`.
+- La extracción usa exclusivamente `TELEMETRY_DATABASE_URL`, exige `TELEMETRY_DATABASE_READ_ONLY=true` y ejecuta un SELECT acotado por semana UTC y los cuatro tipos aprobados. La protección de solo lectura también requiere que el rol PostgreSQL esté configurado realmente sin permisos de escritura.
+- `data/process/business_performance.py` valida cada evento independientemente, deduplica IDs, comprueba semana/dimensiones/moneda/costos y suma con `Decimal`; eventos inválidos se cuentan como rechazados sin impedir el resto. El material se calcula como `unit_cost × quantity`; entregas, faltantes y variaciones se cuentan por evento según el briefing.
+- La task de transformación conserva resultados exitosos en caché por una hora; extracción y carga tienen reintentos limitados. La publicación reemplaza atómicamente la partición semanal bajo advisory lock y solo confirma la auditoría al completar la transacción. Fallos críticos intentan dejar estado `Failed`; la escritura del resumen en `data/eval/` es opcional y no bloquea el ETL.
+- Añadidos migración de destino/auditoría en `data/pipelines/migrations/001_reporting_weekly_office_program_performance.sql`, fixture sintético `data/raw/business_performance_sample.json`, tests y guías operativas en inglés/español. `pyproject.toml` declara Prefect y el CLI `business-performance-pipeline`; `uv.lock` está actualizado.
+- Validación: 8 pruebas de pipeline, 67 pruebas backend y 7 subtests correctos; `compileall`, `uv lock --check`, CLI `--help`, `git diff --check` y diagnósticos del editor sin errores. Backend mantiene un warning no bloqueante preexistente de deprecación Starlette/httpx.
+- Pendiente antes de uso: aplicar la migración en una base de reporting; configurar URLs/roles separados con mínimo privilegio; ejecutar integración controlada para comprobar permisos y SQL contra PostgreSQL, comportamiento de reintentos/cache y carga transaccional. No se conectó ninguna base en esta fase. No se implementaron aquí los endpoints de reporting del diseño.
+- Los cambios ajenos preexistentes en `uis/backoffice/next-env.d.ts` y `temp_pipeline_implem.md` permanecen fuera de alcance. No se creó commit.
+
 ## Diseño del pipeline de desempeño de negocio (2026-11-05)
 
 - Creado `data/pipelines/PIPELINE_DESIGN.md` como diseño, sin código de orquestación. Define el Reporte Semanal de Desempeño por Oficina y Programa para Laura y Elena, los cuatro KPIs y sus eventos obligatorios, la granularidad ISO semanal UTC y el destino exacto `reporting.weekly_office_program_performance`.
