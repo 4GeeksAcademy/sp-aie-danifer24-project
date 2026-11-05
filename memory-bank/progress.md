@@ -33,6 +33,22 @@
 
 # Progreso del proyecto
 
+## Dashboard empresarial de reporting semanal (2026-11-05)
+
+- Añadida la página protegida `/reporting` en Backoffice, dirigida a stakeholders de negocio: consume los resultados semanales reales mediante un proxy Next autenticado hacia `GET /reporting/weekly-office-program-performance` y muestra el rango lunes-domingo de `week_start`.
+- Presenta los cuatro KPIs con sus nombres del briefing —Costo de material por oficina/programa, Kits entregados, Frecuencia de escasez y Frecuencia de variación de costo— en tabla por oficina/programa; el coste se formatea por fila en EUR o USD sin mezclar monedas.
+- Incluye carga, error con reintento, actualización, periodo sin filas y fecha visible; se añadió acceso desde navegación y página inicial, estilos responsivos y clasificación de la vista en telemetría.
+- Validación en `uis/backoffice`: `npm run typecheck`, `npm run lint`, Jest (3 suites, 18 tests) y `npm run build` correctos. El build registró `/reporting` y el proxy dinámico. No se llamó al API contra una base real ni se generaron datos de dashboard.
+- Pendiente: validar visualmente con una sesión y un reporte semanal disponible en un entorno autorizado. No se creó commit.
+
+### Validación integrada del reporting (2026-11-05)
+
+- Ejecutado el ETL real para la semana iniciada el 2026-11-02: 2 eventos procesados y aceptados, 0 rechazados y 1 fila KPI publicada. La fila corresponde a Valencia / `onboarding-soporte` (20 EUR de material, 1 kit, 0 eventos de escasez y 0 variaciones de coste); se verificó la lectura desde el almacenamiento.
+- Aplicadas por el desarrollador las políticas RLS de mínimo privilegio para el rol de escritura de reporting; verificación posterior confirmó las políticas de ambas tablas. Se añade la migración reproducible `data/pipelines/migrations/002_reporting_writer_rls_policies.sql`.
+- Corregida la invocación de subflows Prefect: `return_state=True` se pasa al invocar el Flow, no a `with_options()`. Actualizadas las aserciones de regresión. Validación de pipeline anterior: 20 pruebas correctas.
+- Diagnóstico del 500 de Reporting: la API activa conservaba la configuración de conexión anterior en memoria. Tras reiniciarla cargando el `.env` actualizado, el endpoint autenticado de FastAPI y el proxy del Backoffice respondieron HTTP 200 para la semana publicada.
+- Estado: ETL y consulta de reporting verificados de extremo a extremo en el entorno local autorizado. Pendiente validar la visualización en navegador con la sesión del usuario y definir/configurar el deployment programado de Prefect; la ejecución del ETL no se automatiza desde el dashboard.
+
 ## Subflows ETL del pipeline de desempeño (2026-11-05)
 
 - Refactorizado `weekly_office_program_performance` para invocar secuencialmente los subflows Prefect `extract_events_subflow(week_start) -> events`, `transform_business_kpis_subflow(events, week_start) -> aggregate` y `load_week_partition_subflow(aggregate, run_id) -> rows_written`. Los contratos son explícitos y las tasks originales siguen conservando retries, caché y lógica de auditoría/idempotencia.
