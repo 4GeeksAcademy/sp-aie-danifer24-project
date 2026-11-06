@@ -16,3 +16,9 @@ CREATE TABLE IF NOT EXISTS public.job_runs (
 -- efficient idempotency/active-run lookups. `processing` is the job lock state.
 CREATE UNIQUE INDEX IF NOT EXISTS ix_job_runs_job_name_target_date
     ON public.job_runs (job_name, target_date);
+
+-- The processing row itself is the lock: at most one active run per job,
+-- regardless of target_date. This is not a separate lock table or column.
+CREATE UNIQUE INDEX IF NOT EXISTS ix_job_runs_one_processing_per_job
+    ON public.job_runs (job_name)
+    WHERE status = 'processing';

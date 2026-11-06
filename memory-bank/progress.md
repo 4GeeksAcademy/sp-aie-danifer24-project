@@ -33,6 +33,15 @@
 
 # Progreso del proyecto
 
+## Orquestación de exportación nocturna (2026-11-06)
+
+- Añadida la migración `services/api/migrations/004_job_runs.sql` para `public.job_runs`, con estados `pending`/`processing`/`completed`/`failed` y unicidad diaria por `(job_name, target_date)`, separada de `reporting.pipeline_runs`.
+- Implementada `services/job_runs.py` para persistir la transición pending→processing y terminal, serializar adquisiciones mediante la fila diaria, omitir una ejecución ya activa/completada y recuperar como obsoleta una fila processing con más de 24 horas.
+- Añadido `scripts/nightly_export.py`: resuelve `TARGET_DATE` o ayer UTC; exporta `public.telemetry_events` por rango UTC a CSV sin sobrescribir snapshots; luego invoca el CLI existente del pipeline en un subproceso para la semana ISO del día objetivo. El pipeline continúa leyendo PostgreSQL, no el CSV.
+- La ejecución no se integra en FastAPI: queda para cron/scheduler externo. Documentados entorno, migración y ejemplo de cron en `scripts/README.es.md`; añadida la dependencia directa `python-dotenv`.
+- Pruebas nuevas para calendario UTC, exportación idempotente, comando ETL, omisión por concurrencia, estado failed/completed y persistencia del ciclo; validación conjunta `uv run pytest services/tests/test_job_runs.py scripts/tests/test_nightly_export.py data/pipelines/tests -q`: 27 passed.
+- Pendiente aplicar la migración en la base autorizada, conceder al rol dedicado de job permisos mínimos sobre `public.job_runs`, configurar cron y ejecutar una prueba de integración controlada. No se ejecutó la exportación contra telemetría real.
+
 ## Dashboard empresarial de reporting semanal (2026-11-05)
 
 - Añadida la página protegida `/reporting` en Backoffice, dirigida a stakeholders de negocio: consume los resultados semanales reales mediante un proxy Next autenticado hacia `GET /reporting/weekly-office-program-performance` y muestra el rango lunes-domingo de `week_start`.
