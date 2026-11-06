@@ -10,5 +10,7 @@ Each subfolder inside `services/` must correspond to **one specific service** (f
 ## Available services
 
 - [`api/`](./api/README.md): FastAPI service for validating and analyzing incident CSV files, downloading the latest report, and serving the static backoffice.
+- [`job_runner.py`](./job_runner.py): persistence and lifecycle API for independent nightly jobs in `public.job_runs`, including lock/idempotency queries and failed-state handling. It does not replace ETL audit in `reporting.pipeline_runs`.
+- `job_runs.py`: backward-compatible re-export of `job_runner.py` for existing imports.
 
 > _Spanish version: [README.es.md](./README.es.md)._
