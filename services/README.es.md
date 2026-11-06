@@ -10,3 +10,5 @@ Cada subcarpeta dentro de `services/` debe corresponder a **un servicio concreto
 ## Servicios disponibles
 
 - [`api/`](./api/README.md): API FastAPI para validar y analizar CSV de incidencias, descargar el último informe y servir el backoffice estático.
+- [`job_runner.py`](./job_runner.py): API de persistencia y ciclo de vida para trabajos nocturnos independientes en `public.job_runs`, incluidas consultas de bloqueo/idempotencia y manejo de estados fallidos. No sustituye la auditoría ETL de `reporting.pipeline_runs`.
+- `job_runs.py`: reexportación compatible de `job_runner.py` para imports existentes.
