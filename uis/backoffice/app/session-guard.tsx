@@ -32,6 +32,7 @@ function ProtectedSession({ children }: { children: ReactNode }) {
         pathname === "/suppliers" ? "suppliers" :
         pathname === "/incidents" ? "incidents" :
         pathname === "/incidents/new" ? "incident_new" :
+        pathname === "/reporting" ? "reporting" :
         pathname === "/account/profile" ? "account_profile" :
         pathname.startsWith("/account/") ? "account_password" :
         pathname === "/validacion-tecnica" ? "technical_validation" : "unknown";

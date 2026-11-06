@@ -1,6 +1,6 @@
 # Weekly Nexova business performance pipeline
 
-`pipeline.py` is the Prefect 3 entry point for the `weekly_office_program_performance` flow. It has independent tasks for resolving the week, creating a run record, extracting source events, transforming KPI rows, loading the target partition, and writing an optional evaluation summary.
+`pipeline.py` is the Prefect 3 entry point for the `weekly_office_program_performance` flow. The parent flow resolves the week and creates the audit run, then invokes explicit extraction, transformation, and load subflows in sequence. An optional evaluation-artifact subflow runs afterward and cannot block KPI publication. Each subflow has declared inputs and returns its stage output; the existing tasks retain retries and transformation caching.
 
 ## Run locally
 

@@ -88,6 +88,10 @@ Una fila por `(office, programme_id, week_start)`, donde `week_start` es el lune
 
 La tabla de destino será exactamente `reporting.weekly_office_program_performance`, con el DDL y la restricción `unique (office, programme_id, week_start)` definidos en la sección “Tabla de destino” del briefing. El diseño no propone escribir los agregados en `telemetry_events`. Se podrán crear tablas auxiliares de auditoría bajo `reporting` para corridas/checkpoints, sin cambiar el nombre ni el propósito de la tabla de métricas.
 
+### Prefect: composición de flow y subflows
+
+El flow principal `weekly_office_program_performance` inicia y audita la corrida, y compone tres subflows secuenciales con contratos explícitos: `extract_events_subflow(week_start) -> events`, `transform_business_kpis_subflow(events, week_start) -> aggregate` y `load_week_partition_subflow(aggregate, run_id) -> rows_written`. Cada uno encapsula la task de su etapa y conserva su configuración de retries/cache. Tras la carga, `evaluation_artifact_subflow(aggregate, rows_written, run_id) -> path` produce el resumen local opcional; el padre lo invoca con `return_state=True` y aísla su fallo para no invalidar una publicación correcta. La carga también retorna su estado al padre para marcar la auditoría como fallida antes de relanzar errores críticos.
+
 ### Prefect: composición de flow y tasks
 
 Un deployment semanal de Prefect ejecutará el flow `weekly_office_program_performance`. Se programará para comenzar el lunes antes del horario de consulta acordado, con margen para reintentos; la zona del cron se fijará explícitamente y la ventana de datos siempre será UTC. Un endpoint manual futuro iniciará el mismo deployment con `week_start` opcional; no implementará una segunda lógica de cálculo.

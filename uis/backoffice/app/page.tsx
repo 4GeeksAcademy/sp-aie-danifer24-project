@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Boxes, Building2, ClipboardList, FlaskConical } from "lucide-react";
+import { ArrowRight, Boxes, Building2, ClipboardList, FlaskConical, ChartNoAxesCombined } from "lucide-react";
 
 export default function HomePage() {
   return (
@@ -7,7 +7,7 @@ export default function HomePage() {
       <section className="hero backoffice-home-hero">
         <p className="badge">Operaciones · Nexova</p>
         <h1>Centro de operaciones</h1>
-        <p>Un espacio para gestionar proveedores, inventario e incidencias de los equipos de Valencia y Miami.</p>
+        <p>Un espacio para gestionar la operación y consultar los resultados semanales de los equipos de Valencia y Miami.</p>
       </section>
 
       <section className="backoffice-home-section" aria-labelledby="operations-heading">
@@ -30,6 +30,11 @@ export default function HomePage() {
             <span className="backoffice-home-icon"><ClipboardList size={21} /></span>
             <span className="backoffice-home-card-copy"><strong>Incidencias</strong><span>Registro, seguimiento de estados y métricas del equipo.</span></span>
             <span className="backoffice-home-card-action">Ver incidencias <ArrowRight size={16} /></span>
+          </Link>
+          <Link className="panel backoffice-home-card" href="/reporting">
+            <span className="backoffice-home-icon"><ChartNoAxesCombined size={21} /></span>
+            <span className="backoffice-home-card-copy"><strong>Rendimiento semanal</strong><span>Costes de materiales, kits entregados y eventos operativos por oficina y programa.</span></span>
+            <span className="backoffice-home-card-action">Ver resultados <ArrowRight size={16} /></span>
           </Link>
           <Link className="panel backoffice-home-card" href="/validacion-tecnica">
             <span className="backoffice-home-icon"><FlaskConical size={21} /></span>
