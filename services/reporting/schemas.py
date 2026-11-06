@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
@@ -35,10 +35,13 @@ class StartPipelineRunRequest(BaseModel):
 
 
 class StartPipelineRunResponse(BaseModel):
-    run_id: str
-    flow_run_id: str
-    status: Literal["Running"]
-    week_start: date
+    task_id: str
+
+
+class TaskStatusResponse(BaseModel):
+    task_id: str
+    status: Literal["pending", "started", "success", "failure"]
+    result: Any | None = None
 
 
 class WeeklyKPIEntry(BaseModel):

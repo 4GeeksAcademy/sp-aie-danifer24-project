@@ -62,6 +62,32 @@ ai-engineering-company-project-monorepo/
 4. **Revisa** los `README.md` de cada carpeta raíz para entender responsabilidades (`uis/`, `services/`, `data/`, `skills/`, etc.).
 5. **Empieza a implementar** entregables por hito en `uis/` y `services/`, reutilizando `packages/shared/` y `data/` según corresponda.
 
+## Ejecución local con Docker Compose
+
+Para ejecutar la infraestructura local (API, Redis, worker de Celery y Flower), usa ambos archivos de entorno en este orden:
+
+```bash
+docker compose --env-file .env --env-file .env.docker up -d --build
+```
+
+Cuando una variable está definida en ambos archivos, el archivo indicado después (`.env.docker`) tiene prioridad sobre el anterior (`.env`). Las variables exportadas en la shell pueden prevalecer sobre los archivos. La URL que deben compartir API, worker y Flower dentro de Compose es `REDIS_URL=redis://redis:6379/0`; `redis` es el nombre del servicio en la red Docker.
+
+Comandos útiles, manteniendo el mismo orden de archivos:
+
+```bash
+docker compose --env-file .env --env-file .env.docker ps
+docker compose --env-file .env --env-file .env.docker logs -f api worker redis flower
+docker compose --env-file .env --env-file .env.docker stop worker
+docker compose --env-file .env --env-file .env.docker start worker
+docker compose --env-file .env --env-file .env.docker down
+```
+
+Para iniciar solo el worker (y Redis, si aún no está levantado), usa `docker compose --env-file .env --env-file .env.docker up -d worker`. El endpoint autenticado `POST /reporting/pipeline-runs` encola el deployment Prefect y devuelve `202` con `{ "task_id": "..." }`; consulta el resultado con `GET /tasks/{task_id}`. `GET /tasks/{task_id}` requiere la misma autenticación que las demás rutas protegidas. Flower está disponible en el puerto `5555` y permite observar workers y tareas; el worker también registra el identificador, número de intento, estado, duración y detalle de excepciones.
+
+`.env` conserva la configuración/secretos locales compartidos; `.env.docker` debe contener los ajustes propios de Docker y puede sobrescribirlos cuando sea necesario. No publiques ninguno de esos archivos si contienen credenciales.
+
+Las migraciones SQL de `services/api/migrations/` cambian el esquema de PostgreSQL: crean o actualizan tablas e índices que el código espera encontrar. Añadir un archivo de migración al repositorio **no lo ejecuta automáticamente**; debe aplicarse una vez a la base de datos prevista antes de usar la funcionalidad asociada. Por ejemplo, `005_celery_dead_letters.sql` crea el almacenamiento persistente de tareas Celery que agotan sus reintentos; es distinto de `job_runs` y `reporting.pipeline_runs`.
+
 ---
 
 ## Validación de TypeScript
