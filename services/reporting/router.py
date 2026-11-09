@@ -43,7 +43,7 @@ def latest_pipeline_run():
     status_code=status.HTTP_202_ACCEPTED,
 )
 def start_pipeline_run(request: StartPipelineRunRequest | None = None):
-    """Queue a deployment request; the Celery worker asks Prefect to run it."""
+    """Queue the reporting ETL for execution by the Celery worker."""
     week_start: date | None = request.week_start if request is not None else None
     if week_start is not None and week_start.weekday() != 0:
         raise HTTPException(status_code=422, detail="week_start must be an ISO week Monday")

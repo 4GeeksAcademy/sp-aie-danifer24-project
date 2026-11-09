@@ -74,33 +74,62 @@ def test_dead_letter_storage_sanitizes_error_and_writes_attempt(monkeypatch):
     engine.dispose.assert_called_once()
 
 
-def test_weekly_pipeline_task_delegates_to_prefect(monkeypatch):
-    expected = {
-        "run_id": "flow-123",
-        "flow_run_id": "flow-123",
-        "status": "Running",
-        "week_start": date(2026, 11, 2),
-    }
-    start = MagicMock(return_value=expected)
-    monkeypatch.setattr("services.tasks.start_weekly_office_program_performance", start)
+def test_weekly_pipeline_task_runs_etl_in_celery_worker(monkeypatch):
+    calls = []
+    monkeypatch.setattr("services.tasks._resolve_week_start", lambda value: date(2026, 11, 2))
+    monkeypatch.setattr("services.tasks.start_pipeline_run", MagicMock())
+    monkeypatch.setattr(
+        "services.tasks.extract_events",
+        MagicMock(**{"fn.return_value": [{"event": "one"}]}),
+    )
+    monkeypatch.setattr(
+        "services.tasks.transform_business_kpis",
+        MagicMock(**{"fn.return_value": {
+            "processed_records": 1,
+            "accepted_records": 1,
+            "rejected_records": 0,
+            "duplicate_records": 0,
+        }}),
+    )
+    monkeypatch.setattr(
+        "services.tasks.load_week_partition",
+        MagicMock(**{"fn.return_value": 2}),
+    )
+    monkeypatch.setattr(
+        "services.tasks.write_evaluation_artifact",
+        MagicMock(**{"fn.side_effect": lambda aggregate, rows, run_id: calls.append(run_id) or "artifact.json"}),
+    )
+    start_weekly_pipeline.push_request(id="celery-task-123", retries=0)
+    try:
+        result = start_weekly_pipeline.run(week_start="2026-11-02")
+    finally:
+        start_weekly_pipeline.pop_request()
 
-    result = start_weekly_pipeline.run(week_start="2026-11-02")
-
-    start.assert_called_once_with(date(2026, 11, 2))
     assert result == {
-        "run_id": "flow-123",
-        "flow_run_id": "flow-123",
-        "status": "Running",
+        "run_id": "celery-task-123",
+        "flow_run_id": "celery-task-123",
+        "status": "Completed",
         "week_start": "2026-11-02",
+        "processed_records": 1,
+        "accepted_records": 1,
+        "rejected_records": 0,
+        "duplicate_records": 0,
+        "rows_written": 2,
+        "evaluation_artifact": "artifact.json",
     }
+    assert calls == ["celery-task-123"]
 
 
-def test_weekly_pipeline_task_retries_prefect_errors(monkeypatch):
+def test_weekly_pipeline_task_retries_etl_errors(monkeypatch):
     retry = MagicMock(side_effect=RuntimeError("retry scheduled"))
     monkeypatch.setattr(start_weekly_pipeline, "retry", retry)
     monkeypatch.setattr(
-        "services.tasks.start_weekly_office_program_performance",
-        MagicMock(side_effect=RuntimeError("temporary Prefect outage")),
+        "services.tasks._resolve_week_start", lambda value: date(2026, 11, 2)
+    )
+    monkeypatch.setattr("services.tasks.start_pipeline_run", MagicMock())
+    monkeypatch.setattr(
+        "services.tasks.extract_events",
+        MagicMock(**{"fn.side_effect": RuntimeError("temporary ETL outage")}),
     )
     start_weekly_pipeline.push_request(id="weekly-task", retries=1)
     try:
@@ -110,3 +139,28 @@ def test_weekly_pipeline_task_retries_prefect_errors(monkeypatch):
         start_weekly_pipeline.pop_request()
 
     assert retry.call_args.kwargs["countdown"] == 4
+
+
+def test_weekly_pipeline_task_records_dlq_after_retries_exhausted(monkeypatch):
+    record = MagicMock()
+    mark_failed = MagicMock()
+    monkeypatch.setattr("services.tasks.record_dead_letter", record)
+    monkeypatch.setattr("services.tasks._resolve_week_start", lambda value: date(2026, 11, 2))
+    monkeypatch.setattr("services.tasks.start_pipeline_run", MagicMock())
+    monkeypatch.setattr(
+        "services.tasks.extract_events",
+        MagicMock(**{"fn.side_effect": ValueError("permanent ETL failure")}),
+    )
+    monkeypatch.setattr("services.tasks.mark_pipeline_run_failed", mark_failed)
+
+    start_weekly_pipeline.push_request(id="weekly-task", retries=3)
+    try:
+        with pytest.raises(ValueError, match="permanent ETL failure"):
+            start_weekly_pipeline.run(week_start="2026-11-02")
+    finally:
+        start_weekly_pipeline.pop_request()
+
+    record.assert_called_once()
+    assert record.call_args.kwargs["task_id"] == "weekly-task"
+    assert record.call_args.kwargs["attempt"] == 4
+    mark_failed.fn.assert_called_once()

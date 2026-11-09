@@ -4,12 +4,21 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any
 
 from celery import Task
 
-from data.pipelines.prefect_client import start_weekly_office_program_performance
+from data.pipelines.pipeline import (
+    _resolve_week_start,
+    _sanitize_error_message,
+    extract_events,
+    load_week_partition,
+    mark_pipeline_run_failed,
+    start_pipeline_run,
+    transform_business_kpis,
+    write_evaluation_artifact,
+)
 from scripts.nightly_export import resolve_target_date, run_nightly
 from services.celery_app import celery_app
 from services.dead_letter_queue import (
@@ -150,30 +159,58 @@ def run_nightly_export(self, target_date: str | None = None) -> dict[str, str]:
     soft_time_limit=300,
     time_limit=330,
 )
-def start_weekly_pipeline(self, week_start: str | None = None) -> dict[str, str]:
-    """Ask Prefect to run a weekly pipeline deployment from the worker."""
+def start_weekly_pipeline(self, week_start: str | None = None) -> dict[str, Any]:
+    """Run the weekly reporting ETL directly in the Celery worker."""
+    resolved_week: date | None = None
+    started_at = datetime.now(timezone.utc)
+    processed_records = 0
+    run_id = self.request.id or "unknown"
     try:
-        parsed_week_start = date.fromisoformat(week_start) if week_start else None
-        if parsed_week_start is not None and parsed_week_start.weekday() != 0:
-            raise ValueError("week_start must be an ISO week Monday")
-        result = start_weekly_office_program_performance(parsed_week_start)
-        return {
-            "run_id": result["run_id"],
-            "flow_run_id": result["flow_run_id"],
-            "status": result["status"],
-            "week_start": result["week_start"].isoformat(),
-        }
+        resolved_week = _resolve_week_start(week_start)
+        start_pipeline_run.fn(resolved_week, run_id, started_at)
+        extracted = extract_events.fn(resolved_week)
+        processed_records = len(extracted)
+        aggregate = transform_business_kpis.fn(extracted, resolved_week)
+        rows_written = load_week_partition.fn(aggregate, run_id)
     except Exception as error:
         retries_used = self.request.retries
         if retries_used < self.max_retries:
             raise self.retry(exc=error, countdown=2 ** (retries_used + 1))
 
+        if resolved_week is not None:
+            try:
+                mark_pipeline_run_failed.fn(
+                    run_id, resolved_week, started_at, processed_records, error
+                )
+            except Exception:
+                logger.exception("Could not persist failed reporting run status")
         try:
             record_dead_letter(
-                task_id=self.request.id or "unknown",
+                task_id=run_id,
                 attempt=retries_used + 1,
                 error=error,
             )
         except Exception:
-            log_dead_letter_persistence_failure(self.request.id or "unknown", error)
+            log_dead_letter_persistence_failure(run_id, error)
         raise
+
+    artifact: str | None = None
+    try:
+        artifact = write_evaluation_artifact.fn(aggregate, rows_written, run_id)
+    except Exception as error:
+        logger.warning(
+            "Optional evaluation artifact failed: %s",
+            _sanitize_error_message(error),
+        )
+    return {
+        "run_id": run_id,
+        "flow_run_id": run_id,
+        "status": "Completed",
+        "week_start": resolved_week.isoformat(),
+        "processed_records": aggregate["processed_records"],
+        "accepted_records": aggregate["accepted_records"],
+        "rejected_records": aggregate["rejected_records"],
+        "duplicate_records": aggregate["duplicate_records"],
+        "rows_written": rows_written,
+        "evaluation_artifact": artifact,
+    }
