@@ -62,6 +62,32 @@ ai-engineering-company-project-monorepo/
 4. **Review** each top-level folder `README.md` to understand intended responsibilities (`uis/`, `services/`, `data/`, `skills/`, etc.).
 5. **Start implementing** milestone deliverables in `uis/` and `services/`, reusing `packages/shared/` and `data/` as needed.
 
+## Local Docker Compose
+
+To run the local infrastructure (API, Redis, Celery worker, and Flower), pass both environment files in this order:
+
+```bash
+docker compose --env-file .env --env-file .env.docker up -d --build
+```
+
+When a variable is defined in both files, the later file (`.env.docker`) takes precedence over the earlier one (`.env`). Variables exported in the shell may override file values. API, worker, and Flower should share `REDIS_URL=redis://redis:6379/0`; `redis` is the service name on the Docker network.
+
+Useful commands using the same env-file order:
+
+```bash
+docker compose --env-file .env --env-file .env.docker ps
+docker compose --env-file .env --env-file .env.docker logs -f api worker redis flower
+docker compose --env-file .env --env-file .env.docker stop worker
+docker compose --env-file .env --env-file .env.docker start worker
+docker compose --env-file .env --env-file .env.docker down
+```
+
+To start only the worker (and Redis if it is not already running), use `docker compose --env-file .env --env-file .env.docker up -d worker`. The authenticated `POST /reporting/pipeline-runs` endpoint queues the Prefect deployment and returns `202` with `{ "task_id": "..." }`; retrieve its status with `GET /tasks/{task_id}`. `GET /tasks/{task_id}` requires the same authentication as other protected routes. Flower is available on port `5555` to inspect workers and tasks; the worker also logs task ID, attempt, state, duration, and full exception details.
+
+Keep local/shared configuration and secrets in `.env`; put Docker-specific settings in `.env.docker`, which can override shared values. Do not publish either file if it contains credentials.
+
+SQL migrations in `services/api/migrations/` change the PostgreSQL schema by creating or updating tables and indexes expected by the code. Adding a migration file to the repository does **not** apply it automatically; apply it once to the intended database before using its feature. For example, `005_celery_dead_letters.sql` creates persistent storage for Celery tasks that exhaust their retries, separate from `job_runs` and `reporting.pipeline_runs`.
+
 ---
 
 ## Milestones (reference)

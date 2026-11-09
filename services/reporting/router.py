@@ -4,16 +4,16 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from data.pipelines.prefect_client import start_weekly_office_program_performance
 from data.pipelines.reporting_store import (
     get_latest_pipeline_run,
     get_weekly_office_program_performance,
 )
 from services.api.security import get_current_user
+from services.tasks import start_weekly_pipeline
 from services.reporting.schemas import (
     PipelineRunResponse,
-    StartPipelineRunRequest,
     StartPipelineRunResponse,
+    StartPipelineRunRequest,
     WeeklyKPIResponse,
 )
 
@@ -43,17 +43,20 @@ def latest_pipeline_run():
     status_code=status.HTTP_202_ACCEPTED,
 )
 def start_pipeline_run(request: StartPipelineRunRequest | None = None):
-    """Request a deployment run; Prefect, not the API, performs the ETL."""
+    """Queue the reporting ETL for execution by the Celery worker."""
     week_start: date | None = request.week_start if request is not None else None
+    if week_start is not None and week_start.weekday() != 0:
+        raise HTTPException(status_code=422, detail="week_start must be an ISO week Monday")
     try:
-        return start_weekly_office_program_performance(week_start)
-    except ValueError as error:
-        raise HTTPException(status_code=422, detail=str(error)) from error
+        queued_task = start_weekly_pipeline.delay(
+            week_start.isoformat() if week_start is not None else None
+        )
+        return {"task_id": queued_task.id}
     except Exception as error:
-        # Avoid leaking Prefect/server connection details through the API response.
+        # Avoid leaking broker connection details through the API response.
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="El deployment del pipeline no está disponible.",
+            detail="No se pudo encolar el pipeline.",
         ) from error
 
 

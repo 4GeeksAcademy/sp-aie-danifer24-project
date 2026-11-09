@@ -16,6 +16,7 @@ def test_reporting_routes_require_authentication(api):
     paths = [
         ("GET", "/reporting/pipeline-runs/latest"),
         ("POST", "/reporting/pipeline-runs"),
+        ("GET", "/tasks/task-123"),
         ("GET", "/reporting/weekly-office-program-performance"),
     ]
     for method, path in paths:
@@ -55,53 +56,67 @@ def test_latest_pipeline_run_returns_404_when_no_runs(api, register, login):
     assert response.json()["code"] == "not_found"
 
 
-def test_manual_run_delegates_to_prefect_adapter(api, register, login):
+def test_manual_run_enqueues_celery_task(api, register, login):
     client = authenticated_client(api, register, login)
-    expected = {
-        "run_id": "flow-123",
-        "flow_run_id": "flow-123",
-        "status": "Running",
-        "week_start": date(2026, 11, 2),
-    }
+    queued = type("QueuedTask", (), {"id": "celery-task-123"})()
     with patch(
-        "services.reporting.router.start_weekly_office_program_performance",
-        return_value=expected,
-    ) as start_run:
+        "services.reporting.router.start_weekly_pipeline.delay",
+        return_value=queued,
+    ) as enqueue:
         response = client.post(
             "/reporting/pipeline-runs", json={"week_start": "2026-11-02"}
         )
 
     assert response.status_code == 202
-    assert response.json() == {
-        "run_id": "flow-123",
-        "flow_run_id": "flow-123",
-        "status": "Running",
-        "week_start": "2026-11-02",
-    }
-    start_run.assert_called_once_with(date(2026, 11, 2))
+    assert response.json() == {"task_id": "celery-task-123"}
+    enqueue.assert_called_once_with("2026-11-02")
 
 
 def test_manual_run_rejects_non_monday(api, register, login):
     client = authenticated_client(api, register, login)
-    with patch(
-        "services.reporting.router.start_weekly_office_program_performance",
-        side_effect=ValueError("week_start must be an ISO week Monday"),
-    ):
-        response = client.post(
-            "/reporting/pipeline-runs", json={"week_start": "2026-11-03"}
-        )
+    response = client.post(
+        "/reporting/pipeline-runs", json={"week_start": "2026-11-03"}
+    )
     assert response.status_code == 422
 
 
-def test_manual_run_hides_prefect_connection_errors(api, register, login):
+def test_manual_run_hides_broker_connection_errors(api, register, login):
     client = authenticated_client(api, register, login)
     with patch(
-        "services.reporting.router.start_weekly_office_program_performance",
+        "services.reporting.router.start_weekly_pipeline.delay",
         side_effect=RuntimeError("private server detail"),
     ):
         response = client.post("/reporting/pipeline-runs", json={})
     assert response.status_code == 503
     assert "private server detail" not in response.text
+
+
+def test_task_status_normalizes_celery_states(api, register, login):
+    client = authenticated_client(api, register, login)
+    result = type("AsyncResult", (), {"state": "SUCCESS", "result": {"run_id": "flow-1"}})()
+    with patch("services.api.routes.tasks.celery_app.AsyncResult", return_value=result):
+        response = client.get("/tasks/celery-task-123")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "task_id": "celery-task-123",
+        "status": "success",
+        "result": {"run_id": "flow-1"},
+    }
+
+
+def test_task_status_failure_contains_error_message(api, register, login):
+    client = authenticated_client(api, register, login)
+    result = type("AsyncResult", (), {"state": "FAILURE", "result": RuntimeError("Prefect unavailable")})()
+    with patch("services.api.routes.tasks.celery_app.AsyncResult", return_value=result):
+        response = client.get("/tasks/celery-task-456")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "task_id": "celery-task-456",
+        "status": "failure",
+        "result": "Prefect unavailable",
+    }
 
 
 def test_prefect_client_requests_configured_deployment(monkeypatch):
