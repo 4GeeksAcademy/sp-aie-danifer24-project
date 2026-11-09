@@ -9,10 +9,10 @@ services:
 
   flower:
     image: mher/flower:2.0
-    command: ["celery", "--broker=${REDIS_URL:-redis://redis:6379/0}", "--result-backend=${REDIS_URL:-redis://redis:6379/0}", "flower", "--port=5555"]
+    command: ["celery", "--broker=redis://redis:6379/0", "--result-backend=redis://redis:6379/0", "flower", "--port=5555"]
     environment:
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
-      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-${REDIS_URL:-redis://redis:6379/0}}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
     depends_on:
       - redis
     ports:
@@ -27,8 +27,8 @@ services:
       additional_contexts:
         repo: .
     environment:
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
-      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-${REDIS_URL:-redis://redis:6379/0}}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
       DATABASE_URL: ${DATABASE_URL:?Define DATABASE_URL en el archivo .env o en el entorno}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Define JWT_SECRET_KEY en el archivo .env}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:?}
@@ -44,6 +44,7 @@ services:
     volumes:
       - ./services:/app/services
       - ./packages/shared:/app/packages/shared:ro
+      - ./docs:/app/docs:ro
       - api-data:/app/data
     networks:
       - nexova
@@ -56,12 +57,13 @@ services:
         repo: .
     command: ["celery", "-A", "services.celery_app:celery_app", "worker", "--loglevel=INFO"]
     environment:
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
-      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-${REDIS_URL:-redis://redis:6379/0}}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
       DATABASE_URL: ${DATABASE_URL:?Define DATABASE_URL en el archivo .env o en el entorno}
       JOB_RUNS_DATABASE_URL: ${JOB_RUNS_DATABASE_URL:-}
       TELEMETRY_DATABASE_URL: ${TELEMETRY_DATABASE_URL:-}
       TELEMETRY_DATABASE_READ_ONLY: ${TELEMETRY_DATABASE_READ_ONLY:-false}
+      REPORTING_DATABASE_URL: ${REPORTING_DATABASE_URL:-${DATABASE_URL:?Define DATABASE_URL en el archivo .env o en el entorno}}
     depends_on:
       - redis
     restart: unless-stopped
@@ -78,7 +80,7 @@ services:
       additional_contexts:
         repo: .
       args:
-        NEXT_PUBLIC_INVENTORY_API_URL: ${NEXT_PUBLIC_INVENTORY_API_URL:?}
+        NEXT_PUBLIC_INVENTORY_API_URL: ${NEXT_PUBLIC_INVENTORY_API_URL:-http://api:${API_PORT:?}}
     depends_on:
       - api
     init: true
@@ -88,8 +90,10 @@ services:
       NEXTJS_MODE: ${NEXTJS_MODE:?}
       WEBSITE_PORT: ${WEBSITE_PORT:?}
       BACKOFFICE_PORT: ${BACKOFFICE_PORT:?}
+      INVENTORY_API_URL: http://api:${API_PORT:?}
       NEXT_PUBLIC_INVENTORY_API_URL: ${NEXT_PUBLIC_INVENTORY_API_URL:?}
-      SUPPLIERS_API_URL: ${SUPPLIERS_API_URL:?}
+      SUPPLIERS_API_URL: http://api:${API_PORT:?}
+      TELEMETRY_ENDPOINT: http://api:${API_PORT}/telemetry/events
     ports:
       - "${WEBSITE_PORT:?}:${WEBSITE_PORT:?}"
       - "${BACKOFFICE_PORT:?}:${BACKOFFICE_PORT:?}"

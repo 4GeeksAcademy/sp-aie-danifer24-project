@@ -1,4 +1,10 @@
-const API_BASE = (process.env.NEXT_PUBLIC_INVENTORY_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
+// This is a server-side proxy. Keep its upstream URL as a runtime server
+// variable so Next does not inline the public-prefixed setting at build time.
+const API_BASE = (
+  process.env.INVENTORY_API_URL ??
+  process.env.SUPPLIERS_API_URL ??
+  "http://127.0.0.1:8000"
+).replace(/\/$/, "");
 
 export async function forwardInventoryRequest(request: Request, suffix: string): Promise<Response> {
   const incoming = new URL(request.url);
