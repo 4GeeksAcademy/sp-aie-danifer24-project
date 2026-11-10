@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error, roc_auc_score
+from sklearn.model_selection import TimeSeriesSplit
 from sklearn.preprocessing import StandardScaler
 
 TARGET = "revenue_usd"
@@ -166,6 +167,23 @@ def recursive_forest_forecast(
     return predictions_by_tree.mean(axis=1), predictions_by_tree
 
 
+def calculate_error_metrics(
+    actual_values: pd.Series | np.ndarray,
+    predictions: pd.Series | np.ndarray,
+) -> dict[str, float]:
+    """Return dollar-interpretable MAE and RMSE for one evaluation partition."""
+    actual = np.asarray(actual_values, dtype=float)
+    predicted = np.asarray(predictions, dtype=float)
+    if len(actual) != len(predicted) or len(actual) == 0:
+        raise ValueError("Predictions must match a non-empty target")
+    if not np.isfinite(actual).all() or not np.isfinite(predicted).all():
+        raise ValueError("Targets and predictions must be finite")
+    return {
+        "mae_usd": float(np.mean(np.abs(actual - predicted))),
+        "rmse_usd": float(np.sqrt(mean_squared_error(actual, predicted))),
+    }
+
+
 def calculate_metrics(
     y_train: pd.Series,
     y_test: pd.Series,
@@ -214,7 +232,9 @@ def calculate_metrics(
 
     mse = float(mean_squared_error(actual, predicted))
     mean_revenue = float(np.mean(actual))
+    error_metrics = calculate_error_metrics(actual, predicted)
     return {
+        **error_metrics,
         "mse_usd2": mse,
         "mse_pct_of_mean_revenue": float(100 * mse / (mean_revenue**2)) if mean_revenue else float("nan"),
         "psi_revenue_distribution": psi,
@@ -224,31 +244,211 @@ def calculate_metrics(
     }
 
 
-def train_and_evaluate(
-    csv_path: str | Path,
-    output_path: str | Path = "reports/sales_forecast.png",
-) -> dict[str, Any]:
-    """Train, evaluate, and plot a leakage-safe chronological sales forecast."""
-    sales = load_sales_data(csv_path)
-    features, target = build_forecasting_features(sales)
-    x_train, y_train, x_test, y_test = split_first_eight_years(features, target)
-
-    # With only 96 raw training months (84 after the 12-month lag warm-up), a
-    # Random Forest is a practical low-tuning baseline. Its ensemble averages
-    # many trees, and feature importances offer a stakeholder-friendly account
-    # of drivers; XGBoost's sequential boosting would require more tuning time.
-    model = RandomForestRegressor(
+def make_forest_model() -> RandomForestRegressor:
+    """Create the fixed Random Forest baseline used by every evaluation fold."""
+    return RandomForestRegressor(
         n_estimators=500,
         min_samples_leaf=2,
         max_features=0.8,
         random_state=42,
         n_jobs=-1,
     )
+
+
+def temporal_cross_validation(
+    x_train: pd.DataFrame,
+    y_train: pd.Series,
+    n_splits: int = 5,
+) -> tuple[list[dict[str, Any]], dict[str, float]]:
+    """Evaluate sequential forecast folds, recursively forecasting each horizon.
+
+    The train indices in each TimeSeriesSplit fold are a chronological prefix;
+    validation is the immediately following contiguous block. All revenue-based
+    validation features are recomputed from that fold's training observations
+    and its own earlier predictions by ``recursive_forest_forecast``. Thus the
+    prebuilt shifted/rolling columns never expose validation actuals, while the
+    fold's training history remains available as legitimate prior context.
+    """
+    if not x_train.index.equals(y_train.index):
+        raise ValueError("Training features and target must have matching indexes")
+    if not x_train.index.is_monotonic_increasing:
+        raise ValueError("Training observations must be sorted chronologically")
+    if n_splits < 2 or len(x_train) <= n_splits:
+        raise ValueError("Not enough training rows for the requested temporal folds")
+
+    splitter = TimeSeriesSplit(n_splits=n_splits)
+    fold_results: list[dict[str, Any]] = []
+
+    for fold_number, (train_positions, validation_positions) in enumerate(
+        splitter.split(x_train), start=1
+    ):
+        # Explicitly enforce temporal order and no overlap; never shuffle.
+        if train_positions.max() >= validation_positions.min():
+            raise AssertionError(f"Fold {fold_number} mixes train and validation order")
+        fold_x_train = x_train.iloc[train_positions]
+        fold_y_train = y_train.iloc[train_positions]
+        fold_x_validation = x_train.iloc[validation_positions]
+        fold_y_validation = y_train.iloc[validation_positions]
+        if fold_x_train.index.max() >= fold_x_validation.index.min():
+            raise AssertionError(f"Fold {fold_number} is not strictly chronological")
+
+        model = make_forest_model()
+        model.fit(fold_x_train, fold_y_train)
+        # Only actual history through the fold's train end is passed in. The
+        # recursive forecaster appends its predictions, not validation labels.
+        fold_history = y_train.loc[:fold_y_train.index.max()]
+        predictions, _ = recursive_forest_forecast(
+            model, fold_history, fold_x_validation
+        )
+        train_predictions = model.predict(fold_x_train)
+        fold_train_errors = calculate_error_metrics(fold_y_train, train_predictions)
+        fold_validation_errors = calculate_error_metrics(fold_y_validation, predictions)
+        fold_mse = float(mean_squared_error(fold_y_validation, predictions))
+        fold_results.append(
+            {
+                "fold": fold_number,
+                "train_start": fold_x_train.index.min(),
+                "train_end": fold_x_train.index.max(),
+                "validation_start": fold_x_validation.index.min(),
+                "validation_end": fold_x_validation.index.max(),
+                "train_rows": len(fold_x_train),
+                "validation_rows": len(fold_x_validation),
+                "train_mae_usd": fold_train_errors["mae_usd"],
+                "train_rmse_usd": fold_train_errors["rmse_usd"],
+                "validation_mae_usd": fold_validation_errors["mae_usd"],
+                "validation_rmse_usd": fold_validation_errors["rmse_usd"],
+                "predictions": pd.Series(
+                    predictions, index=fold_y_validation.index, name="prediction"
+                ),
+                "mse_usd2": fold_mse,
+            }
+        )
+
+    mse_values = np.asarray([fold["mse_usd2"] for fold in fold_results])
+    summary = {
+        "mse_usd2_mean": float(mse_values.mean()),
+        "mse_usd2_std": float(mse_values.std(ddof=1)),
+        "folds": float(n_splits),
+    }
+    return fold_results, summary
+
+
+def generate_learning_curve(
+    x_train: pd.DataFrame,
+    y_train: pd.Series,
+    output_path: str | Path,
+    validation_size: int = 14,
+    min_train_size: int = 14,
+    step: int = 7,
+) -> dict[str, Any]:
+    """Plot train/validation MSE as a chronological training prefix grows.
+
+    The most recent ``validation_size`` training observations form one fixed,
+    contiguous validation horizon. All candidate training prefixes end before
+    it. Validation predictions are rolled forward recursively so actual
+    validation revenues never enter lag/rolling features.
+    """
+    if not x_train.index.equals(y_train.index):
+        raise ValueError("Training features and target must have matching indexes")
+    if not x_train.index.is_monotonic_increasing:
+        raise ValueError("Training observations must be sorted chronologically")
+    if validation_size < 1 or step < 1 or min_train_size < 1:
+        raise ValueError("validation_size, min_train_size, and step must be positive")
+    max_train_size = len(x_train) - validation_size
+    if max_train_size < min_train_size:
+        raise ValueError("Not enough rows for the learning curve train/validation split")
+
+    validation_x = x_train.iloc[-validation_size:]
+    validation_y = y_train.iloc[-validation_size:]
+    sizes = list(range(min_train_size, max_train_size + 1, step))
+    if sizes[-1] != max_train_size:
+        sizes.append(max_train_size)
+
+    points: list[dict[str, float | int]] = []
+    for size in sizes:
+        prefix_x = x_train.iloc[:size]
+        prefix_y = y_train.iloc[:size]
+        if prefix_x.index.max() >= validation_x.index.min():
+            raise AssertionError("Learning-curve train prefix overlaps validation period")
+        model = make_forest_model()
+        model.fit(prefix_x, prefix_y)
+        train_predictions = model.predict(prefix_x)
+        train_error_metrics = calculate_error_metrics(prefix_y, train_predictions)
+        validation_predictions, _ = recursive_forest_forecast(
+            model, prefix_y, validation_x
+        )
+        validation_error_metrics = calculate_error_metrics(
+            validation_y, validation_predictions
+        )
+        points.append(
+            {
+                "train_size": size,
+                "train_mae_usd": train_error_metrics["mae_usd"],
+                "train_rmse_usd": train_error_metrics["rmse_usd"],
+                "validation_mae_usd": validation_error_metrics["mae_usd"],
+                "validation_rmse_usd": validation_error_metrics["rmse_usd"],
+            }
+        )
+
+    destination = Path(output_path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    fig, ax = plt.subplots(figsize=(10, 6))
+    sizes_array = [point["train_size"] for point in points]
+    ax.plot(sizes_array, [point["train_mae_usd"] for point in points],
+            marker="o", label="MAE entrenamiento")
+    ax.plot(sizes_array, [point["validation_mae_usd"] for point in points],
+            marker="o", label="MAE validación")
+    ax.plot(sizes_array, [point["train_rmse_usd"] for point in points],
+            marker="s", linestyle="--", label="RMSE entrenamiento")
+    ax.plot(sizes_array, [point["validation_rmse_usd"] for point in points],
+            marker="s", linestyle="--", label="RMSE validación")
+    ax.set(
+        title="Curva de aprendizaje — pronóstico de ingresos Nexova",
+        xlabel="Tamaño del conjunto de entrenamiento (meses)",
+        ylabel="Error (USD)",
+    )
+    ax.grid(alpha=0.25)
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(destination, dpi=160)
+    plt.close(fig)
+    return {
+        "points": points,
+        "validation_period": (validation_x.index.min(), validation_x.index.max()),
+        "plot_path": destination,
+    }
+
+
+def train_and_evaluate(
+    csv_path: str | Path,
+    output_path: str | Path = "reports/sales_forecast.png",
+    cv_splits: int = 5,
+    learning_curve_path: str | Path = "data/eval/sales_forecast_learning_curve.png",
+) -> dict[str, Any]:
+    """Train, evaluate, and plot a leakage-safe chronological sales forecast."""
+    sales = load_sales_data(csv_path)
+    features, target = build_forecasting_features(sales)
+    x_train, y_train, x_test, y_test = split_first_eight_years(features, target)
+
+    # Use only the first eight years for model selection. Each fold is a
+    # chronological expanding-window split with a recursive holdout forecast.
+    cv_folds, cv_summary = temporal_cross_validation(x_train, y_train, n_splits=cv_splits)
+    learning_curve = generate_learning_curve(
+        x_train, y_train, learning_curve_path
+    )
+
+    # With only 96 raw training months (84 after the 12-month lag warm-up), a
+    # Random Forest is a practical low-tuning baseline. Its ensemble averages
+    # many trees; XGBoost's sequential boosting would require more tuning time.
+    model = make_forest_model()
     model.fit(x_train, y_train)
     # Roll the 24-month holdout forward recursively: after the first test month,
     # lag features use prior forecasts rather than actual holdout observations.
     train_history = target.loc[:x_train.index.max()]
     predictions, tree_predictions = recursive_forest_forecast(model, train_history, x_test)
+    train_predictions = model.predict(x_train)
+    train_error_metrics = calculate_error_metrics(y_train, train_predictions)
+    validation_error_metrics = calculate_error_metrics(y_test, predictions)
 
     # Tree-to-tree quantiles visualize model spread. This is an empirical
     # ensemble variability band, not a calibrated statistical prediction interval.
@@ -273,6 +473,11 @@ def train_and_evaluate(
     return {
         "model": model,
         "metrics": metrics,
+        "train_error_metrics": train_error_metrics,
+        "validation_error_metrics": validation_error_metrics,
+        "cv_folds": cv_folds,
+        "cv_summary": cv_summary,
+        "learning_curve": learning_curve,
         "predictions": pd.Series(predictions, index=y_test.index, name="prediction"),
         "lower": pd.Series(lower, index=y_test.index, name="p05_tree"),
         "upper": pd.Series(upper, index=y_test.index, name="p95_tree"),
@@ -292,9 +497,40 @@ def main() -> None:
           f"({result['train_rows']} usable months)")
     print(f"Test:  {result['test_period'][0]:%Y-%m}–{result['test_period'][1]:%Y-%m} "
           f"({result['test_rows']} months)")
+    print("Temporal CV (expanding window, recursive one-step rollout per fold):")
+    for fold in result["cv_folds"]:
+        print(
+            f"  Fold {fold['fold']}: train {fold['train_start']:%Y-%m}–{fold['train_end']:%Y-%m} "
+            f"({fold['train_rows']}), validation "
+            f"{fold['validation_start']:%Y-%m}–{fold['validation_end']:%Y-%m} "
+            f"({fold['validation_rows']}), MSE={fold['mse_usd2']:,.2f} USD²"
+        )
+    cv = result["cv_summary"]
+    print(f"CV MSE: {cv['mse_usd2_mean']:,.2f} ± {cv['mse_usd2_std']:,.2f} USD² "
+          f"(mean ± sample SD, {int(cv['folds'])} folds)")
+    print("MAE/RMSE (entrenamiento vs. validación 2024–2025):")
+    for label, error_metrics in (
+        ("Entrenamiento", result["train_error_metrics"]),
+        ("Validación", result["validation_error_metrics"]),
+    ):
+        print(
+            f"  {label}: MAE={error_metrics['mae_usd']:,.2f} USD; "
+            f"RMSE={error_metrics['rmse_usd']:,.2f} USD"
+        )
+    print("Métricas adicionales de prueba:")
     for name, value in result["metrics"].items():
         print(f"{name}: {value:,.6f}")
-    print(f"Visualization: {result['plot_path']}")
+    print(f"Forecast visualization: {result['plot_path']}")
+    curve = result["learning_curve"]
+    print(f"Learning curve validation: {curve['validation_period'][0]:%Y-%m}–"
+          f"{curve['validation_period'][1]:%Y-%m}")
+    print(f"Learning curve: {curve['plot_path']}")
+    print(
+        "Métrica orientada a negocio: RMSE, porque castiga cuadráticamente los "
+        "errores grandes; una sobreestimación importante puede inducir compromisos "
+        "de presupuesto que los ingresos reales no cubran. MAE se conserva como "
+        "referencia robusta del error absoluto típico."
+    )
 
 
 if __name__ == "__main__":
