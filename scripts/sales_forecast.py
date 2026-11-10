@@ -281,6 +281,8 @@ def temporal_cross_validation(
         predictions, _ = recursive_forest_forecast(
             model, fold_history, fold_x_validation
         )
+        train_predictions = model.predict(fold_x_train)
+        fold_train_mse = float(mean_squared_error(fold_y_train, train_predictions))
         fold_mse = float(mean_squared_error(fold_y_validation, predictions))
         fold_results.append(
             {
@@ -291,6 +293,7 @@ def temporal_cross_validation(
                 "validation_end": fold_x_validation.index.max(),
                 "train_rows": len(fold_x_train),
                 "validation_rows": len(fold_x_validation),
+                "train_mse_usd2": fold_train_mse,
                 "predictions": pd.Series(
                     predictions, index=fold_y_validation.index, name="prediction"
                 ),
@@ -307,10 +310,88 @@ def temporal_cross_validation(
     return fold_results, summary
 
 
+def generate_learning_curve(
+    x_train: pd.DataFrame,
+    y_train: pd.Series,
+    output_path: str | Path,
+    validation_size: int = 14,
+    min_train_size: int = 14,
+    step: int = 7,
+) -> dict[str, Any]:
+    """Plot train/validation MSE as a chronological training prefix grows.
+
+    The most recent ``validation_size`` training observations form one fixed,
+    contiguous validation horizon. All candidate training prefixes end before
+    it. Validation predictions are rolled forward recursively so actual
+    validation revenues never enter lag/rolling features.
+    """
+    if not x_train.index.equals(y_train.index):
+        raise ValueError("Training features and target must have matching indexes")
+    if not x_train.index.is_monotonic_increasing:
+        raise ValueError("Training observations must be sorted chronologically")
+    if validation_size < 1 or step < 1 or min_train_size < 1:
+        raise ValueError("validation_size, min_train_size, and step must be positive")
+    max_train_size = len(x_train) - validation_size
+    if max_train_size < min_train_size:
+        raise ValueError("Not enough rows for the learning curve train/validation split")
+
+    validation_x = x_train.iloc[-validation_size:]
+    validation_y = y_train.iloc[-validation_size:]
+    sizes = list(range(min_train_size, max_train_size + 1, step))
+    if sizes[-1] != max_train_size:
+        sizes.append(max_train_size)
+
+    points: list[dict[str, float | int]] = []
+    for size in sizes:
+        prefix_x = x_train.iloc[:size]
+        prefix_y = y_train.iloc[:size]
+        if prefix_x.index.max() >= validation_x.index.min():
+            raise AssertionError("Learning-curve train prefix overlaps validation period")
+        model = make_forest_model()
+        model.fit(prefix_x, prefix_y)
+        train_mse = float(mean_squared_error(prefix_y, model.predict(prefix_x)))
+        validation_predictions, _ = recursive_forest_forecast(
+            model, prefix_y, validation_x
+        )
+        validation_mse = float(mean_squared_error(validation_y, validation_predictions))
+        points.append(
+            {
+                "train_size": size,
+                "train_mse_usd2": train_mse,
+                "validation_mse_usd2": validation_mse,
+            }
+        )
+
+    destination = Path(output_path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    fig, ax = plt.subplots(figsize=(10, 6))
+    sizes_array = [point["train_size"] for point in points]
+    ax.plot(sizes_array, [point["train_mse_usd2"] for point in points],
+            marker="o", label="Error de entrenamiento")
+    ax.plot(sizes_array, [point["validation_mse_usd2"] for point in points],
+            marker="o", label="Error de validación (horizonte temporal fijo)")
+    ax.set(
+        title="Curva de aprendizaje — pronóstico de ingresos Nexova",
+        xlabel="Tamaño del conjunto de entrenamiento (meses)",
+        ylabel="MSE (USD²)",
+    )
+    ax.grid(alpha=0.25)
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(destination, dpi=160)
+    plt.close(fig)
+    return {
+        "points": points,
+        "validation_period": (validation_x.index.min(), validation_x.index.max()),
+        "plot_path": destination,
+    }
+
+
 def train_and_evaluate(
     csv_path: str | Path,
     output_path: str | Path = "reports/sales_forecast.png",
     cv_splits: int = 5,
+    learning_curve_path: str | Path = "data/eval/sales_forecast_learning_curve.png",
 ) -> dict[str, Any]:
     """Train, evaluate, and plot a leakage-safe chronological sales forecast."""
     sales = load_sales_data(csv_path)
@@ -320,6 +401,9 @@ def train_and_evaluate(
     # Use only the first eight years for model selection. Each fold is a
     # chronological expanding-window split with a recursive holdout forecast.
     cv_folds, cv_summary = temporal_cross_validation(x_train, y_train, n_splits=cv_splits)
+    learning_curve = generate_learning_curve(
+        x_train, y_train, learning_curve_path
+    )
 
     # With only 96 raw training months (84 after the 12-month lag warm-up), a
     # Random Forest is a practical low-tuning baseline. Its ensemble averages
@@ -356,6 +440,7 @@ def train_and_evaluate(
         "metrics": metrics,
         "cv_folds": cv_folds,
         "cv_summary": cv_summary,
+        "learning_curve": learning_curve,
         "predictions": pd.Series(predictions, index=y_test.index, name="prediction"),
         "lower": pd.Series(lower, index=y_test.index, name="p05_tree"),
         "upper": pd.Series(upper, index=y_test.index, name="p95_tree"),
@@ -388,7 +473,11 @@ def main() -> None:
           f"(mean ± sample SD, {int(cv['folds'])} folds)")
     for name, value in result["metrics"].items():
         print(f"{name}: {value:,.6f}")
-    print(f"Visualization: {result['plot_path']}")
+    print(f"Forecast visualization: {result['plot_path']}")
+    curve = result["learning_curve"]
+    print(f"Learning curve validation: {curve['validation_period'][0]:%Y-%m}–"
+          f"{curve['validation_period'][1]:%Y-%m}")
+    print(f"Learning curve: {curve['plot_path']}")
 
 
 if __name__ == "__main__":
