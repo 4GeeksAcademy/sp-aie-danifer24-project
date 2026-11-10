@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error, roc_auc_score
+from sklearn.model_selection import TimeSeriesSplit
 from sklearn.preprocessing import StandardScaler
 
 TARGET = "revenue_usd"
@@ -224,26 +225,106 @@ def calculate_metrics(
     }
 
 
-def train_and_evaluate(
-    csv_path: str | Path,
-    output_path: str | Path = "reports/sales_forecast.png",
-) -> dict[str, Any]:
-    """Train, evaluate, and plot a leakage-safe chronological sales forecast."""
-    sales = load_sales_data(csv_path)
-    features, target = build_forecasting_features(sales)
-    x_train, y_train, x_test, y_test = split_first_eight_years(features, target)
-
-    # With only 96 raw training months (84 after the 12-month lag warm-up), a
-    # Random Forest is a practical low-tuning baseline. Its ensemble averages
-    # many trees, and feature importances offer a stakeholder-friendly account
-    # of drivers; XGBoost's sequential boosting would require more tuning time.
-    model = RandomForestRegressor(
+def make_forest_model() -> RandomForestRegressor:
+    """Create the fixed Random Forest baseline used by every evaluation fold."""
+    return RandomForestRegressor(
         n_estimators=500,
         min_samples_leaf=2,
         max_features=0.8,
         random_state=42,
         n_jobs=-1,
     )
+
+
+def temporal_cross_validation(
+    x_train: pd.DataFrame,
+    y_train: pd.Series,
+    n_splits: int = 5,
+) -> tuple[list[dict[str, Any]], dict[str, float]]:
+    """Evaluate sequential forecast folds, recursively forecasting each horizon.
+
+    The train indices in each TimeSeriesSplit fold are a chronological prefix;
+    validation is the immediately following contiguous block. All revenue-based
+    validation features are recomputed from that fold's training observations
+    and its own earlier predictions by ``recursive_forest_forecast``. Thus the
+    prebuilt shifted/rolling columns never expose validation actuals, while the
+    fold's training history remains available as legitimate prior context.
+    """
+    if not x_train.index.equals(y_train.index):
+        raise ValueError("Training features and target must have matching indexes")
+    if not x_train.index.is_monotonic_increasing:
+        raise ValueError("Training observations must be sorted chronologically")
+    if n_splits < 2 or len(x_train) <= n_splits:
+        raise ValueError("Not enough training rows for the requested temporal folds")
+
+    splitter = TimeSeriesSplit(n_splits=n_splits)
+    fold_results: list[dict[str, Any]] = []
+
+    for fold_number, (train_positions, validation_positions) in enumerate(
+        splitter.split(x_train), start=1
+    ):
+        # Explicitly enforce temporal order and no overlap; never shuffle.
+        if train_positions.max() >= validation_positions.min():
+            raise AssertionError(f"Fold {fold_number} mixes train and validation order")
+        fold_x_train = x_train.iloc[train_positions]
+        fold_y_train = y_train.iloc[train_positions]
+        fold_x_validation = x_train.iloc[validation_positions]
+        fold_y_validation = y_train.iloc[validation_positions]
+        if fold_x_train.index.max() >= fold_x_validation.index.min():
+            raise AssertionError(f"Fold {fold_number} is not strictly chronological")
+
+        model = make_forest_model()
+        model.fit(fold_x_train, fold_y_train)
+        # Only actual history through the fold's train end is passed in. The
+        # recursive forecaster appends its predictions, not validation labels.
+        fold_history = y_train.loc[:fold_y_train.index.max()]
+        predictions, _ = recursive_forest_forecast(
+            model, fold_history, fold_x_validation
+        )
+        fold_mse = float(mean_squared_error(fold_y_validation, predictions))
+        fold_results.append(
+            {
+                "fold": fold_number,
+                "train_start": fold_x_train.index.min(),
+                "train_end": fold_x_train.index.max(),
+                "validation_start": fold_x_validation.index.min(),
+                "validation_end": fold_x_validation.index.max(),
+                "train_rows": len(fold_x_train),
+                "validation_rows": len(fold_x_validation),
+                "predictions": pd.Series(
+                    predictions, index=fold_y_validation.index, name="prediction"
+                ),
+                "mse_usd2": fold_mse,
+            }
+        )
+
+    mse_values = np.asarray([fold["mse_usd2"] for fold in fold_results])
+    summary = {
+        "mse_usd2_mean": float(mse_values.mean()),
+        "mse_usd2_std": float(mse_values.std(ddof=1)),
+        "folds": float(n_splits),
+    }
+    return fold_results, summary
+
+
+def train_and_evaluate(
+    csv_path: str | Path,
+    output_path: str | Path = "reports/sales_forecast.png",
+    cv_splits: int = 5,
+) -> dict[str, Any]:
+    """Train, evaluate, and plot a leakage-safe chronological sales forecast."""
+    sales = load_sales_data(csv_path)
+    features, target = build_forecasting_features(sales)
+    x_train, y_train, x_test, y_test = split_first_eight_years(features, target)
+
+    # Use only the first eight years for model selection. Each fold is a
+    # chronological expanding-window split with a recursive holdout forecast.
+    cv_folds, cv_summary = temporal_cross_validation(x_train, y_train, n_splits=cv_splits)
+
+    # With only 96 raw training months (84 after the 12-month lag warm-up), a
+    # Random Forest is a practical low-tuning baseline. Its ensemble averages
+    # many trees; XGBoost's sequential boosting would require more tuning time.
+    model = make_forest_model()
     model.fit(x_train, y_train)
     # Roll the 24-month holdout forward recursively: after the first test month,
     # lag features use prior forecasts rather than actual holdout observations.
@@ -273,6 +354,8 @@ def train_and_evaluate(
     return {
         "model": model,
         "metrics": metrics,
+        "cv_folds": cv_folds,
+        "cv_summary": cv_summary,
         "predictions": pd.Series(predictions, index=y_test.index, name="prediction"),
         "lower": pd.Series(lower, index=y_test.index, name="p05_tree"),
         "upper": pd.Series(upper, index=y_test.index, name="p95_tree"),
@@ -292,6 +375,17 @@ def main() -> None:
           f"({result['train_rows']} usable months)")
     print(f"Test:  {result['test_period'][0]:%Y-%m}–{result['test_period'][1]:%Y-%m} "
           f"({result['test_rows']} months)")
+    print("Temporal CV (expanding window, recursive one-step rollout per fold):")
+    for fold in result["cv_folds"]:
+        print(
+            f"  Fold {fold['fold']}: train {fold['train_start']:%Y-%m}–{fold['train_end']:%Y-%m} "
+            f"({fold['train_rows']}), validation "
+            f"{fold['validation_start']:%Y-%m}–{fold['validation_end']:%Y-%m} "
+            f"({fold['validation_rows']}), MSE={fold['mse_usd2']:,.2f} USD²"
+        )
+    cv = result["cv_summary"]
+    print(f"CV MSE: {cv['mse_usd2_mean']:,.2f} ± {cv['mse_usd2_std']:,.2f} USD² "
+          f"(mean ± sample SD, {int(cv['folds'])} folds)")
     for name, value in result["metrics"].items():
         print(f"{name}: {value:,.6f}")
     print(f"Visualization: {result['plot_path']}")
