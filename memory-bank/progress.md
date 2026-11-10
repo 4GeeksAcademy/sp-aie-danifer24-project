@@ -355,3 +355,9 @@ En terminos de impacto, el proyecto ya reduce friccion en la operacion de selecc
 - Las respuestas de inventario separan los modelos de entrada y salida. El historial usa proyecciones planas con nombre/SKU del activo, proveedor o destinatario/tipo de movimiento; omite claves foráneas e identificador interno del usuario. Backoffice se alineó con ese contrato.
 - Verificación: backend `57 passed`, 7 subtests y 1 warning no bloqueante de deprecación Starlette; Backoffice `npm run lint`, `npm run typecheck` y `npm test` correctos (3 suites, 18 pruebas); `git diff --check` correcto y recuento de auditoría comprobado.
 - Pendiente: crear commits separados para implementación (backend, tests y consumidor Backoffice) y documentación (auditoría y este progreso), previa confirmación explícita de los mensajes.
+
+## Evaluación temporal de ventas (2026-11-10)
+
+- Actualizados el pipeline de pronóstico y sus pruebas para incluir MAE/RMSE, curva de aprendizaje con ambas métricas y comprobación del orden cronológico entre folds.
+- Validación ejecutada: 5 pruebas de los módulos de validación temporal y curva de aprendizaje pasaron; compilación Python correcta. No hay Ruff ni Flake8 instalados en el entorno para ejecutar lint.
+- Pendiente: revisión del gráfico generado y del informe en data/eval, así como aprobación explícita de los mensajes de commit antes de crear commits.

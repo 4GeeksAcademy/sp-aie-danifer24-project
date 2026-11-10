@@ -40,10 +40,16 @@ def test_temporal_cv_has_five_non_overlapping_chronological_folds():
     assert summary["folds"] == 5
     assert summary["mse_usd2_mean"] >= 0
     assert summary["mse_usd2_std"] >= 0
+    previous_validation_end = None
     for fold in folds:
         assert fold["train_start"] <= fold["train_end"]
         assert fold["validation_start"] <= fold["validation_end"]
         assert fold["train_end"] < fold["validation_start"]
+        # Every validation index in this fold must occur after all validation
+        # indices from the preceding fold; folds cannot reorder or overlap time.
+        if previous_validation_end is not None:
+            assert previous_validation_end < fold["validation_start"]
+        previous_validation_end = fold["validation_end"]
         assert len(fold["predictions"]) == fold["validation_rows"]
 
 

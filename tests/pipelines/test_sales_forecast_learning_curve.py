@@ -39,8 +39,10 @@ def test_learning_curve_keeps_validation_after_every_training_prefix(tmp_path):
     assert result["points"][-1]["train_size"] == len(x_train) - 14
     for point in result["points"]:
         assert point["train_size"] < len(x_train) - 14 + 1
-        assert np.isfinite(point["train_mse_usd2"])
-        assert np.isfinite(point["validation_mse_usd2"])
+        assert np.isfinite(point["train_mae_usd"])
+        assert np.isfinite(point["train_rmse_usd"])
+        assert np.isfinite(point["validation_mae_usd"])
+        assert np.isfinite(point["validation_rmse_usd"])
     assert validation_start == x_train.index[-14]
     assert validation_end == x_train.index[-1]
 
@@ -59,8 +61,8 @@ def test_learning_curve_is_independent_of_validation_actuals(tmp_path):
     )
 
     np.testing.assert_allclose(
-        [point["train_mse_usd2"] for point in original["points"]],
-        [point["train_mse_usd2"] for point in altered["points"]],
+        [point["train_mae_usd"] for point in original["points"]],
+        [point["train_mae_usd"] for point in altered["points"]],
         rtol=1e-12,
         atol=1e-6,
     )
