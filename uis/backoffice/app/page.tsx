@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Boxes, Building2, ClipboardList, FlaskConical, ChartNoAxesCombined } from "lucide-react";
+import { ArrowRight, BookOpenText, Boxes, Building2, ClipboardList, FlaskConical, ChartNoAxesCombined } from "lucide-react";
 
 export default function HomePage() {
   return (
@@ -35,6 +35,11 @@ export default function HomePage() {
             <span className="backoffice-home-icon"><ChartNoAxesCombined size={21} /></span>
             <span className="backoffice-home-card-copy"><strong>Rendimiento semanal</strong><span>Costes de materiales, kits entregados y eventos operativos por oficina y programa.</span></span>
             <span className="backoffice-home-card-action">Ver resultados <ArrowRight size={16} /></span>
+          </Link>
+          <Link className="panel backoffice-home-card" href="/knowledge">
+            <span className="backoffice-home-icon"><BookOpenText size={21} /></span>
+            <span className="backoffice-home-card-copy"><strong>Asistente comercial</strong><span>Consulta la base de conocimiento de Nexova y prepara respuestas para prospectos.</span></span>
+            <span className="backoffice-home-card-action">Hacer una consulta <ArrowRight size={16} /></span>
           </Link>
           <Link className="panel backoffice-home-card" href="/validacion-tecnica">
             <span className="backoffice-home-icon"><FlaskConical size={21} /></span>
