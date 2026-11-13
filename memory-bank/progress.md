@@ -361,3 +361,49 @@ En terminos de impacto, el proyecto ya reduce friccion en la operacion de selecc
 - Actualizados el pipeline de pronóstico y sus pruebas para incluir MAE/RMSE, curva de aprendizaje con ambas métricas y comprobación del orden cronológico entre folds.
 - Validación ejecutada: 5 pruebas de los módulos de validación temporal y curva de aprendizaje pasaron; compilación Python correcta. No hay Ruff ni Flake8 instalados en el entorno para ejecutar lint.
 - Pendiente: revisión del gráfico generado y del informe en data/eval, así como aprobación explícita de los mensajes de commit antes de crear commits.
+
+
+## Hito 7 RAG — Fase 1 (2026-11-12)
+
+- Implementado scripts/rag.py como preparación provisional accesible: lee los cuatro Markdown de docs/company-knowledge-base/, separa unidades por headings, párrafos y listas, no corta frases y falla explícitamente si una frase excede el límite.
+- embed(text) usa la API OpenAI-compatible de Perplexity con modelo pplx-embed-v1-0.6b; requiere LLM_API_KEY y permite configurar LLM_BASE_URL y EMBEDDING_MODEL. Dimensión detectada en la primera respuesta y Qdrant verifica consistencia; aún falta confirmar endpoint/dimensiones facilitados por la academia.
+- `setup()` prepara la colección `nexova_knowledge`, indexa el payload requerido y evita duplicados con limpieza filtrada por `company=nexova` e IDs UUIDv5 deterministas.
+- Añadida suite `tests/pipelines/test_rag.py`: 4 pruebas aprobadas con embeddings/Qdrant simulados. `compileall`, YAML de Compose y revisión de whitespace pasaron. No se ejecutó contra Qdrant/Perplexity real ni lint porque no hay servicio/credenciales verificados.
+- El destino pedido `data/process/rag.py` quedó inaccesible por política de herramientas; el módulo está temporalmente en `scripts/rag.py` y debe moverse a `data/process/` cuando se habilite la ruta. Fase 1 solamente: recuperación, generación, endpoint y UI quedan pendientes.
+
+
+## Hito 7 RAG — Fase 2 (2026-11-12)
+
+- Implementado provisionalmente en scripts/rag_pipeline.py (destino data/pipelines/rag.py bloqueado): etrieve() consulta Qdrant usando embed(), filtra por empresa y umbral de similitud configurable, y devuelve payloads simples; generate_answer() construye prompt de asesor comercial Nexova basado solo en contexto; query() orquesta recuperación y generación una sola vez.
+- Configuración prevista: LLM_API_KEY, LLM_BASE_URL, EMBEDDING_MODEL, GENERATION_MODEL y QDRANT_URL. En esta fase el generador requiere GENERATION_MODEL; la clave/host comunes los comparte con embeddings.
+- Validación: 9 pruebas de fases 1 y 2 aprobadas; compileall y diff-check correctos. Tests usan dobles; no se llamó al gateway ni a Qdrant real.
+- Pendiente: mover módulo a data/pipelines/rag.py cuando la ruta sea accesible, verificar el contrato del gateway y calibrar min_score en los test queries. API/UI son fases posteriores.
+
+
+## Hito 7 RAG — Endpoint HTTP (2026-11-12)
+
+- Añadido POST /knowledge/query en services/api/routes/knowledge.py, conectado a data.pipelines.rag.query() sin replicar recuperación/generación. Request valida question no vacía (máx. 4000 caracteres); respuesta solo contiene {answer: string}. Errores internos se registran en servidor y se traducen a 502 genérico, sin exponer detalles de Qdrant/LLM.
+- Router registrado en services/api/main.py. Agregadas dependencias openai y qdrant-client a requisitos de la imagen API; GENERATION_MODEL expuesto al contenedor.
+- Pruebas endpoint + pipeline: 8 aprobadas con mocks; no prueba gateway/Qdrant real. python-multipart faltaba para cargar la app en tests y se agregó con uv add --group dev python-multipart.
+
+
+## API RAG runtime fix (2026-11-12)
+
+- Diagnostic del fallo en localhost:8000: el contenedor levantaba el proceso reloader, pero el worker caía al importar data.pipelines.rag porque docker-compose.yml montaba el volumen pi-data sobre /app/data, ocultando el código /app/data copiado durante build. Cambiado a bind mount ./data:/app/data para desarrollo.
+- Rebuild/restart validado; /openapi.json responde y registra /knowledge/query. Pendiente prueba HTTP end-to-end con Qdrant/gateway.
+
+
+## Hito 7 RAG — Fase 4 UI (2026-11-12)
+
+- Añadida página responsive /knowledge en el backoffice con formulario, contador, estado de carga, mensajes de error explícitos y respuesta accesible; evita tratar respuesta fallida/vacía como éxito. Incluye estilos de modo oscuro según preferencia del sistema.
+- Añadida ruta proxy Next /api/knowledge/query que reenvía JSON a la API interna sin lógica RAG en el navegador. Enlace añadido al menú y tarjeta de entrada del dashboard.
+- Validación: `npm run typecheck`, `npm run build` y `npm run lint` aprobados. Jest no pudo ejecutarse: falta `ts-node` necesario para `jest.config.ts` en el workspace actual (no agregado como parte de esta fase).
+
+## Hito 7 RAG — Evaluación y documentación (2026-11-13)
+
+- Suite unitaria de recuperación y generación RAG validada: 9 pruebas aprobadas con Qdrant y LLM simulados; no requiere servicios externos en CI.
+- Añadido `data/eval/test-queries.json` con 10 consultas que cubren los cuatro documentos, incluidas objeciones comerciales. `scripts/evaluate_retrieval.py` mide si el texto objetivo aparece en los primeros 3 resultados.
+- Evaluación sobre Qdrant/gateway configurados: **Recall@3 10/10 (100 %)** con `k=3` y `min_score=0.30`, superior al umbral de aceptación del 80 %.
+- Validada la colección `nexova_knowledge`: 29 chunks (hiring-process-sla: 7; objection-handling: 4; pricing-model: 13; service-lines: 5). `embed()` produce vectores de dimensión 1024, coincidente con Qdrant; distancia Cosine.
+- Configuración observada: embeddings `madrid-spain/openrouter/perplexity/pplx-embed-v1-0.6b`; generación `madrid-spain/openrouter/deepseek/deepseek-v4-flash`. El umbral 0.30 conserva el chunk de tarifa que puntuó 0.3418 y que se excluía con el valor anterior 0.35.
+- Añadido `docs/rag/rag-design.md`, que describe el flujo de extremo a extremo, chunking semántico, modelos, recuperación, seguridad comercial y ejecución de la evaluación.
