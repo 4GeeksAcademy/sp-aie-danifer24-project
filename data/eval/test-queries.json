@@ -1,0 +1,52 @@
+[
+  {
+    "question": "¿Cuánto tarda una búsqueda de un perfil ejecutivo y cuántos candidatos incluye la terna?",
+    "source_document": "hiring-process-sla",
+    "target_text": "8 semanas promedio, terna de 3 candidatos"
+  },
+  {
+    "question": "¿Qué debe hacer el consultor si a las cuatro semanas no presentó un candidato calificado en una búsqueda ejecutiva?",
+    "source_document": "hiring-process-sla",
+    "target_text": "escalar el caso a Javier Almeida"
+  },
+  {
+    "question": "¿Cuál es la tarifa del headhunting y sobre qué cantidad se calcula?",
+    "source_document": "pricing-model",
+    "target_text": "22% del salario anual bruto"
+  },
+  {
+    "question": "¿Cuánto cuesta el programa de formación de ocho semanas para un grupo de hasta 15 personas?",
+    "source_document": "pricing-model",
+    "target_text": "desde 6.200 USD"
+  },
+  {
+    "question": "¿Qué incluye el outsourcing de soporte al cliente y cuál es el tamaño mínimo de equipo?",
+    "source_document": "service-lines",
+    "target_text": "Tamaño mínimo de equipo contratable: 5 agentes"
+  },
+  {
+    "question": "¿Qué modalidades ofrece la formación corporativa y qué incluye el programa?",
+    "source_document": "service-lines",
+    "target_text": "diagnóstico inicial, sesiones en vivo, y certificado de finalización"
+  },
+  {
+    "question": "Un prospecto dice que el 22% es caro comparado con otras firmas. ¿Cómo se responde y quién puede aprobar un descuento?",
+    "source_document": "objection-handling",
+    "target_text": "No se debe ofrecer un descuento sobre el 22% sin aprobación de Marcos Ibáñez"
+  },
+  {
+    "question": "Un cliente nuevo quiere pagar todo cuando el candidato empiece. ¿Qué esquema de pago se aplica?",
+    "source_document": "objection-handling",
+    "target_text": "el esquema de pago en tres momentos (30/30/40) es estándar y no es negociable para nuevos clientes"
+  },
+  {
+    "question": "¿Qué pasa si el cliente no está conforme con ninguno de los candidatos de la terna?",
+    "source_document": "objection-handling",
+    "target_text": "una ronda adicional de búsqueda sin costo"
+  },
+  {
+    "question": "¿Nexova trabaja con competidores directos de un cliente?",
+    "source_document": "objection-handling",
+    "target_text": "Esto se debe comunicar con transparencia, nunca ocultarlo"
+  }
+]

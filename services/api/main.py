@@ -23,6 +23,7 @@ from services.api.models import CsvAnalysisResponse
 from services.api.routes.suppliers import router as suppliers_router
 from services.api.routes.auth import router as auth_router
 from services.api.routes.incidents import router as incidents_router
+from services.api.routes.knowledge import router as knowledge_router
 from services.api.routes.profiles import router as profiles_router
 from services.api.routes.users import router as users_router
 from services.api.routes.telemetry import router as telemetry_router
@@ -44,6 +45,7 @@ app.include_router(auth_router)
 app.include_router(profiles_router)
 app.include_router(users_router)
 app.include_router(incidents_router)
+app.include_router(knowledge_router)
 app.include_router(inventory_router)
 app.include_router(telemetry_router)
 app.include_router(reporting_router)
