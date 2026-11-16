@@ -25,6 +25,12 @@ def test_recorded_agent_trace_and_grounding_evaluation(case):
         generate_event = next(event for event in events if event["node"] == "generate_answer")
         retrieve_event = next(event for event in events if event["node"] == "retrieve")
         assert generate_event["context_chunk_count"] == retrieve_event["chunk_count"]
+    if "incident_lookup" in nodes:
+        route_event = next(event for event in events if event["node"] == "route_request")
+        lookup_event = next(event for event in events if event["node"] == "incident_lookup")
+        assert route_event["route"] == "incident_lookup"
+        assert lookup_event["outcome"] == "found"
+        assert nodes.index("incident_lookup") < nodes.index("incident_response")
 
     # A known Nexova policy question must remain grounded in its expected KB source/data.
     if case["expected_source"]:

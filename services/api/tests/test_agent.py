@@ -1,8 +1,19 @@
 from unittest.mock import patch
 
+from services.api.security import get_current_user
+
+
+def authenticated_api(api):
+    client, _, mail = api
+    user = {"id": 77, "email": "agent@example.test", "hashed_password": "unused", "is_active": True, "role": "user"}
+    from services.api.models import User
+
+    client.app.dependency_overrides[get_current_user] = lambda: User.model_validate(user)
+    return client, mail
+
 
 def test_agent_query_invokes_compiled_graph_and_returns_run_id(api):
-    client, _, _ = api
+    client, _ = authenticated_api(api)
     graph_result = {
         "answer": "Tarifa del 22% sobre el salario anual.",
         "run_id": "run-agent-123",
@@ -24,7 +35,7 @@ def test_agent_query_invokes_compiled_graph_and_returns_run_id(api):
 
 
 def test_agent_query_returns_safe_error_when_graph_node_fails(api):
-    client, _, _ = api
+    client, _ = authenticated_api(api)
     with patch(
         "services.api.routes.agent.run_knowledge_graph",
         side_effect=RuntimeError("raw qdrant stack details"),

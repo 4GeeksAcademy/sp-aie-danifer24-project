@@ -6,10 +6,10 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path
 from pydantic import ValidationError
-from tinydb import Query as TinyQuery
 from tinydb.table import Table
 
 from services.api.cache import TTLCache
+from services.api.services.incidents import get_incident, list_incidents as query_incidents
 from services.api.dependencies import RequestTables
 from services.api.models import (
     IncidentBranch,
@@ -133,17 +133,10 @@ def list_incidents(
     if cached is not None:
         return cached
 
-    query = TinyQuery()
-    filters = query.noop()
-    for field, value in (
-        ("status", status),
-        ("origin", origin),
-        ("branch", branch),
-        ("category", category),
-    ):
-        if value is not None:
-            filters &= query[field] == value.value
-    response = [incident_response(document, document.doc_id) for document in table.search(filters)]
+    documents = query_incidents(
+        table, status=status, origin=origin, branch=branch, category=category
+    )
+    response = [incident_response(document, document["id"]) for document in documents]
     incident_cache.set(cache_key, response, generation)
     return response
 
@@ -177,8 +170,10 @@ def incidents_summary(table: IncidentsTable, current_user: CurrentUser):
 
 @router.get("/{id}", response_model=IncidentResponse)
 def retrieve_incident(id: IncidentId, table: IncidentsTable):
-    document = find_incident(table, id)
-    return incident_response(document, document.doc_id)
+    document = get_incident(table, id)
+    if document is None:
+        raise HTTPException(status_code=404, detail="No se encontró la incidencia solicitada.")
+    return incident_response(document, document["id"])
 
 
 @router.patch("/{id}/status", response_model=IncidentResponse)

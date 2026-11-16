@@ -43,6 +43,20 @@
     ]
   },
   {
+    "case_id": "ticket-status-routes-to-incident-tool",
+    "question": "¿Cuál es el estado del ticket 42?",
+    "expected_nodes": ["receive_question", "route_request", "incident_lookup", "incident_response"],
+    "expected_source": null,
+    "expected_answer_terms": ["incidencia 42", "open"],
+    "answer": "Incidencia 42: estado open, categoría technical_failure, origen customer.",
+    "events": [
+      {"sequence": 1, "node": "receive_question", "valid": true},
+      {"sequence": 2, "node": "route_request", "route": "incident_lookup", "ticket_id": 42},
+      {"sequence": 3, "node": "incident_lookup", "outcome": "found", "incident_count": 1},
+      {"sequence": 4, "node": "incident_response", "answer": "Incidencia 42: estado open, categoría technical_failure, origen customer."}
+    ]
+  },
+  {
     "case_id": "blank-question-short-circuit",
     "question": "   ",
     "expected_nodes": ["receive_question"],
