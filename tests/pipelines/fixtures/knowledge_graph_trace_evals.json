@@ -1,0 +1,56 @@
+[
+  {
+    "case_id": "pricing-grounded-answer",
+    "question": "¿Cuál es la tarifa de headhunting ejecutivo?",
+    "expected_nodes": ["receive_question", "retrieve", "generate_answer"],
+    "expected_source": "pricing-model",
+    "expected_answer_terms": ["22%", "salario anual"],
+    "answer": "La tarifa de headhunting ejecutivo es del 22% sobre el salario anual del candidato contratado.",
+    "events": [
+      {"sequence": 1, "node": "receive_question", "valid": true},
+      {
+        "sequence": 2,
+        "node": "retrieve",
+        "chunk_count": 1,
+        "sources": ["pricing-model"],
+        "retrieved_chunks": [
+          {
+            "source_document": "pricing-model",
+            "section": "Headhunting ejecutivo",
+            "text": "Tarifa estándar: 22% del salario anual del candidato contratado."
+          }
+        ]
+      },
+      {
+        "sequence": 3,
+        "node": "generate_answer",
+        "context_chunk_count": 1,
+        "answer": "La tarifa de headhunting ejecutivo es del 22% sobre el salario anual del candidato contratado."
+      }
+    ]
+  },
+  {
+    "case_id": "no-context-honest-route",
+    "question": "¿Qué descuento especial no documentado ofrecemos?",
+    "expected_nodes": ["receive_question", "retrieve", "no_context"],
+    "expected_source": null,
+    "expected_answer_terms": ["No tengo información suficiente"],
+    "answer": "No tengo información suficiente en la base de conocimiento para responder esa pregunta.",
+    "events": [
+      {"sequence": 1, "node": "receive_question", "valid": true},
+      {"sequence": 2, "node": "retrieve", "chunk_count": 0, "sources": []},
+      {"sequence": 3, "node": "no_context", "chunk_count": 0}
+    ]
+  },
+  {
+    "case_id": "blank-question-short-circuit",
+    "question": "   ",
+    "expected_nodes": ["receive_question"],
+    "expected_source": null,
+    "expected_answer_terms": [],
+    "answer": "",
+    "events": [
+      {"sequence": 1, "node": "receive_question", "valid": false, "error": "La pregunta no puede estar vacía."}
+    ]
+  }
+]

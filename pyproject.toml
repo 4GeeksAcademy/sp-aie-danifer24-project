@@ -10,6 +10,7 @@ dependencies = [
     "celery>=5.7.0",
     "flower>=2.2.0",
     "jsonschema[format]>=4.23,<5.0",
+    "langgraph>=1.2.22",
     "libpass[bcrypt]>=1.9.3",
     "matplotlib>=3.10.9",
     "pandas>=2.2,<4.0",
