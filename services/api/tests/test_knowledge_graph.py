@@ -33,7 +33,7 @@ def test_graph_retrieves_once_then_generates_from_retrieved_chunks():
 
     assert result["answer"] == "Respuesta basada en contexto"
     assert result["chunks"] == chunks
-    assert result["trace"] == ["receive_question", "retrieve", "generate_answer"]
+    assert result["trace"] == ["receive_question", "route_request", "retrieve", "generate_answer"]
     assert calls == [
         ("retrieve", "¿Cuál es la tarifa?"),
         ("generate", "¿Cuál es la tarifa?", chunks),
@@ -73,7 +73,7 @@ def test_graph_routes_empty_retrieval_to_honest_no_context_answer():
     assert result["answer"] == (
         "No tengo información suficiente en la base de conocimiento para responder esa pregunta."
     )
-    assert result["trace"] == ["receive_question", "retrieve", "no_context"]
+    assert result["trace"] == ["receive_question", "route_request", "retrieve", "no_context"]
     assert calls == []
 
 
@@ -90,7 +90,7 @@ def test_graph_run_persists_queryable_trace_and_checkpoints(tmp_path, monkeypatc
     events = read_knowledge_graph_trace("checkpoint-test")
     snapshots = inspect_knowledge_graph_run("checkpoint-test")
     assert [event["node"] for event in events] == result["trace"]
-    assert [event["sequence"] for event in events] == [1, 2, 3]
+    assert [event["sequence"] for event in events] == [1, 2, 3, 4]
     assert len(snapshots) >= 2
     assert any(snapshot.values.get("question") == "¿Cuál es la tarifa?" for snapshot in snapshots)
 

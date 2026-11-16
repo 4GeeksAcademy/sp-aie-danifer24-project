@@ -2,13 +2,19 @@
 
 import logging
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from services.api.security import CurrentUser, get_current_user
 
 from services.api.routes.knowledge import KnowledgeQueryRequest, KnowledgeQueryResponse
 from services.api.services.knowledge_graph import run_knowledge_graph
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/agent", tags=["agent"])
+router = APIRouter(
+    prefix="/agent",
+    tags=["agent"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 @router.post("/query", response_model=KnowledgeQueryResponse)
