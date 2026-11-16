@@ -8,6 +8,7 @@ from sqlmodel import Session, select
 from services.api.cache import TTLCache
 from services.api.dependencies import DatabaseSession, RequestTables
 from services.api.models import Asset, AssetEntry, AssetExit
+from services.api.services.inventory import inventory_product_response, list_inventory_products
 from services.api.inventory_catalog import INVENTORY_PROGRAMMES, INVENTORY_PROGRAMME_IDS
 from services.api.schemas import (
 	AssetCreate,
@@ -36,15 +37,7 @@ def invalidate_products_cache() -> None:
 
 
 def asset_response(session: Session, asset: Asset) -> AssetResponse:
-	entries = session.exec(
-		select(func.coalesce(func.sum(AssetEntry.quantity), 0))
-		.where(AssetEntry.asset_id == asset.id)
-	).one()
-	exits = session.exec(
-		select(func.coalesce(func.sum(AssetExit.quantity), 0))
-		.where(AssetExit.asset_id == asset.id)
-	).one()
-	return AssetResponse(**asset.model_dump(), current_stock=entries - exits)
+	return inventory_product_response(session, asset)
 
 
 def get_asset(session: Session, asset_id: int, lock: bool = False) -> Asset:
@@ -68,10 +61,7 @@ def list_products(session: DatabaseSession):
 	cached = products_cache.get("all")
 	if cached is not None:
 		return cached
-	response = [
-		asset_response(session, asset)
-		for asset in session.exec(select(Asset).order_by(Asset.id)).all()
-	]
+	response = list_inventory_products(session)
 	products_cache.set("all", response, generation)
 	return response
 

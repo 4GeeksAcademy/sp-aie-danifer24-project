@@ -23,6 +23,12 @@ from services.api.services.incident_tool import (
     IncidentToolOutcome,
     lookup_incidents,
 )
+from services.api.services.inventory_tool import (
+    InventoryLookupInput,
+    InventoryLookupOutput,
+    InventoryToolOutcome,
+    lookup_inventory,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +47,8 @@ class KnowledgeGraphState(TypedDict, total=False):
     error: NotRequired[str]
     incident_lookup: NotRequired[IncidentLookupInput | None]
     incident_result: NotRequired[IncidentLookupOutput]
+    inventory_lookup: NotRequired[InventoryLookupInput | None]
+    inventory_result: NotRequired[InventoryLookupOutput]
     route: NotRequired[str]
 
 
@@ -48,12 +56,15 @@ class KnowledgeGraphState(TypedDict, total=False):
 _NODE_NAMES = {
     "receive_question", "route_request", "retrieve", "incident_lookup",
     "generate_answer", "no_context", "incident_response",
+    "inventory_lookup", "inventory_response",
 }
 _TRANSITIONS = {
     START: {"receive_question"},
     "receive_question": {"route_request", END},
-    "route_request": {"incident_lookup", "retrieve"},
+    "route_request": {"incident_lookup", "inventory_lookup", "retrieve"},
     "incident_lookup": {"incident_response"},
+    "inventory_lookup": {"inventory_response"},
+    "inventory_response": {END},
     "retrieve": {"generate_answer", "no_context"},
     "generate_answer": {END},
     "no_context": {END},
@@ -69,6 +80,8 @@ _EXPECTED_STATE_TYPES = {
     "route": str,
     "incident_lookup": IncidentLookupInput | None,
     "incident_result": IncidentLookupOutput,
+    "inventory_lookup": InventoryLookupInput | None,
+    "inventory_result": InventoryLookupOutput,
 }
 
 
@@ -149,6 +162,7 @@ def build_knowledge_graph(
     generate_fn: Callable[..., str] = generate_answer,
     *,
     incident_fn: Callable[[IncidentLookupInput], IncidentLookupOutput] = lookup_incidents,
+    inventory_fn: Callable[[InventoryLookupInput], InventoryLookupOutput] = lookup_inventory,
     checkpointer: Any | None = None,
 ):
     """Validate and compile; structural errors fail before graph invocation."""
@@ -174,43 +188,62 @@ def build_knowledge_graph(
         }
 
     def route_request(state: KnowledgeGraphState) -> KnowledgeGraphState:
-        # Ticket IDs and explicit incident-status language route to the incident tool;
-        # general company/policy questions continue through the existing RAG path.
-        match = re.search(r"\b(?:ticket|incidencia|incidente)\s*#?\s*(\d+)\b", state["question"], re.IGNORECASE)
-        if match:
-            incident_lookup = IncidentLookupInput(ticket_id=int(match.group(1)))
+        # Product stock/name/SKU queries route to live inventory; ticket lookups
+        # route to incidents; business policy questions continue through RAG.
+        question = state["question"]
+        inventory_match = re.search(
+            r"\b(?:stock|inventario|existencias|disponibilidad)\b.*?\b(?:de|del|para)\s+(.+)$",
+            question,
+            re.IGNORECASE,
+        )
+        sku_match = re.search(r"\bSKU\s*[:#]?\s*([\w-]+)", question, re.IGNORECASE)
+        product_match = re.search(r"\bproducto\s*#?\s*(\d+)\b", question, re.IGNORECASE)
+        incident_match = re.search(r"\b(?:ticket|incidencia|incidente)\s*#?\s*(\d+)\b", question, re.IGNORECASE)
+        incident_lookup = None
+        inventory_lookup = None
+
+        if inventory_match or sku_match or product_match:
+            if product_match:
+                inventory_lookup = InventoryLookupInput(product_id=int(product_match.group(1)))
+            elif sku_match:
+                inventory_lookup = InventoryLookupInput(sku=sku_match.group(1))
+            else:
+                product_name = inventory_match.group(1).strip(" ?.!\"'")
+                product_name = re.sub(r"^(?:producto|artículo)\s+", "", product_name, flags=re.IGNORECASE)
+                inventory_lookup = InventoryLookupInput(name=product_name)
+            route = "inventory_lookup"
+        elif incident_match:
+            incident_lookup = IncidentLookupInput(ticket_id=int(incident_match.group(1)))
             route = "incident_lookup"
-        elif re.search(r"\b(incidencias|incidentes|tickets)\b", state["question"], re.IGNORECASE):
-            question_lower = state["question"].casefold()
+        elif re.search(r"\b(incidencias|incidentes|tickets)\b", question, re.IGNORECASE):
+            question_lower = question.casefold()
             incident_lookup = IncidentLookupInput(
                 status=next((value for value in IncidentStatus if value.value in question_lower), None),
                 category=next((value for value in IncidentCategory if value.value in question_lower), None),
                 origin=next((value for value in IncidentOrigin if value.value in question_lower), None),
                 branch=next((value for value in IncidentBranch if value.value in question_lower), None),
             )
-            route = (
-                "incident_lookup"
-                if any(
-                    (
-                        incident_lookup.status,
-                        incident_lookup.category,
-                        incident_lookup.origin,
-                        incident_lookup.branch,
-                    )
-                )
-                else "retrieve"
-            )
+            route = "incident_lookup" if any((
+                incident_lookup.status, incident_lookup.category,
+                incident_lookup.origin, incident_lookup.branch,
+            )) else "retrieve"
             if route == "retrieve":
                 incident_lookup = None
         else:
-            incident_lookup = None
             route = "retrieve"
+
         return {
             "incident_lookup": incident_lookup,
+            "inventory_lookup": inventory_lookup,
             "route": route,
             "trace": _record(
-                state, "route_request", route=route,
+                state,
+                "route_request",
+                route=route,
                 ticket_id=incident_lookup.ticket_id if incident_lookup else None,
+                product_id=inventory_lookup.product_id if inventory_lookup else None,
+                sku=inventory_lookup.sku if inventory_lookup else None,
+                product_name=inventory_lookup.name if inventory_lookup else None,
             ),
         }
 
@@ -244,6 +277,37 @@ def build_knowledge_graph(
         return {
             "answer": answer,
             "trace": _record(state, "incident_response", answer=answer),
+        }
+
+    def lookup_inventory_node(state: KnowledgeGraphState) -> KnowledgeGraphState:
+        outcome = inventory_fn(state["inventory_lookup"])
+        products = [product.model_dump(mode="json") for product in outcome.products]
+        return {
+            "inventory_result": outcome,
+            "trace": _record(
+                state,
+                "inventory_lookup",
+                outcome=outcome.outcome.value,
+                product_count=len(products),
+                products=products,
+                message=outcome.message,
+            ),
+        }
+
+    def inventory_response(state: KnowledgeGraphState) -> KnowledgeGraphState:
+        outcome = state["inventory_result"]
+        if outcome.outcome == InventoryToolOutcome.FOUND:
+            answer = "\n".join(
+                f"{product.name} (SKU {product.sku}): {product.current_stock} unidades disponibles."
+                for product in outcome.products
+            )
+        elif outcome.outcome == InventoryToolOutcome.NOT_FOUND:
+            answer = "No encontré un producto que coincida con la consulta."
+        else:
+            answer = "No pude confirmar el stock del producto ahora mismo."
+        return {
+            "answer": answer,
+            "trace": _record(state, "inventory_response", answer=answer),
         }
 
     def retrieve_context(state: KnowledgeGraphState) -> KnowledgeGraphState:
@@ -296,6 +360,8 @@ def build_knowledge_graph(
     builder.add_node("route_request", route_request)
     builder.add_node("incident_lookup", lookup_incident_node)
     builder.add_node("incident_response", incident_response)
+    builder.add_node("inventory_lookup", lookup_inventory_node)
+    builder.add_node("inventory_response", inventory_response)
     builder.add_node("retrieve", retrieve_context)
     builder.add_node("generate_answer", generate_response)
     builder.add_node("no_context", no_context)
@@ -308,9 +374,15 @@ def build_knowledge_graph(
     builder.add_conditional_edges(
         "route_request",
         lambda state: state["route"],
-        {"incident_lookup": "incident_lookup", "retrieve": "retrieve"},
+        {
+            "incident_lookup": "incident_lookup",
+            "inventory_lookup": "inventory_lookup",
+            "retrieve": "retrieve",
+        },
     )
     builder.add_edge("incident_lookup", "incident_response")
+    builder.add_edge("inventory_lookup", "inventory_response")
+    builder.add_edge("inventory_response", END)
     builder.add_conditional_edges(
         "retrieve",
         route_after_retrieval,
