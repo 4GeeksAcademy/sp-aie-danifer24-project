@@ -44,12 +44,15 @@ class KnowledgeGraphState(TypedDict, total=False):
     chunks: list[dict[str, Any]]
     trace: list[str]
     answer: NotRequired[str]
+    partial_answer: NotRequired[str]
     error: NotRequired[str]
     incident_lookup: NotRequired[IncidentLookupInput | None]
     incident_result: NotRequired[IncidentLookupOutput]
     inventory_lookup: NotRequired[InventoryLookupInput | None]
     inventory_result: NotRequired[InventoryLookupOutput]
     route: NotRequired[str]
+    active_tool: NotRequired[str | None]
+    use_rag: NotRequired[bool]
 
 
 # Explicit graph manifest validated before compilation.
@@ -63,12 +66,12 @@ _TRANSITIONS = {
     "receive_question": {"route_request", END},
     "route_request": {"incident_lookup", "inventory_lookup", "retrieve"},
     "incident_lookup": {"incident_response"},
+    "incident_response": {"retrieve", END},
     "inventory_lookup": {"inventory_response"},
-    "inventory_response": {END},
+    "inventory_response": {"retrieve", END},
     "retrieve": {"generate_answer", "no_context"},
     "generate_answer": {END},
     "no_context": {END},
-    "incident_response": {END},
 }
 _EXPECTED_STATE_TYPES = {
     "question": str,
@@ -76,8 +79,11 @@ _EXPECTED_STATE_TYPES = {
     "chunks": list[dict[str, Any]],
     "trace": list[str],
     "answer": str,
+    "partial_answer": str,
     "error": str,
     "route": str,
+    "active_tool": str | None,
+    "use_rag": bool,
     "incident_lookup": IncidentLookupInput | None,
     "incident_result": IncidentLookupOutput,
     "inventory_lookup": InventoryLookupInput | None,
@@ -209,6 +215,14 @@ def build_knowledge_graph(
                 inventory_lookup = InventoryLookupInput(sku=sku_match.group(1))
             else:
                 product_name = inventory_match.group(1).strip(" ?.!\"'")
+                # Do not pass the second, RAG-oriented clause as part of the
+                # product name in mixed-source questions.
+                product_name = re.split(
+                    r"\s+(?:y|e)\s+(?=(?:cu[aá]l|cu[aá]nto|qu[eé]|c[oó]mo|por qu[eé])\b)",
+                    product_name,
+                    maxsplit=1,
+                    flags=re.IGNORECASE,
+                )[0].strip()
                 product_name = re.sub(r"^(?:producto|artículo)\s+", "", product_name, flags=re.IGNORECASE)
                 inventory_lookup = InventoryLookupInput(name=product_name)
             route = "inventory_lookup"
@@ -232,14 +246,33 @@ def build_knowledge_graph(
         else:
             route = "retrieve"
 
+        rag_intent = bool(re.search(
+            r"\b(pol[ií]tica|procedimiento|contrato|documentaci[oó]n|seg[uú]n|c[oó]mo|por qu[eé]|requisito|tarifa|precio|condiciones)\b",
+            question,
+            re.IGNORECASE,
+        ))
+        active_tool = (
+            "incident_lookup" if incident_lookup is not None
+            else "inventory_lookup" if inventory_lookup is not None
+            else None
+        )
+        use_rag = route == "retrieve" or rag_intent
+        sources = ([active_tool] if active_tool else []) + (["rag"] if use_rag else [])
         return {
             "incident_lookup": incident_lookup,
             "inventory_lookup": inventory_lookup,
+            "active_tool": active_tool,
+            "use_rag": use_rag,
             "route": route,
             "trace": _record(
                 state,
                 "route_request",
                 route=route,
+                sources=sources,
+                execution_order=(
+                    [active_tool, "rag"] if active_tool and use_rag
+                    else sources
+                ),
                 ticket_id=incident_lookup.ticket_id if incident_lookup else None,
                 product_id=inventory_lookup.product_id if inventory_lookup else None,
                 sku=inventory_lookup.sku if inventory_lookup else None,
@@ -276,7 +309,13 @@ def build_knowledge_graph(
             )
         return {
             "answer": answer,
-            "trace": _record(state, "incident_response", answer=answer),
+            "partial_answer": answer,
+            "trace": _record(
+                state,
+                "incident_response",
+                answer=answer,
+                sources_used=["incident_lookup"],
+            ),
         }
 
     def lookup_inventory_node(state: KnowledgeGraphState) -> KnowledgeGraphState:
@@ -307,7 +346,13 @@ def build_knowledge_graph(
             answer = "No pude confirmar el stock del producto ahora mismo."
         return {
             "answer": answer,
-            "trace": _record(state, "inventory_response", answer=answer),
+            "partial_answer": answer,
+            "trace": _record(
+                state,
+                "inventory_response",
+                answer=answer,
+                sources_used=["inventory_lookup"],
+            ),
         }
 
     def retrieve_context(state: KnowledgeGraphState) -> KnowledgeGraphState:
@@ -318,6 +363,7 @@ def build_knowledge_graph(
                 state,
                 "retrieve",
                 chunk_count=len(chunks),
+                sources_used=["rag"],
                 sources=sorted({chunk.get("source_document", "unknown") for chunk in chunks}),
                 retrieved_chunks=[
                     {
@@ -330,27 +376,48 @@ def build_knowledge_graph(
             ),
         }
 
+    def _with_partial_answer(state: KnowledgeGraphState, rag_answer: str) -> str:
+        partial = state.get("partial_answer")
+        if not partial:
+            return rag_answer
+        if rag_answer.startswith("No tengo información suficiente"):
+            return f"{partial}\n\n{rag_answer}"
+        return f"{partial}\n\n{rag_answer}"
+
     def generate_response(state: KnowledgeGraphState) -> KnowledgeGraphState:
-        answer = generate_fn(state["question"], state["chunks"])
+        rag_answer = generate_fn(state["question"], state["chunks"])
+        answer = _with_partial_answer(state, rag_answer)
         return {
             "answer": answer,
             "trace": _record(
                 state,
                 "generate_answer",
                 answer=answer,
+                rag_answer=rag_answer,
+                sources_used=([state["active_tool"]] if state.get("active_tool") else []) + ["rag"],
                 context_chunk_count=len(state["chunks"]),
             ),
         }
 
     def no_context(state: KnowledgeGraphState) -> KnowledgeGraphState:
-        answer = "No tengo información suficiente en la base de conocimiento para responder esa pregunta."
+        rag_answer = "No tengo información suficiente en la base de conocimiento para responder esa pregunta."
+        answer = _with_partial_answer(state, rag_answer)
         return {
             "answer": answer,
-            "trace": _record(state, "no_context", answer=answer, chunk_count=0),
+            "trace": _record(
+                state,
+                "no_context",
+                answer=answer,
+                chunk_count=0,
+                sources_used=([state["active_tool"]] if state.get("active_tool") else []) + ["rag"],
+            ),
         }
 
+    def route_after_tool(state: KnowledgeGraphState) -> str:
+        return "retrieve" if state.get("use_rag") else "finish"
+
     def route_after_question(state: KnowledgeGraphState) -> str:
-        return "invalid" if state.get("error") else "retrieve"
+        return "invalid" if state.get("error") else "route"
 
     def route_after_retrieval(state: KnowledgeGraphState) -> str:
         return "generate" if state.get("chunks") else "no_context"
@@ -369,7 +436,7 @@ def build_knowledge_graph(
     builder.add_conditional_edges(
         "receive_question",
         route_after_question,
-        {"invalid": END, "retrieve": "route_request"},
+        {"invalid": END, "route": "route_request"},
     )
     builder.add_conditional_edges(
         "route_request",
@@ -381,8 +448,15 @@ def build_knowledge_graph(
         },
     )
     builder.add_edge("incident_lookup", "incident_response")
+    builder.add_conditional_edges(
+        "incident_response", route_after_tool,
+        {"retrieve": "retrieve", "finish": END},
+    )
     builder.add_edge("inventory_lookup", "inventory_response")
-    builder.add_edge("inventory_response", END)
+    builder.add_conditional_edges(
+        "inventory_response", route_after_tool,
+        {"retrieve": "retrieve", "finish": END},
+    )
     builder.add_conditional_edges(
         "retrieve",
         route_after_retrieval,

@@ -2,17 +2,48 @@
   {
     "case_id": "pricing-grounded-answer",
     "question": "¿Cuál es la tarifa de headhunting ejecutivo?",
-    "expected_nodes": ["receive_question", "retrieve", "generate_answer"],
+    "expected_nodes": [
+      "receive_question",
+      "route_request",
+      "retrieve",
+      "generate_answer"
+    ],
     "expected_source": "pricing-model",
-    "expected_answer_terms": ["22%", "salario anual"],
+    "expected_answer_terms": [
+      "22%",
+      "salario anual"
+    ],
     "answer": "La tarifa de headhunting ejecutivo es del 22% sobre el salario anual del candidato contratado.",
+    "expected_sources": [
+      "rag"
+    ],
+    "expected_execution_order": [
+      "rag"
+    ],
     "events": [
-      {"sequence": 1, "node": "receive_question", "valid": true},
+      {
+        "sequence": 1,
+        "node": "receive_question",
+        "valid": true
+      },
       {
         "sequence": 2,
+        "node": "route_request",
+        "route": "retrieve",
+        "sources": [
+          "rag"
+        ],
+        "execution_order": [
+          "rag"
+        ]
+      },
+      {
+        "sequence": 3,
         "node": "retrieve",
         "chunk_count": 1,
-        "sources": ["pricing-model"],
+        "sources": [
+          "pricing-model"
+        ],
         "retrieved_chunks": [
           {
             "source_document": "pricing-model",
@@ -22,9 +53,10 @@
         ]
       },
       {
-        "sequence": 3,
+        "sequence": 4,
         "node": "generate_answer",
         "context_chunk_count": 1,
+        "sources_used": ["rag"],
         "answer": "La tarifa de headhunting ejecutivo es del 22% sobre el salario anual del candidato contratado."
       }
     ]
@@ -32,39 +64,313 @@
   {
     "case_id": "no-context-honest-route",
     "question": "¿Qué descuento especial no documentado ofrecemos?",
-    "expected_nodes": ["receive_question", "retrieve", "no_context"],
+    "expected_nodes": [
+      "receive_question",
+      "route_request",
+      "retrieve",
+      "no_context"
+    ],
     "expected_source": null,
-    "expected_answer_terms": ["No tengo información suficiente"],
+    "expected_answer_terms": [
+      "No tengo información suficiente"
+    ],
     "answer": "No tengo información suficiente en la base de conocimiento para responder esa pregunta.",
+    "expected_sources": [
+      "rag"
+    ],
+    "expected_execution_order": [
+      "rag"
+    ],
     "events": [
-      {"sequence": 1, "node": "receive_question", "valid": true},
-      {"sequence": 2, "node": "retrieve", "chunk_count": 0, "sources": []},
-      {"sequence": 3, "node": "no_context", "chunk_count": 0}
+      {
+        "sequence": 1,
+        "node": "receive_question",
+        "valid": true
+      },
+      {
+        "sequence": 2,
+        "node": "route_request",
+        "route": "retrieve",
+        "sources": [
+          "rag"
+        ],
+        "execution_order": [
+          "rag"
+        ]
+      },
+      {
+        "sequence": 3,
+        "node": "retrieve",
+        "chunk_count": 0,
+        "sources": []
+      },
+      {
+        "sequence": 4,
+        "node": "no_context",
+        "chunk_count": 0,
+        "sources_used": ["rag"]
+      }
     ]
   },
   {
     "case_id": "ticket-status-routes-to-incident-tool",
     "question": "¿Cuál es el estado del ticket 42?",
-    "expected_nodes": ["receive_question", "route_request", "incident_lookup", "incident_response"],
+    "expected_nodes": [
+      "receive_question",
+      "route_request",
+      "incident_lookup",
+      "incident_response"
+    ],
     "expected_source": null,
-    "expected_answer_terms": ["incidencia 42", "open"],
+    "expected_answer_terms": [
+      "incidencia 42",
+      "open"
+    ],
     "answer": "Incidencia 42: estado open, categoría technical_failure, origen customer.",
+    "expected_sources": [
+      "incident_lookup"
+    ],
+    "expected_execution_order": [
+      "incident_lookup"
+    ],
     "events": [
-      {"sequence": 1, "node": "receive_question", "valid": true},
-      {"sequence": 2, "node": "route_request", "route": "incident_lookup", "ticket_id": 42},
-      {"sequence": 3, "node": "incident_lookup", "outcome": "found", "incident_count": 1},
-      {"sequence": 4, "node": "incident_response", "answer": "Incidencia 42: estado open, categoría technical_failure, origen customer."}
+      {
+        "sequence": 1,
+        "node": "receive_question",
+        "valid": true
+      },
+      {
+        "sequence": 2,
+        "node": "route_request",
+        "route": "incident_lookup",
+        "sources": [
+          "incident_lookup"
+        ],
+        "execution_order": [
+          "incident_lookup"
+        ],
+        "ticket_id": 42
+      },
+      {
+        "sequence": 3,
+        "node": "incident_lookup",
+        "outcome": "found",
+        "incident_count": 1
+      },
+      {
+        "sequence": 4,
+        "node": "incident_response",
+        "sources_used": [
+          "incident_lookup"
+        ],
+        "answer": "Incidencia 42: estado open, categoría technical_failure, origen customer."
+      }
     ]
   },
   {
     "case_id": "blank-question-short-circuit",
     "question": "   ",
-    "expected_nodes": ["receive_question"],
+    "expected_nodes": [
+      "receive_question"
+    ],
     "expected_source": null,
     "expected_answer_terms": [],
     "answer": "",
     "events": [
-      {"sequence": 1, "node": "receive_question", "valid": false, "error": "La pregunta no puede estar vacía."}
+      {
+        "sequence": 1,
+        "node": "receive_question",
+        "valid": false,
+        "error": "La pregunta no puede estar vacía."
+      }
+    ]
+  },
+  {
+    "case_id": "automatic-inventory-tool-routing",
+    "question": "?Cu?nto stock hay del producto Laptop?",
+    "expected_nodes": [
+      "receive_question",
+      "route_request",
+      "inventory_lookup",
+      "inventory_response"
+    ],
+    "expected_source": null,
+    "expected_answer_terms": [
+      "Laptop",
+      "LAP-5",
+      "7 unidades disponibles"
+    ],
+    "answer": "Laptop (SKU LAP-5): 7 unidades disponibles.",
+    "expected_sources": [
+      "inventory_lookup"
+    ],
+    "expected_execution_order": [
+      "inventory_lookup"
+    ],
+    "events": [
+      {
+        "sequence": 1,
+        "node": "receive_question",
+        "valid": true
+      },
+      {
+        "sequence": 2,
+        "node": "route_request",
+        "route": "inventory_lookup",
+        "sources": [
+          "inventory_lookup"
+        ],
+        "execution_order": [
+          "inventory_lookup"
+        ],
+        "product_name": "Laptop"
+      },
+      {
+        "sequence": 3,
+        "node": "inventory_lookup",
+        "outcome": "found",
+        "product_count": 1,
+        "products": [
+          {
+            "name": "Laptop",
+            "sku": "LAP-5",
+            "current_stock": 7
+          }
+        ]
+      },
+      {
+        "sequence": 4,
+        "node": "inventory_response",
+        "sources_used": [
+          "inventory_lookup"
+        ],
+        "answer": "Laptop (SKU LAP-5): 7 unidades disponibles."
+      }
+    ]
+  },
+  {
+    "case_id": "automatic-rag-policy-routing",
+    "question": "?Cu?l es la tarifa de headhunting ejecutivo?",
+    "expected_nodes": [
+      "receive_question",
+      "route_request",
+      "retrieve",
+      "generate_answer"
+    ],
+    "expected_source": "pricing-model",
+    "expected_answer_terms": [
+      "22%",
+      "salario anual"
+    ],
+    "answer": "La tarifa de headhunting ejecutivo es del 22% sobre el salario anual del candidato contratado.",
+    "expected_sources": [
+      "rag"
+    ],
+    "expected_execution_order": [
+      "rag"
+    ],
+    "events": [
+      {
+        "sequence": 1,
+        "node": "receive_question",
+        "valid": true
+      },
+      {
+        "sequence": 2,
+        "node": "route_request",
+        "route": "retrieve",
+        "sources": [
+          "rag"
+        ],
+        "execution_order": [
+          "rag"
+        ]
+      },
+      {
+        "sequence": 3,
+        "node": "retrieve",
+        "chunk_count": 1,
+        "sources": [
+          "pricing-model"
+        ],
+        "retrieved_chunks": [
+          {
+            "source_document": "pricing-model",
+            "section": "Headhunting ejecutivo",
+            "text": "Tarifa est?ndar: 22% del salario anual del candidato contratado."
+          }
+        ]
+      },
+      {
+        "sequence": 4,
+        "node": "generate_answer",
+        "context_chunk_count": 1,
+        "sources_used": [
+          "rag"
+        ],
+        "answer": "La tarifa de headhunting ejecutivo es del 22% sobre el salario anual del candidato contratado."
+      }
+    ]
+  },
+  {
+    "case_id": "automatic-mixed-inventory-and-rag-routing",
+    "question": "¿Cuánto stock hay del producto Laptop y cuál es la política de reposición?",
+    "expected_nodes": [
+      "receive_question",
+      "route_request",
+      "inventory_lookup",
+      "inventory_response",
+      "retrieve",
+      "generate_answer"
+    ],
+    "expected_source": "inventory-policy",
+    "expected_answer_terms": ["22%"],
+    "expected_response_terms": ["LAP-5", "22%"],
+    "answer": "Laptop (SKU LAP-5): 7 unidades disponibles.\n\nLa política de reposición aplica el umbral documentado del 22%.",
+    "expected_sources": ["inventory_lookup", "rag"],
+    "expected_execution_order": ["inventory_lookup", "rag"],
+    "events": [
+      {"sequence": 1, "node": "receive_question", "valid": true},
+      {
+        "sequence": 2,
+        "node": "route_request",
+        "route": "inventory_lookup",
+        "sources": ["inventory_lookup", "rag"],
+        "execution_order": ["inventory_lookup", "rag"],
+        "product_name": "Laptop y cuál es la política de reposición"
+      },
+      {
+        "sequence": 3,
+        "node": "inventory_lookup",
+        "outcome": "found",
+        "product_count": 1,
+        "products": [{"name": "Laptop", "sku": "LAP-5", "current_stock": 7}]
+      },
+      {
+        "sequence": 4,
+        "node": "inventory_response",
+        "sources_used": ["inventory_lookup"],
+        "answer": "Laptop (SKU LAP-5): 7 unidades disponibles."
+      },
+      {
+        "sequence": 5,
+        "node": "retrieve",
+        "chunk_count": 1,
+        "sources_used": ["rag"],
+        "sources": ["inventory-policy"],
+        "retrieved_chunks": [{
+          "source_document": "inventory-policy",
+          "section": "Reposición",
+          "text": "La política de reposición aplica el umbral documentado del 22%."
+        }]
+      },
+      {
+        "sequence": 6,
+        "node": "generate_answer",
+        "context_chunk_count": 1,
+        "sources_used": ["inventory_lookup", "rag"],
+        "answer": "Laptop (SKU LAP-5): 7 unidades disponibles.\n\nLa política de reposición aplica el umbral documentado del 22%."
+      }
     ]
   }
 ]
