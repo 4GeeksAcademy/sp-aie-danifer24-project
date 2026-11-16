@@ -314,7 +314,7 @@
   },
   {
     "case_id": "automatic-mixed-inventory-and-rag-routing",
-    "question": "¿Cuánto stock hay del producto Laptop y cuál es la política de reposición?",
+    "question": "¿Cuánto stock hay del producto Laptop y cuál es la tarifa de headhunting ejecutivo?",
     "expected_nodes": [
       "receive_question",
       "route_request",
@@ -323,10 +323,10 @@
       "retrieve",
       "generate_answer"
     ],
-    "expected_source": "inventory-policy",
-    "expected_answer_terms": ["22%"],
-    "expected_response_terms": ["LAP-5", "22%"],
-    "answer": "Laptop (SKU LAP-5): 7 unidades disponibles.\n\nLa política de reposición aplica el umbral documentado del 22%.",
+    "expected_source": "pricing-model",
+    "expected_answer_terms": ["22%", "salario anual"],
+    "expected_response_terms": ["LAP-5", "22%", "salario anual"],
+    "answer": "Laptop (SKU LAP-5): 7 unidades disponibles.\n\nLa tarifa de headhunting ejecutivo es del 22% sobre el salario anual del candidato contratado.",
     "expected_sources": ["inventory_lookup", "rag"],
     "expected_execution_order": ["inventory_lookup", "rag"],
     "events": [
@@ -337,7 +337,7 @@
         "route": "inventory_lookup",
         "sources": ["inventory_lookup", "rag"],
         "execution_order": ["inventory_lookup", "rag"],
-        "product_name": "Laptop y cuál es la política de reposición"
+        "product_name": "Laptop"
       },
       {
         "sequence": 3,
@@ -357,11 +357,11 @@
         "node": "retrieve",
         "chunk_count": 1,
         "sources_used": ["rag"],
-        "sources": ["inventory-policy"],
+        "sources": ["pricing-model"],
         "retrieved_chunks": [{
-          "source_document": "inventory-policy",
-          "section": "Reposición",
-          "text": "La política de reposición aplica el umbral documentado del 22%."
+          "source_document": "pricing-model",
+          "section": "Headhunting ejecutivo",
+          "text": "Tarifa estándar: 22% del salario anual del candidato contratado."
         }]
       },
       {
@@ -369,7 +369,7 @@
         "node": "generate_answer",
         "context_chunk_count": 1,
         "sources_used": ["inventory_lookup", "rag"],
-        "answer": "Laptop (SKU LAP-5): 7 unidades disponibles.\n\nLa política de reposición aplica el umbral documentado del 22%."
+        "answer": "Laptop (SKU LAP-5): 7 unidades disponibles.\n\nLa tarifa de headhunting ejecutivo es del 22% sobre el salario anual del candidato contratado."
       }
     ]
   }
