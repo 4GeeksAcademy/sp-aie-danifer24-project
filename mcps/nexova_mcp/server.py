@@ -42,10 +42,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger("nexova_mcp.server")
 
-# ── mcpauth: OAuth 2.1 / OIDC bearer-token validation ────────────────────
-from mcpauth import MCPAuth
-from mcpauth.config import AuthServerConfig
-
 # ── fastmcp 4.x (wrapper around mcp 2.x MCPServer) ──────────────────────
 from fastmcp import FastMCP
 
@@ -80,41 +76,6 @@ server = FastMCP(
     ),
 )
 
-# ── OAuth configuration (used at startup in main()) ────────────────────
-from mcpauth.config import (
-    AuthorizationServerMetadata,
-    AuthServerType,
-)
-
-
-def _build_bearer_middleware() -> type[BaseHTTPMiddleware] | None:
-    """Build the mcpauth bearer-token middleware class.
-
-    Returns None if mcpauth rejects the configuration (the server will
-    start WITHOUT authentication in that case).
-    """
-    try:
-        meta = AuthorizationServerMetadata(
-            issuer=PROTECTED_RESOURCE_METADATA["issuer"],
-            authorization_endpoint="http://localhost:8010/authorize",
-            token_endpoint="http://localhost:8010/token",
-            response_types_supported=["code"],
-            grant_types_supported=["authorization_code"],
-            code_challenge_methods_supported=["S256"],
-        )
-        cfg = AuthServerConfig(metadata=meta, type=AuthServerType.OAUTH)
-        mcp_auth = MCPAuth(server=cfg)
-        return mcp_auth.bearer_auth_middleware(
-            mode_or_verify=introspect_token,
-            show_error_details=True,
-        )
-    except Exception as exc:
-        logger.warning("Could not build mcpauth config: %s", exc)
-        return None
-
-
-# Pre-build once at module level
-_BEARER_MW = _build_bearer_middleware()
 
 
 # ==========================================================================
@@ -425,14 +386,53 @@ from starlette.responses import JSONResponse, Response
 
 
 class TokenContextMiddleware(BaseHTTPMiddleware):
-    """Middleware ASGI que extrae el payload del token de la request
-    (inyectado por mcpauth) y lo pone a disposición de las tools
-    via ``_set_current_token_payload()`` antes de cada invocación.
+    """Middleware OAuth propio (sin mcpauth).
+
+    1. Extrae el header ``Authorization: Bearer <token>``.
+    2. Valida el JWT via ``introspect_token()``.
+    3. Inyecta el payload en las tools via ``_set_current_token_payload()``.
+    4. Rechaza con 401 si no hay token o es inválido.
     """
 
+    # Rutas que NO requieren autenticación
+    PUBLIC_PATHS = {
+        "/.well-known/oauth-authorization-server",
+        "/health",
+    }
+    # Rutas MCP que requieren autenticación
+    MCP_PATH = "/mcp"
+
     async def dispatch(self, request: Request, call_next):
-        # El payload del token lo deja mcpauth en request.state.token_introspection
-        payload = getattr(request.state, "token_introspection", None) if hasattr(request, "state") else None
+        # Rutas públicas pasan sin autenticar
+        if request.url.path in self.PUBLIC_PATHS:
+            _set_current_token_payload(None)
+            return await call_next(request)
+
+        # Rutas MCP requieren bearer token
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return JSONResponse(
+                {
+                    "error": "unauthorized",
+                    "message": "Se requiere un token de acceso. "
+                    "Usa el header 'Authorization: Bearer <token>'.",
+                },
+                status_code=401,
+            )
+
+        token = auth_header[len("Bearer "):].strip()
+        payload = introspect_token(token)
+
+        if not payload.get("active"):
+            return JSONResponse(
+                {
+                    "error": "invalid_token",
+                    "message": "El token de acceso no es válido o ha expirado.",
+                },
+                status_code=401,
+            )
+
+        # Token válido → inyectar payload
         _set_current_token_payload(payload)
         try:
             response = await call_next(request)
@@ -449,25 +449,17 @@ async def main() -> None:
     HOST = os.environ.get("MCP_HOST", "0.0.0.0")
     PORT = int(os.environ.get("MCP_PORT", "8010"))
 
+    from starlette.responses import JSONResponse
+
+    async def metadata_endpoint(request):
+        return JSONResponse(PROTECTED_RESOURCE_METADATA)
+
     # Build the ASGI app
     app = server.http_app(middleware=None)
 
-    # 1. mcpauth bearer-token middleware (autenticación)
-    if _BEARER_MW is not None:
-        try:
-            app.add_middleware(_BEARER_MW)
-            logger.info("mcpauth bearer-token middleware added.")
-        except Exception as exc:
-            logger.warning(
-                "Could not instantiate mcpauth middleware: %s. "
-                "Proceeding WITHOUT authentication.",
-                exc,
-            )
-    else:
-        logger.warning("No mcpauth config -- server starting WITHOUT auth.")
-
-    # 2. TokenContextMiddleware (inyecta token payload a las tools)
+    # TokenContextMiddleware (autenticación OAuth propia + inyección de payload)
     app.add_middleware(TokenContextMiddleware)
+    logger.info("OAuth bearer-token middleware (own) added.")
 
     try:
         app.add_route(
@@ -486,6 +478,10 @@ async def main() -> None:
     print(
         "   OAuth Protected Resource Metadata: "
         f"http://{HOST}:{PORT}/.well-known/oauth-authorization-server",
+        flush=True,
+    )
+    print(
+        "   Auth: OAuth 2.1 (Bearer JWT) via TokenContextMiddleware",
         flush=True,
     )
     print(f"   Tools ({len(tool_names)}): {', '.join(sorted(tool_names))}", flush=True)
