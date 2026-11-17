@@ -1,9 +1,9 @@
 ﻿"""Nexova MCP Server — entry point.
 
-Usage (development — Streamable HTTP):
+Usage (development — SSE transport, compatible with MCP Playground):
     python -m mcps.nexova_mcp.server
 
-The server is protected by OAuth 2.1 bearer‑token validation (mcpauth).
+The server is protected by OAuth 2.1 bearer‑token validation (own middleware).
 Clients must present a valid JWT (same issuer as the Nexova FastAPI backend)
 in the `Authorization: Bearer <token>` header.
 
@@ -454,8 +454,8 @@ async def main() -> None:
     async def metadata_endpoint(request):
         return JSONResponse(PROTECTED_RESOURCE_METADATA)
 
-    # Build the ASGI app
-    app = server.http_app(middleware=None)
+    # Build the SSE app (transporte MCP estándar, compatible con MCP Playground)
+    app = server.sse_app(middleware=None)
 
     # TokenContextMiddleware (autenticación OAuth propia + inyección de payload)
     app.add_middleware(TokenContextMiddleware)
@@ -476,18 +476,18 @@ async def main() -> None:
     tool_names = [t.name for t in tools]
     print(f"\nNexova MCP Server starting on http://{HOST}:{PORT}", flush=True)
     print(
-        "   OAuth Protected Resource Metadata: "
-        f"http://{HOST}:{PORT}/.well-known/oauth-authorization-server",
+        "   Transport: SSE (MCP estándar — compatible con MCP Playground)",
         flush=True,
     )
     print(
-        "   Auth: OAuth 2.1 (Bearer JWT) via TokenContextMiddleware",
+        "   OAuth Protected Resource Metadata: "
+        f"http://{HOST}:{PORT}/.well-known/oauth-authorization-server",
         flush=True,
     )
     print(f"   Tools ({len(tool_names)}): {', '.join(sorted(tool_names))}", flush=True)
     print()
 
-    # Serve with uvicorn directly, passing the pre-built app
+    # Serve with uvicorn
     import uvicorn
 
     config = uvicorn.Config(
