@@ -1,0 +1,1 @@
+# Nexova MCP Server — exposes incidents and inventory tools via the Model Context Protocol.
