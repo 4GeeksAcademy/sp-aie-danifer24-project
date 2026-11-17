@@ -17,18 +17,41 @@ from langgraph.graph import END, START, StateGraph
 
 from data.pipelines.rag import generate_answer, retrieve
 from services.api.models import IncidentBranch, IncidentCategory, IncidentOrigin, IncidentStatus
-from services.api.services.incident_tool import (
-    IncidentLookupInput,
-    IncidentLookupOutput,
-    IncidentToolOutcome,
-    lookup_incidents,
-)
-from services.api.services.inventory_tool import (
-    InventoryLookupInput,
-    InventoryLookupOutput,
-    InventoryToolOutcome,
-    lookup_inventory,
-)
+
+# ── Tool provider selection ──────────────────────────────────────────────
+# When USE_MCP_BACKEND is truthy, the agent routes incident and inventory
+# lookups through the MCP Server instead of hitting databases directly.
+_USE_MCP_BACKEND = os.environ.get("USE_MCP_BACKEND", "").lower() in ("1", "true", "yes")
+
+if _USE_MCP_BACKEND:
+    from services.api.services.incident_tool import (
+        IncidentLookupInput,
+        IncidentLookupOutput,
+        IncidentToolOutcome,
+    )
+    from services.api.services.inventory_tool import (
+        InventoryLookupInput,
+        InventoryLookupOutput,
+        InventoryToolOutcome,
+    )
+    from services.api.services.mcp_agent_adapter import (
+        lookup_incidents_mcp as lookup_incidents,
+        lookup_inventory_mcp as lookup_inventory,
+    )
+else:
+    from services.api.services.incident_tool import (
+        IncidentLookupInput,
+        IncidentLookupOutput,
+        IncidentToolOutcome,
+        lookup_incidents,
+    )
+    from services.api.services.inventory_tool import (
+        InventoryLookupInput,
+        InventoryLookupOutput,
+        InventoryToolOutcome,
+        lookup_inventory,
+    )
+# ─────────────────────────────────────────────────────────────────────────
 
 logger = logging.getLogger(__name__)
 
