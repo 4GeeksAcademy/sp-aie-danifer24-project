@@ -434,8 +434,10 @@ class TokenContextMiddleware(BaseHTTPMiddleware):
         # El payload del token lo deja mcpauth en request.state.token_introspection
         payload = getattr(request.state, "token_introspection", None) if hasattr(request, "state") else None
         _set_current_token_payload(payload)
-        response = await call_next(request)
-        _set_current_token_payload(None)
+        try:
+            response = await call_next(request)
+        finally:
+            _set_current_token_payload(None)
         return response
 
 
@@ -447,13 +449,13 @@ async def main() -> None:
     HOST = os.environ.get("MCP_HOST", "0.0.0.0")
     PORT = int(os.environ.get("MCP_PORT", "8010"))
 
-    # Build middleware list
-    mw_list: list = []
+    # Build the ASGI app
+    app = server.http_app(middleware=None)
 
     # 1. mcpauth bearer-token middleware (autenticación)
     if _BEARER_MW is not None:
         try:
-            mw_list.append(_BEARER_MW())
+            app.add_middleware(_BEARER_MW)
             logger.info("mcpauth bearer-token middleware added.")
         except Exception as exc:
             logger.warning(
@@ -465,17 +467,8 @@ async def main() -> None:
         logger.warning("No mcpauth config -- server starting WITHOUT auth.")
 
     # 2. TokenContextMiddleware (inyecta token payload a las tools)
-    mw_list.append(TokenContextMiddleware())
+    app.add_middleware(TokenContextMiddleware)
 
-    # Build the ASGI app with middleware
-    from starlette.responses import JSONResponse
-
-    async def metadata_endpoint(request):
-        return JSONResponse(PROTECTED_RESOURCE_METADATA)
-
-    app = server.http_app(middleware=mw_list if mw_list else None)
-
-    # Add metadata route to the Starlette app
     try:
         app.add_route(
             "/.well-known/oauth-authorization-server",
