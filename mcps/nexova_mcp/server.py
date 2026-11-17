@@ -381,6 +381,7 @@ _register_tool(
 # Middleware ASGI para inyectar el token payload en cada request
 # ==========================================================================
 from starlette.responses import JSONResponse
+from starlette.types import ASGIApp, Scope, Receive, Send
 
 
 class TokenContextMiddleware:
@@ -391,7 +392,7 @@ class TokenContextMiddleware:
     3. Inyecta el payload en las tools via ``_set_current_token_payload()``.
     4. Rechaza con 401 si no hay token o es inválido.
 
-    Se pasa como middleware Starlette en ``run_http_async(middleware=[...])``.
+    Se aplica manualmente envolviendo la app ASGI final en ``main()``.
     """
 
     PUBLIC_PATHS = {
@@ -399,53 +400,44 @@ class TokenContextMiddleware:
         "/health",
     }
 
-    def __init__(self, app):
+    def __init__(self, app: ASGIApp):
         self.app = app
 
-    async def __call__(self, scope, receive, send):
-        # Solo interceptamos requests HTTP
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
 
         path = scope.get("path", "")
 
-        # Rutas públicas pasan sin autenticar
         if path in self.PUBLIC_PATHS:
             _set_current_token_payload(None)
             await self.app(scope, receive, send)
             return
 
-        # Extraer header Authorization manualmente desde scope
         headers = dict(scope.get("headers", []))
         auth_header = headers.get(b"authorization", b"").decode()
         if not auth_header.startswith("Bearer "):
-            response = JSONResponse(
-                {
-                    "error": "unauthorized",
-                    "message": "Se requiere un token de acceso. "
-                    "Usa el header 'Authorization: Bearer <token>'.",
-                },
+            resp = JSONResponse(
+                {"error": "unauthorized",
+                 "message": "Se requiere un token de acceso. Usa el header 'Authorization: Bearer <token>'."},
                 status_code=401,
             )
-            await response(scope, receive, send)
+            await resp(scope, receive, send)
             return
 
         token = auth_header[len("Bearer "):].strip()
         payload = introspect_token(token)
 
         if not payload.get("active"):
-            response = JSONResponse(
-                {
-                    "error": "invalid_token",
-                    "message": "El token de acceso no es válido o ha expirado.",
-                },
+            resp = JSONResponse(
+                {"error": "invalid_token",
+                 "message": "El token de acceso no es válido o ha expirado."},
                 status_code=401,
             )
-            await response(scope, receive, send)
+            await resp(scope, receive, send)
             return
 
-        # Token válido → inyectar payload y pasar al siguiente middleware
         _set_current_token_payload(payload)
         try:
             await self.app(scope, receive, send)
@@ -459,6 +451,11 @@ class TokenContextMiddleware:
 async def _metadata_endpoint(request):
     from starlette.responses import JSONResponse
     return JSONResponse(PROTECTED_RESOURCE_METADATA)
+
+
+def _apply_middleware(app: ASGIApp) -> ASGIApp:
+    """Envuelve la app ASGI con TokenContextMiddleware manualmente."""
+    return TokenContextMiddleware(app)
 
 
 async def main() -> None:
@@ -476,14 +473,21 @@ async def main() -> None:
     except Exception as exc:
         logger.warning("Could not mount metadata endpoint: %s", exc)
 
-    # Arrancar con SSE transport y middleware OAuth
-    await server.run_http_async(
-        transport="sse",
+    # Construir la app ASGI (sin middleware Starlette) y aplicarlo manualmente
+    app = server.http_app(transport="sse")
+    app = _apply_middleware(app)
+    logger.info("OAuth bearer-token middleware (TokenContextMiddleware) applied.")
+
+    # Arrancar Uvicorn directamente con la app envuelta
+    import uvicorn
+    config = uvicorn.Config(
+        app=app,
         host=HOST,
         port=PORT,
-        show_banner=True,
-        middleware=[TokenContextMiddleware],
+        log_level=LOG_LEVEL.lower() if LOG_LEVEL else "info",
     )
+    server_instance = uvicorn.Server(config)
+    await server_instance.serve()
 
 
 if __name__ == "__main__":
