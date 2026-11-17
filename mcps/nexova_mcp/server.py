@@ -1,4 +1,4 @@
-﻿"""Nexova MCP Server — entry point.
+"""Nexova MCP Server — entry point.
 
 Usage (development — SSE transport, compatible with MCP Playground):
     python -m mcps.nexova_mcp.server
@@ -380,38 +380,47 @@ _register_tool(
 # ==========================================================================
 # Middleware ASGI para inyectar el token payload en cada request
 # ==========================================================================
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
+from starlette.responses import JSONResponse
 
 
-class TokenContextMiddleware(BaseHTTPMiddleware):
-    """Middleware OAuth propio (sin mcpauth).
+class TokenContextMiddleware:
+    """Middleware OAuth propio (ASGI puro, sin mcpauth).
 
     1. Extrae el header ``Authorization: Bearer <token>``.
     2. Valida el JWT via ``introspect_token()``.
     3. Inyecta el payload en las tools via ``_set_current_token_payload()``.
     4. Rechaza con 401 si no hay token o es inválido.
+
+    Se pasa como middleware Starlette en ``run_http_async(middleware=[...])``.
     """
 
-    # Rutas que NO requieren autenticación
     PUBLIC_PATHS = {
         "/.well-known/oauth-authorization-server",
         "/health",
     }
-    # Rutas MCP que requieren autenticación
-    MCP_PATH = "/mcp"
 
-    async def dispatch(self, request: Request, call_next):
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        # Solo interceptamos requests HTTP
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        path = scope.get("path", "")
+
         # Rutas públicas pasan sin autenticar
-        if request.url.path in self.PUBLIC_PATHS:
+        if path in self.PUBLIC_PATHS:
             _set_current_token_payload(None)
-            return await call_next(request)
+            await self.app(scope, receive, send)
+            return
 
-        # Rutas MCP requieren bearer token
-        auth_header = request.headers.get("Authorization", "")
+        # Extraer header Authorization manualmente desde scope
+        headers = dict(scope.get("headers", []))
+        auth_header = headers.get(b"authorization", b"").decode()
         if not auth_header.startswith("Bearer "):
-            return JSONResponse(
+            response = JSONResponse(
                 {
                     "error": "unauthorized",
                     "message": "Se requiere un token de acceso. "
@@ -419,26 +428,29 @@ class TokenContextMiddleware(BaseHTTPMiddleware):
                 },
                 status_code=401,
             )
+            await response(scope, receive, send)
+            return
 
         token = auth_header[len("Bearer "):].strip()
         payload = introspect_token(token)
 
         if not payload.get("active"):
-            return JSONResponse(
+            response = JSONResponse(
                 {
                     "error": "invalid_token",
                     "message": "El token de acceso no es válido o ha expirado.",
                 },
                 status_code=401,
             )
+            await response(scope, receive, send)
+            return
 
-        # Token válido → inyectar payload
+        # Token válido → inyectar payload y pasar al siguiente middleware
         _set_current_token_payload(payload)
         try:
-            response = await call_next(request)
+            await self.app(scope, receive, send)
         finally:
             _set_current_token_payload(None)
-        return response
 
 
 # ==========================================================================
@@ -457,10 +469,6 @@ async def main() -> None:
     HOST = os.environ.get("MCP_HOST", "0.0.0.0")
     PORT = int(os.environ.get("MCP_PORT", "8010"))
 
-    # TokenContextMiddleware se agrega ANTES de arrancar
-    server.add_middleware(TokenContextMiddleware)
-    logger.info("OAuth bearer-token middleware (TokenContextMiddleware) added.")
-
     # Montar metadata endpoint
     try:
         server.mount("/.well-known/oauth-authorization-server", _metadata_endpoint)
@@ -468,12 +476,13 @@ async def main() -> None:
     except Exception as exc:
         logger.warning("Could not mount metadata endpoint: %s", exc)
 
-    # Arrancar con SSE transport
+    # Arrancar con SSE transport y middleware OAuth
     await server.run_http_async(
         transport="sse",
         host=HOST,
         port=PORT,
         show_banner=True,
+        middleware=[TokenContextMiddleware],
     )
 
 
