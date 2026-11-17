@@ -444,60 +444,37 @@ class TokenContextMiddleware(BaseHTTPMiddleware):
 # ==========================================================================
 # Entry point
 # ==========================================================================
+async def _metadata_endpoint(request):
+    from starlette.responses import JSONResponse
+    return JSONResponse(PROTECTED_RESOURCE_METADATA)
+
+
 async def main() -> None:
-    """Run the MCP server with Streamable HTTP transport via uvicorn."""
+    """Run the MCP server with SSE transport (MCP estándar).
+
+    Compatible with MCP Playground, MCP Inspector and any MCP client.
+    """
     HOST = os.environ.get("MCP_HOST", "0.0.0.0")
     PORT = int(os.environ.get("MCP_PORT", "8010"))
 
-    from starlette.responses import JSONResponse
+    # TokenContextMiddleware se agrega ANTES de arrancar
+    server.add_middleware(TokenContextMiddleware)
+    logger.info("OAuth bearer-token middleware (TokenContextMiddleware) added.")
 
-    async def metadata_endpoint(request):
-        return JSONResponse(PROTECTED_RESOURCE_METADATA)
-
-    # Build the SSE app (transporte MCP estándar, compatible con MCP Playground)
-    app = server.sse_app(middleware=None)
-
-    # TokenContextMiddleware (autenticación OAuth propia + inyección de payload)
-    app.add_middleware(TokenContextMiddleware)
-    logger.info("OAuth bearer-token middleware (own) added.")
-
+    # Montar metadata endpoint
     try:
-        app.add_route(
-            "/.well-known/oauth-authorization-server",
-            metadata_endpoint,
-            methods=["GET"],
-        )
-        logger.info("Metadata endpoint at /.well-known/oauth-authorization-server")
+        server.mount("/.well-known/oauth-authorization-server", _metadata_endpoint)
+        logger.info("Metadata endpoint mounted at /.well-known/oauth-authorization-server")
     except Exception as exc:
         logger.warning("Could not mount metadata endpoint: %s", exc)
 
-    # Print banner
-    tools = await server.list_tools()
-    tool_names = [t.name for t in tools]
-    print(f"\nNexova MCP Server starting on http://{HOST}:{PORT}", flush=True)
-    print(
-        "   Transport: SSE (MCP estándar — compatible con MCP Playground)",
-        flush=True,
-    )
-    print(
-        "   OAuth Protected Resource Metadata: "
-        f"http://{HOST}:{PORT}/.well-known/oauth-authorization-server",
-        flush=True,
-    )
-    print(f"   Tools ({len(tool_names)}): {', '.join(sorted(tool_names))}", flush=True)
-    print()
-
-    # Serve with uvicorn
-    import uvicorn
-
-    config = uvicorn.Config(
-        app,
+    # Arrancar con SSE transport
+    await server.run_http_async(
+        transport="sse",
         host=HOST,
         port=PORT,
-        log_level="info",
+        show_banner=True,
     )
-    server_uvicorn = uvicorn.Server(config)
-    await server_uvicorn.serve()
 
 
 if __name__ == "__main__":
