@@ -416,8 +416,19 @@ class TokenContextMiddleware:
             return
 
         headers = dict(scope.get("headers", []))
-        auth_header = headers.get(b"authorization", b"").decode()
-        if not auth_header.startswith("Bearer "):
+        raw = headers.get(b"authorization", b"").decode().strip().strip('"').strip("'")
+
+        # Parsear: extraer token con o sin prefijo "Bearer "
+        token = None
+        for prefix in ("Bearer ", "bearer ", "BEARER "):
+            if raw.startswith(prefix):
+                token = raw[len(prefix):].strip()
+                break
+        if token is None and raw:
+            # Sin prefijo → tratarlo como token directo
+            token = raw
+
+        if token is None:
             resp = JSONResponse(
                 {"error": "unauthorized",
                  "message": "Se requiere un token de acceso. Usa el header 'Authorization: Bearer <token>'."},
@@ -426,9 +437,7 @@ class TokenContextMiddleware:
             await resp(scope, receive, send)
             return
 
-        token = auth_header[len("Bearer "):].strip()
         payload = introspect_token(token)
-
         if not payload.get("active"):
             resp = JSONResponse(
                 {"error": "invalid_token",
