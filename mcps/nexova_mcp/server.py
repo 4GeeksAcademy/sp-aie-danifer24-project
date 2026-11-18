@@ -82,21 +82,11 @@ server = FastMCP(
 # Wrapper de trazabilidad: registra cada invocación en logs
 # ==========================================================================
 import functools
+import contextvars
 
-# Almacén temporal del payload del token para la request actual.
-# Lo establece el middleware antes de llegar a la tool.
-_current_token_payload: dict | None = None
-
-
-def _set_current_token_payload(payload: dict | None) -> None:
-    """Establece el payload del token para la request actual (llamado desde middleware)."""
-    global _current_token_payload
-    _current_token_payload = payload
-
-
-def _get_current_token_payload() -> dict | None:
-    """Recupera el payload del token para la request actual."""
-    return _current_token_payload
+# Almacén del payload del token usando contextvars (seguro para asyncio).
+# El middleware lo establece antes de cada request HTTP, y las tools lo leen.
+_token_payload_var: contextvars.ContextVar[dict | None] = contextvars.ContextVar("token_payload", default=None)
 
 
 class ToolAuthError(Exception):
@@ -117,7 +107,7 @@ def _with_tracing(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         tool_name = func.__name__
-        token_payload = _get_current_token_payload()
+        token_payload = _token_payload_var.get()
 
         # 1. Verificar autorización (scope enforcement)
         authorized, reason = check_tool_authorization(tool_name, token_payload)
@@ -411,7 +401,7 @@ class TokenContextMiddleware:
         path = scope.get("path", "")
 
         if path in self.PUBLIC_PATHS:
-            _set_current_token_payload(None)
+            _token_payload_var.set(None)
             await self.app(scope, receive, send)
             return
 
@@ -447,11 +437,11 @@ class TokenContextMiddleware:
             await resp(scope, receive, send)
             return
 
-        _set_current_token_payload(payload)
+        _token_payload_var.set(payload)
         try:
             await self.app(scope, receive, send)
         finally:
-            _set_current_token_payload(None)
+            _token_payload_var.set(None)
 
 
 # ==========================================================================
