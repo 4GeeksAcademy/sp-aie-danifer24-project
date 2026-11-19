@@ -29,6 +29,7 @@ from services.api.routes.profiles import router as profiles_router
 from services.api.routes.users import router as users_router
 from services.api.routes.telemetry import router as telemetry_router
 from services.api.routes.tasks import router as tasks_router
+from services.api.routes.memory import router as memory_router
 from services.reporting.router import router as reporting_router
 from services.api.routers.inventory import router as inventory_router
 from services.api.security import CurrentUser
@@ -52,6 +53,7 @@ app.include_router(inventory_router)
 app.include_router(telemetry_router)
 app.include_router(reporting_router)
 app.include_router(tasks_router)
+app.include_router(memory_router)
 latest_report_csv = None
 logger = logging.getLogger(__name__)
 timing_logger = logging.getLogger("api.timing")
