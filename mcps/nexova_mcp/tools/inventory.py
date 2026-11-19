@@ -1,10 +1,8 @@
 """
-Inventory MCP tools — **read‑only by design**.
+Inventory MCP tools — read-only by design.
 
-Any attempt to create, update or delete a product is explicitly rejected at
-the server level with a ``WriteDenied`` error.  This is not an omission of
-write endpoints — it is an enforced policy that every mutation path returns
-an error.
+Product lookup and listing are read-only. Explicit mutation attempts are
+rejected with a stable ``read_only_server`` error and never reach the database.
 """
 
 from __future__ import annotations
@@ -16,8 +14,6 @@ from sqlmodel import Session, select
 from services.api.database import engine
 from services.api.models import Asset
 from services.api.services.inventory import inventory_product_response
-from services.api.schemas import AssetResponse
-
 # ── Timeout (seconds) ────────────────────────────────────────────────────
 INVENTORY_TOOL_TIMEOUT_SECONDS = 5
 TIMEOUT_MESSAGE = "No pude consultar el inventario ahora mismo."
@@ -110,19 +106,3 @@ def list_products(
             inventory_product_response(session, asset).model_dump(mode="json")
             for asset in assets
         ]
-
-
-# ── Explicit write denial (policy enforcement, not omission) ─────────────
-
-WRITE_DENIED_MESSAGE = (
-    "El servidor MCP de inventario es exclusivamente de consulta. "
-    "Las operaciones de escritura no están permitidas por diseño."
-)
-
-
-def _reject_write() -> dict[str, Any]:
-    """Explicitly reject any mutation attempt on inventory data."""
-    return {
-        "outcome": "denied",
-        "message": WRITE_DENIED_MESSAGE,
-    }

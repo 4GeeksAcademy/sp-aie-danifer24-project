@@ -10,11 +10,11 @@ in the `Authorization: Bearer <token>` header.
 Códigos de error (autenticación/autorización):
 ────────────────────────────────────────────
 HTTP 401 → unauthorized / token_expired / invalid_token
-HTTP 403 → insufficient_scope
-HTTP 405 → read_only_server
-HTTP 422 → validation_error
-HTTP 500 → internal_error
-Ver ``mcps/nexova_mcp/auth.py`` para la documentación completa.
+Los fallos de autenticación se devuelven como HTTP 401. Los fallos de autorización,
+validación, escritura de inventario y ejecución se devuelven como resultados MCP
+estructurados con códigos ``insufficient_scope``, ``validation_error``,
+``read_only_server`` o ``internal_error`` (el protocolo MCP transporta la respuesta
+de la tool en una respuesta JSON-RPC). Ver ``mcps/nexova_mcp/auth.py``.
 """
 
 from __future__ import annotations
@@ -23,6 +23,9 @@ import logging
 import os
 import sys
 from pathlib import Path
+from typing import Annotated, Literal
+
+from pydantic import Field, ValidationError
 
 # ── Load .env before any service import reads env vars. ─────────────────
 from dotenv import load_dotenv
@@ -50,18 +53,19 @@ from mcps.nexova_mcp.auth import (
     check_tool_authorization,
     introspect_token,
 )
+from mcps.nexova_mcp.request_context import incoming_bearer_token
 from mcps.nexova_mcp.tools.incidents import (
     lookup_incident,
     list_incidents_tool,
     create_incident_tool,
     update_incident_status_tool,
-    delete_incident_tool,
+    ToolValidationError,
 )
 from mcps.nexova_mcp.tools.inventory import (
     lookup_product,
     list_products as _list_inventory_products,
-    _reject_write,
 )
+from mcps.nexova_mcp.tools.inventory_write_policy import reject_inventory_write
 
 # ---------------------------------------------------------------------------
 # FastMCP application
@@ -97,26 +101,28 @@ class ToolAuthError(Exception):
         super().__init__(message)
 
 
-def _with_tracing(func):
-    """Decorador que envuelve cada tool con:
-    - Verificación de autorización (scope enforcement)
-    - Log de invocación (qué tool, qué cliente, qué resultado)
-    - Captura de errores con códigos de salida documentados
-    """
+def _with_tracing(func, public_name: str):
+    """Wrap a tool with public-name authorization, tracing, and error mapping."""
 
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        tool_name = func.__name__
+        tool_name = public_name
         token_payload = _token_payload_var.get()
 
         # 1. Verificar autorización (scope enforcement)
         authorized, reason = check_tool_authorization(tool_name, token_payload)
         if not authorized:
+            client_id = token_payload.get("sub", "anonymous") if token_payload else "anonymous"
             logger.warning(
                 "Tool authorization DENIED: tool=%s client=%s reason=%s",
                 tool_name,
-                token_payload.get("sub", "anonymous") if token_payload else "anonymous",
+                client_id,
                 reason,
+            )
+            logger.info(
+                "Tool completed: tool=%s client=%s outcome=error error=insufficient_scope",
+                tool_name,
+                client_id,
             )
             return {
                 "outcome": "error",
@@ -127,26 +133,18 @@ def _with_tracing(func):
         # 2. Ejecutar la tool
         client_id = token_payload.get("sub", "unknown") if token_payload else "unknown"
         logger.info(
-            "Tool invoked: tool=%s client=%s args=%s",
+            "Tool invoked: tool=%s client=%s",
             tool_name,
             client_id,
-            {k: v for k, v in kwargs.items() if k != "password"},
         )
         try:
             result = func(*args, **kwargs)
-            # Determinar outcome para el log
-            outcome = "unknown"
-            if isinstance(result, dict):
-                outcome = result.get("outcome", result.get("error", "success"))
-            elif isinstance(result, list):
-                outcome = f"list({len(result)} items)"
-            logger.info(
-                "Tool completed: tool=%s client=%s outcome=%s",
-                tool_name,
-                client_id,
-                outcome,
-            )
-            return result
+        except (ToolValidationError, ValidationError, ValueError) as exc:
+            result = {
+                "outcome": "error",
+                "error": "validation_error",
+                "message": str(exc),
+            }
         except Exception as exc:
             logger.error(
                 "Tool FAILED: tool=%s client=%s error=%s",
@@ -155,35 +153,55 @@ def _with_tracing(func):
                 str(exc),
                 exc_info=True,
             )
-            return {
+            result = {
                 "outcome": "error",
                 "error": "internal_error",
                 "message": "Ocurrió un error inesperado al procesar la solicitud.",
             }
+
+        # Every invocation gets a completion log, including denials/errors.
+        if isinstance(result, dict):
+            outcome = result.get("outcome", result.get("error", "success"))
+            result_code = result.get("error", "")
+        elif isinstance(result, list):
+            outcome = f"list({len(result)} items)"
+            result_code = ""
+        else:
+            outcome = "success"
+            result_code = ""
+        logger.info(
+            "Tool completed: tool=%s client=%s outcome=%s error=%s",
+            tool_name,
+            client_id,
+            outcome,
+            result_code,
+        )
+        return result
 
     return wrapper
 
 
 def _register_tool(tool_fn, name: str | None = None, description: str | None = None):
     """Registra una tool con el wrapper de trazabilidad."""
-    wrapped = _with_tracing(tool_fn)
-    server.tool(name=name or tool_fn.__name__, description=description or tool_fn.__doc__ or "")(wrapped)
+    public_name = name or tool_fn.__name__
+    wrapped = _with_tracing(tool_fn, public_name)
+    server.tool(name=public_name, description=description or tool_fn.__doc__ or "")(wrapped)
 
 
 # ==========================================================================
 # TOOLS — Incidents Manager
 # ==========================================================================
 
-def _get_incident_impl(incident_id: int) -> dict:
+def _get_incident_impl(incident_id: Annotated[int, Field(gt=0, description="ID numérico de la incidencia, mayor que cero.")]) -> dict:
     """Fetch one incident by ID from the Incidents Manager."""
     return lookup_incident(incident_id)
 
 
 def _list_incidents_impl(
-    status: str | None = None,
-    category: str | None = None,
-    origin: str | None = None,
-    branch: str | None = None,
+    status: Annotated[Literal["open", "in_progress", "resolved", "discarded"] | None, Field(description="Filtra por estado actual.")] = None,
+    category: Annotated[Literal["technical_failure", "process_error", "client_complaint", "candidate_issue", "staff_issue", "sla_breach", "data_quality", "other"] | None, Field(description="Filtra por categor?a.")] = None,
+    origin: Annotated[Literal["customer", "branch", "internal"] | None, Field(description="Filtra por origen.")] = None,
+    branch: Annotated[Literal["central", "valencia_operations", "miami_office", "remote"] | None, Field(description="Filtra por sede.")] = None,
 ) -> list[dict]:
     """List incidents from the Incidents Manager with optional filters."""
     return list_incidents_tool(
@@ -192,12 +210,12 @@ def _list_incidents_impl(
 
 
 def _create_incident_impl(
-    title: str,
-    description: str,
-    category: str,
-    status: str,
-    origin: str,
-    branch: str,
+    title: Annotated[str, Field(min_length=1, description="Título breve y no vacío.")],
+    description: Annotated[str, Field(min_length=1, description="Descripción detallada no vacía.")],
+    category: Annotated[Literal["technical_failure", "process_error", "client_complaint", "candidate_issue", "staff_issue", "sla_breach", "data_quality", "other"], Field(description="Categor?a de la incidencia.")],
+    status: Annotated[Literal["open", "in_progress", "resolved", "discarded"], Field(description="Estado inicial.")],
+    origin: Annotated[Literal["customer", "branch", "internal"], Field(description="Origen de la incidencia.")],
+    branch: Annotated[Literal["central", "valencia_operations", "miami_office", "remote"], Field(description="Sede relacionada.")],
 ) -> dict:
     """Create a new incident in the Incidents Manager."""
     return create_incident_tool(
@@ -206,16 +224,16 @@ def _create_incident_impl(
     )
 
 
-def _update_incident_status_impl(incident_id: int, new_status: str) -> dict:
+def _update_incident_status_impl(
+    incident_id: Annotated[int, Field(gt=0, description="ID numérico de la incidencia, mayor que cero.")],
+    new_status: Annotated[Literal["open", "in_progress", "resolved", "discarded"], Field(description="Nuevo estado solicitado; sujeto a transiciones permitidas.")],
+) -> dict:
     """Update an incident's status via the lifecycle endpoint."""
     return update_incident_status_tool(
         incident_id=incident_id, new_status=new_status
     )
 
 
-def _delete_incident_impl(incident_id: int) -> dict:
-    """Delete an incident."""
-    return delete_incident_tool(incident_id=incident_id)
 
 
 # ==========================================================================
@@ -223,44 +241,45 @@ def _delete_incident_impl(incident_id: int) -> dict:
 # ==========================================================================
 
 def _get_product_impl(
-    product_id: int | None = None,
-    sku: str | None = None,
-    name: str | None = None,
+    product_id: Annotated[int | None, Field(gt=0, description="ID num?rico del producto.")] = None,
+    sku: Annotated[str | None, Field(min_length=1, description="SKU exacto o parcial.")] = None,
+    name: Annotated[str | None, Field(min_length=1, description="Nombre exacto o parcial.")] = None,
 ) -> dict:
     """Fetch one product from the inventory."""
     return lookup_product(product_id=product_id, sku=sku, name=name)
 
 
 def _list_products_impl(
-    category: str | None = None,
-    office: str | None = None,
+    category: Annotated[str | None, Field(description="Categor?a del producto.")] = None,
+    office: Annotated[str | None, Field(description="Oficina/ubicaci?n del producto.")] = None,
 ) -> list[dict]:
     """List inventory products."""
     return _list_inventory_products(category=category, office=office)
 
 
-def _create_product_impl(
-    name: str = "",
-    sku: str = "",
-    category: str = "",
-    office: str = "",
+def _reject_inventory_write_impl(
+    operation: Annotated[
+        Literal["create", "update", "delete"],
+        Field(description="Tipo de escritura intentada sobre el inventario."),
+    ],
+    product_id: Annotated[int | None, Field(gt=0, description="ID del producto existente, para update o delete.")] = None,
+    name: Annotated[str | None, Field(min_length=1, description="Nombre del producto, para create o update.")] = None,
+    sku: Annotated[str | None, Field(min_length=1, description="SKU del producto, para create o update.")] = None,
+    category: Annotated[str | None, Field(description="Categoría del producto, para create.")] = None,
+    office: Annotated[str | None, Field(description="Oficina/ubicación del producto, para create.")] = None,
 ) -> dict:
-    """Denied: inventory is read-only."""
-    return _reject_write()
+    """Explicitly reject inventory create, update, or delete attempts.
 
-
-def _update_product_impl(
-    product_id: int = 0,
-    name: str = "",
-    sku: str = "",
-) -> dict:
-    """Denied: inventory is read-only."""
-    return _reject_write()
-
-
-def _delete_product_impl(product_id: int = 0) -> dict:
-    """Denied: inventory is read-only."""
-    return _reject_write()
+    This policy tool never performs or forwards a write operation.
+    """
+    return reject_inventory_write(
+        operation=operation,
+        product_id=product_id,
+        name=name,
+        sku=sku,
+        category=category,
+        office=office,
+    )
 
 
 # ── Registrar todas las tools con trazabilidad ──────────────────────────
@@ -309,15 +328,6 @@ _register_tool(
 )
 
 _register_tool(
-    _delete_incident_impl,
-    name="delete_incident",
-    description=(
-        "Permanently delete an incident record.  Use sparingly -- "
-        "prefer status transitions over deletion."
-    ),
-)
-
-_register_tool(
     _get_product_impl,
     name="get_product",
     description=(
@@ -333,40 +343,21 @@ _register_tool(
     name="list_products",
     description=(
         "List all products with current stock levels, optionally filtered "
-        "by category or office.  This is the inventory catalogue.  "
-        "READ-ONLY -- write attempts are explicitly rejected."
+        "by category or office. This is a read-only inventory catalogue."
     ),
 )
 
 _register_tool(
-    _create_product_impl,
-    name="create_product",
+    _reject_inventory_write_impl,
+    name="reject_inventory_write",
     description=(
-        "READ-ONLY SERVER -- Inventory write operations are not allowed.  "
-        "This tool exists solely to return an explicit denial message.  "
-        "Use the FastAPI backend at /inventory/products for product creation."
+        "Explicitly reject an attempted inventory mutation. Call this when "
+        "asked to create, update, or delete a product. Requires operation "
+        "(create, update, or delete); accepts optional product details for "
+        "auditing only. This tool never changes data and returns the "
+        "read_only_server error."
     ),
 )
-
-_register_tool(
-    _update_product_impl,
-    name="update_product",
-    description=(
-        "READ-ONLY SERVER -- Inventory write operations are not allowed.  "
-        "This tool exists solely to return an explicit denial message."
-    ),
-)
-
-_register_tool(
-    _delete_product_impl,
-    name="delete_product",
-    description=(
-        "READ-ONLY SERVER -- Inventory write operations are not allowed.  "
-        "This tool exists solely to return an explicit denial message."
-    ),
-)
-
-
 # ==========================================================================
 # Middleware ASGI para inyectar el token payload en cada request
 # ==========================================================================
@@ -388,6 +379,7 @@ class TokenContextMiddleware:
     PUBLIC_PATHS = {
         "/.well-known/oauth-authorization-server",
         "/health",
+        "/sse",
     }
 
     def __init__(self, app: ASGIApp):
@@ -408,17 +400,11 @@ class TokenContextMiddleware:
         headers = dict(scope.get("headers", []))
         raw = headers.get(b"authorization", b"").decode().strip().strip('"').strip("'")
 
-        # Parsear: extraer token con o sin prefijo "Bearer "
-        token = None
-        for prefix in ("Bearer ", "bearer ", "BEARER "):
-            if raw.startswith(prefix):
-                token = raw[len(prefix):].strip()
-                break
-        if token is None and raw:
-            # Sin prefijo → tratarlo como token directo
-            token = raw
+        # Enforce the OAuth bearer scheme; never accept a raw token or another scheme.
+        scheme, separator, credential = raw.partition(" ")
+        token = credential.strip() if separator and scheme.casefold() == "bearer" else None
 
-        if token is None:
+        if not token:
             resp = JSONResponse(
                 {"error": "unauthorized",
                  "message": "Se requiere un token de acceso. Usa el header 'Authorization: Bearer <token>'."},
@@ -429,26 +415,37 @@ class TokenContextMiddleware:
 
         payload = introspect_token(token)
         if not payload.get("active"):
+            error = payload.get("error", "invalid_token")
+            message = payload.get("message", "El token de acceso no es válido o ha expirado.")
             resp = JSONResponse(
-                {"error": "invalid_token",
-                 "message": "El token de acceso no es válido o ha expirado."},
+                {"error": error, "message": message},
                 status_code=401,
+                headers={"WWW-Authenticate": f'Bearer error="{error}"'},
             )
             await resp(scope, receive, send)
             return
 
-        _token_payload_var.set(payload)
+        payload_token = _token_payload_var.set(payload)
+        bearer_token = incoming_bearer_token.set(token)
         try:
             await self.app(scope, receive, send)
         finally:
-            _token_payload_var.set(None)
+            incoming_bearer_token.reset(bearer_token)
+            _token_payload_var.reset(payload_token)
 
 
 # ==========================================================================
 # Entry point
 # ==========================================================================
+@server.custom_route(
+    "/.well-known/oauth-authorization-server",
+    methods=["GET"],
+    include_in_schema=False,
+)
 async def _metadata_endpoint(request):
+    """Publish OAuth resource metadata without registering a FastMCP subserver."""
     from starlette.responses import JSONResponse
+
     return JSONResponse(PROTECTED_RESOURCE_METADATA)
 
 
@@ -465,12 +462,7 @@ async def main() -> None:
     HOST = os.environ.get("MCP_HOST", "0.0.0.0")
     PORT = int(os.environ.get("MCP_PORT", "8010"))
 
-    # Montar metadata endpoint
-    try:
-        server.mount("/.well-known/oauth-authorization-server", _metadata_endpoint)
-        logger.info("Metadata endpoint mounted at /.well-known/oauth-authorization-server")
-    except Exception as exc:
-        logger.warning("Could not mount metadata endpoint: %s", exc)
+    logger.info("OAuth metadata endpoint registered at /.well-known/oauth-authorization-server")
 
     # Construir la app ASGI (sin middleware Starlette) y aplicarlo manualmente
     app = server.http_app(transport="sse")

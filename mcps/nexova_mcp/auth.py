@@ -46,15 +46,12 @@ HTTP 403 — Forbidden (scope insuficiente)
     ningún scope del conjunto requerido por la tool invocada.
   → Causa: el cliente autenticado no está autorizado para la tool.
 
-HTTP 405 — Method not allowed (solo lectura)
+Error de tool — Escritura de inventario rechazada
 ────────────────────
-  { "error": "read_only_server",
-    "message": "El servidor MCP de inventario es exclusivamente de
-    consulta. Las operaciones de escritura no están permitidas por
-    diseño." }
-  → Se invocó create_product, update_product o delete_product.
-  → Causa: el servidor rechaza explícitamente cualquier mutación
-    sobre el inventario, incluso con un token con scopes de escritura.
+  { "outcome": "error", "error": "read_only_server",
+    "message": "El inventario es de solo lectura en este servidor MCP. ..." }
+  → Se invocó reject_inventory_write para una operación de create, update
+    o delete. La solicitud se registra pero nunca accede a la base de datos.
 
 HTTP 422 — Validation error
 ────────────────────
@@ -84,7 +81,7 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from jose import JWTError, jwt
+from jose import ExpiredSignatureError, JWTError, jwt
 
 logger = logging.getLogger("nexova_mcp.auth")
 
@@ -133,10 +130,10 @@ TOOL_SCOPE_MAP: dict[str, set[str]] = {
     # ── Incident tools (escritura — requieren incidents:write) ────────
     "create_incident": {"incidents:write"},
     "update_incident_status": {"incidents:write"},
-    "delete_incident": {"incidents:write"},
-    # ── Inventory tools (solo lectura por diseño) ────────────────────
+    # ── Inventory tools (solo lectura, incluido rechazo explícito) ──────
     "get_product": {"inventory:read"},
     "list_products": {"inventory:read"},
+    "reject_inventory_write": {"inventory:read"},
 }
 
 
@@ -161,8 +158,15 @@ def introspect_token(token: str) -> dict[str, Any]:
             algorithms=[JWT_ALGORITHM],
             options={"require": ["exp", "sub"]},
         )
+    except ExpiredSignatureError:
+        logger.warning("Token introspection failed: expired token")
+        result["error"] = "token_expired"
+        result["message"] = "El token de acceso ha expirado. Solicita uno nuevo."
+        return result
     except JWTError:
         logger.warning("Token introspection failed: JWT decode error (invalid signature or malformed)")
+        result["error"] = "invalid_token"
+        result["message"] = "El token de acceso no es válido o está mal formado."
         return result
 
     # Reject non‑access tokens (e.g. password‑reset tokens).
@@ -230,11 +234,12 @@ def check_tool_authorization(
             "o la solicitud no incluye un bearer token válido."
         )
 
-    # Si la tool no está en el mapa de scopes, permite por defecto
-    # (las tools de denegación de escritura no requieren scopes específicos).
+    # Fail closed: every exposed tool must declare its required scope.
+    # Read-only denial tools still require inventory:read so they cannot be
+    # used as an unauthenticated oracle or to enumerate server behavior.
     required = TOOL_SCOPE_MAP.get(tool_name)
     if required is None:
-        return True, None
+        return False, f"No hay una política de autorización configurada para '{tool_name}'."
 
     # Verificar scopes del token
     token_scopes = _parse_scopes(token_payload.get("scope", ""))

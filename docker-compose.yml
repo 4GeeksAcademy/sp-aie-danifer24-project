@@ -30,6 +30,28 @@ services:
     networks:
       - nexova
 
+  mcp:
+    build:
+      context: .
+      dockerfile: mcps/Dockerfile
+    environment:
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Define JWT_SECRET_KEY en el archivo .env}
+      DATABASE_URL: ${DATABASE_URL:?Define DATABASE_URL en el archivo .env o en el entorno}
+      SUPPLIERS_DB_PATH: /app/data/suppliers.json
+      INCIDENTS_API_URL: http://api:${API_PORT:?}
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: 8010
+      MCP_LOG_LEVEL: INFO
+    depends_on:
+      - api
+    ports:
+      - "8010:8010"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    networks:
+      - nexova
+
   api:
     build:
       context: ./services
@@ -47,6 +69,9 @@ services:
       DATABASE_URL: ${DATABASE_URL:?Define DATABASE_URL en el archivo .env o en el entorno}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Define JWT_SECRET_KEY en el archivo .env}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:?}
+      USE_MCP_BACKEND: "true"
+      MCP_SERVER_URL: http://mcp:8010/sse
+      MCP_CLIENT_TIMEOUT: "30"
       SUPPLIERS_DB_PATH: ${SUPPLIERS_DB_PATH:?}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-}

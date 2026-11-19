@@ -1,9 +1,12 @@
 """
-MCP Client — consume the Nexova MCP Server via Streamable HTTP transport.
+MCP Client — consume the Nexova MCP Server via Streamable HTTP (SSE + POST).
 
-This client is used by the LangGraph agent (``services/api/services/mcp_agent_adapter.py``)
-to replace direct calls to the Incidents Manager and Inventory services with
-calls through the MCP protocol.
+Uses raw httpx2 instead of the mcp SDK (mcp SDK 2.3.0 has a compatibility bug
+with FastMCP 4.2.0: it treats a 202 Accepted response to initialize as an error).
+
+The public API is identical to the previous SDK-based version:
+    client = NexovaMCPClient()
+    result = client.call_tool_sync("get_incident", {"incident_id": 1})
 
 Usage (standalone test):
     python -m mcps.nexova_mcp.mcp_client get_incident 1
@@ -17,11 +20,13 @@ import asyncio
 import json
 import logging
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
+from mcps.nexova_mcp.request_context import api_bearer_token
 
 logger = logging.getLogger("nexova_mcp.client")
 
@@ -31,48 +36,245 @@ if _env_path.exists():
     load_dotenv(_env_path)
 
 
-MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL", "http://localhost:8010/mcp")
+MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL", "http://localhost:8010/sse")
 
 
 def _get_token() -> str | None:
-    """Return a JWT token from env, or None if not configured."""
-    token = os.environ.get("MCP_TEST_TOKEN")
-    if token:
-        return token
-    # Try to mint one if JWT_SECRET_KEY is available
-    secret = os.environ.get("JWT_SECRET_KEY")
-    if not secret:
-        return None
-    try:
-        from mcps.nexova_mcp.token_issuer import mint_token
-        return mint_token(
-            sub="agent",
-            scopes=["incidents:read", "incidents:write", "inventory:read"],
+    """Return the authenticated API user's token for the current request."""
+    return api_bearer_token.get()
+
+
+# ==========================================================================
+#  Minimal SSE-based MCP client (no SDK dependency)
+# ==========================================================================
+
+
+class _SSEMCPClient:
+    """Low-level async MCP client over SSE + POST.
+
+    Holds a single SSE connection for its lifetime.  Sends requests via POST to
+    ``/messages/?session_id=...``.  Responses arrive as SSE events on the same
+    stream.
+    """
+
+    def __init__(
+        self,
+        server_url: str,
+        http_client: "httpx2.AsyncClient",
+        *,
+        request_timeout: float = 30.0,
+    ) -> None:
+        self._server_url = server_url.rstrip("/")
+        self._client = http_client
+        self._request_timeout = request_timeout
+        self._session_id: str | None = None
+        self._initialized = False
+
+        # SSE reading machinery
+        self._sse_aiter: AsyncIterator[bytes] | None = None
+        self._pending: dict[int, asyncio.Future] = {}
+        self._sse_buffer = ""
+        self._reader_task: asyncio.Task | None = None
+
+    async def __aenter__(self) -> _SSEMCPClient:
+        await self._start_sse()
+        return self
+
+    async def __aexit__(self, *args: Any) -> None:
+        if self._reader_task and not self._reader_task.done():
+            self._reader_task.cancel()
+            try:
+                await self._reader_task
+            except (asyncio.CancelledError, Exception):
+                pass
+
+    async def _start_sse(self) -> None:
+        """Open the SSE connection, extract session_id, start background reader."""
+        response = await self._client.send(
+            self._client.build_request("GET", self._server_url),
+            stream=True,
         )
-    except Exception:
-        return None
+        self._sse_aiter = response.aiter_bytes()
+
+        # Read until we get session_id
+        async for chunk in self._sse_aiter:
+            text = chunk.decode()
+            self._sse_buffer += text
+            m = re.search(r"/messages/\?session_id=([\w-]+)", self._sse_buffer)
+            if m:
+                self._session_id = m.group(1)
+                logger.info("SSE session_id=%s", self._session_id)
+                break
+
+        # Start background reader (processes whatever remains & future events)
+        self._reader_task = asyncio.create_task(self._sse_reader())
+
+    async def _sse_reader(self) -> None:
+        """Background: read SSE events and resolve pending futures."""
+        try:
+            async for chunk in self._sse_aiter:
+                self._sse_buffer += chunk.decode()
+                self._flush_sse_buffer()
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:
+            logger.error("SSE reader error: %s", exc)
+
+    def _flush_sse_buffer(self) -> None:
+        """Parse buffered SSE text and resolve any pending futures."""
+        while "\n" in self._sse_buffer:
+            line, rest = self._sse_buffer.split("\n", 1)
+            self._sse_buffer = rest
+            line = line.strip()
+            if line.startswith("data: "):
+                try:
+                    data = json.loads(line[6:])
+                    msg_id = data.get("id")
+                    if msg_id is not None:
+                        fut = self._pending.get(msg_id)
+                        if fut and not fut.done():
+                            fut.set_result(data)
+                        else:
+                            logger.debug("No pending future for id=%s", msg_id)
+                except json.JSONDecodeError:
+                    pass
+
+    def _messages_url(self) -> str:
+        assert self._session_id is not None, "Not connected"
+        base = self._server_url
+        if base.endswith("/sse"):
+            base = base[: -len("/sse")]
+        return f"{base}/messages/?session_id={self._session_id}"
+
+    async def initialize(self) -> dict[str, Any]:
+        """Send initialize and wait for response via SSE."""
+        result = await self._request(
+            "initialize",
+            {
+                "protocolVersion": "2025-03-26",
+                "capabilities": {},
+                "clientInfo": {"name": "nexova-mcp-client", "version": "1.0"},
+            },
+        )
+        self._initialized = True
+        return result
+
+    async def list_tools(self) -> list[dict[str, Any]]:
+        result = await self._request("tools/list", None)
+        return result.get("tools", [])
+
+    async def call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        return await self._request(
+            "tools/call",
+            {"name": name, "arguments": arguments},
+        )
+
+    async def _request(self, method: str, params: Any | None) -> dict[str, Any]:
+        """Send a JSON-RPC request, wait for SSE response."""
+        msg_id = abs(hash((method, json.dumps(params, sort_keys=True)))) % 10_000_000
+        body: dict[str, Any] = {
+            "jsonrpc": "2.0",
+            "method": method,
+            "id": msg_id,
+        }
+        if params is not None:
+            body["params"] = params
+
+        # Register future BEFORE sending
+        loop = asyncio.get_event_loop()
+        future = loop.create_future()
+        self._pending[msg_id] = future
+
+        try:
+            # Send via POST
+            logger.info("Sending %s (id=%s)", method, msg_id)
+            post_resp = await self._client.post(
+                self._messages_url(),
+                json=body,
+            )
+
+            if post_resp.status_code == 405:
+                raise RuntimeError(
+                    f"POST to {self._messages_url()} returned 405. "
+                    "Check server uses transport='sse'."
+                )
+            if post_resp.status_code == 202:
+                logger.info("POST returned 202 — awaiting SSE response...")
+            elif post_resp.status_code in (200, 201):
+                try:
+                    data = post_resp.json()
+                    if data.get("id") == msg_id:
+                        if "error" in data:
+                            err = data["error"]
+                            raise RuntimeError(
+                                f"MCP error ({err.get('code')}): {err.get('message')}"
+                            )
+                        return data.get("result", data)
+                except Exception:
+                    raise RuntimeError(
+                        f"POST returned {post_resp.status_code}: {post_resp.text[:500]}"
+                    )
+            else:
+                raise RuntimeError(
+                    f"POST returned {post_resp.status_code}: {post_resp.text[:500]}"
+                )
+
+            # Wait for SSE response
+            try:
+                data = await asyncio.wait_for(future, timeout=self._request_timeout)
+            except asyncio.TimeoutError:
+                raise RuntimeError(f"Timeout waiting for response to {method}")
+
+            if "error" in data:
+                err = data["error"]
+                raise RuntimeError(
+                    f"MCP error ({err.get('code')}): {err.get('message')}"
+                )
+            return data.get("result", data)
+
+        finally:
+            self._pending.pop(msg_id, None)
+
+    async def notify(self, method: str, params: Any | None = None) -> None:
+        """Send a JSON-RPC notification (fire-and-forget)."""
+        body: dict[str, Any] = {"jsonrpc": "2.0", "method": method}
+        if params is not None:
+            body["params"] = params
+        await self._client.post(self._messages_url(), json=body)
 
 
 # ==========================================================================
-#  MCP Client
+#  NexovaMCPClient — same public API as before
 # ==========================================================================
+
 
 class NexovaMCPClient:
-    """Async client that communicates with the Nexova MCP Server via Streamable HTTP."""
+    """Async MCP client that talks to the Nexova MCP Server via raw SSE+POST.
+
+    Usage:
+
+        client = NexovaMCPClient()
+        result = await client.call_tool("get_incident", {"incident_id": 1})
+
+    Synchronous convenience wrappers are also provided:
+        client.get_incident(1)
+        client.list_incidents(status="open")
+        ...
+    """
 
     def __init__(
         self,
         server_url: str = MCP_SERVER_URL,
         token: str | None = None,
-        timeout: float = 10.0,
+        timeout: float = 30.0,
     ):
         self.server_url = server_url
         self._token = token or _get_token()
         self._timeout = timeout
 
     async def _make_http_client(self) -> "httpx2.AsyncClient":
-        """Create an httpx2 client with auth headers."""
         import httpx2
+
         headers = {
             "User-Agent": "nexova-mcp-client/1.0",
         }
@@ -83,11 +285,7 @@ class NexovaMCPClient:
             timeout=httpx2.Timeout(self._timeout),
         )
 
-    async def call_tool(
-        self,
-        tool_name: str,
-        arguments: dict[str, Any] | None = None,
-    ) -> Any:
+    async def call_tool(self, tool_name: str, arguments: dict[str, Any] | None = None) -> Any:
         """Call an MCP tool and return its result.
 
         Parameters
@@ -102,48 +300,44 @@ class NexovaMCPClient:
         Any
             The tool's result content (parsed JSON or raw text).
         """
-        from mcp import ClientSession
-        from mcp.client.streamable_http import streamable_http_client
+        async with await self._make_http_client() as http_client:
+            async with _SSEMCPClient(
+                self.server_url, http_client, request_timeout=self._timeout
+            ) as sse_client:
+                await sse_client.initialize()
+                await sse_client.notify("notifications/initialized")
+                result = await sse_client.call_tool(tool_name, arguments or {})
 
-        http_client = await self._make_http_client()
-        transport_cm = streamable_http_client(url=self.server_url, http_client=http_client)
+        # Parse content
+        content = result.get("content", [])
+        if content:
+            texts = []
+            for content_item in content:
+                texts.append(
+                    content_item.get("text", "")
+                    if isinstance(content_item, dict)
+                    else str(content_item)
+                )
+            raw = "".join(texts)
+            try:
+                return json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                return raw
 
-        async with transport_cm as (read_stream, write_stream):
-            session = ClientSession(read_stream, write_stream)
-            await session.initialize()
-            result = await session.call_tool(
-                tool_name,
-                arguments=arguments or {},
-            )
-            # Parse content
-            if result.content:
-                texts = []
-                for content_item in result.content:
-                    texts.append(content_item.text if hasattr(content_item, 'text') else str(content_item))
-                raw = "".join(texts)
-                try:
-                    return json.loads(raw)
-                except (json.JSONDecodeError, TypeError):
-                    return raw
-            if result.isError:
-                return {
-                    "outcome": "error",
-                    "message": f"Tool '{tool_name}' returned an error",
-                }
-            return {"outcome": "success", "result": str(result)}
+        if result.get("isError"):
+            return {
+                "outcome": "error",
+                "message": f"Tool '{tool_name}' returned an error",
+            }
+        return {"outcome": "success", "result": str(result)}
 
-    # ── Convenience wrappers (sync, for LangGraph nodes) ──────────────
+    # ── Synchronous wrappers (for LangGraph nodes) ───────────────────────
 
-    def call_tool_sync(
-        self,
-        tool_name: str,
-        arguments: dict[str, Any] | None = None,
-    ) -> Any:
+    def call_tool_sync(self, tool_name: str, arguments: dict[str, Any] | None = None) -> Any:
         """Synchronous wrapper around ``call_tool()``."""
         return asyncio.run(self.call_tool(tool_name, arguments))
 
     def get_incident(self, incident_id: int) -> dict[str, Any]:
-        """Fetch a single incident by ID."""
         result = self.call_tool_sync("get_incident", {"incident_id": incident_id})
         if isinstance(result, dict):
             return result
@@ -156,8 +350,7 @@ class NexovaMCPClient:
         origin: str | None = None,
         branch: str | None = None,
     ) -> dict[str, Any]:
-        """List incidents with optional filters."""
-        args = {}
+        args: dict[str, Any] = {}
         if status:
             args["status"] = status
         if category:
@@ -173,14 +366,8 @@ class NexovaMCPClient:
             return result
         return {"outcome": "error", "message": "Unexpected response format"}
 
-    def get_product(
-        self,
-        product_id: int | None = None,
-        sku: str | None = None,
-        name: str | None = None,
-    ) -> dict[str, Any]:
-        """Fetch a product by ID, SKU, or name."""
-        args = {}
+    def get_product(self, product_id: int | None = None, sku: str | None = None, name: str | None = None) -> dict[str, Any]:
+        args: dict[str, Any] = {}
         if product_id is not None:
             args["product_id"] = product_id
         if sku:
@@ -192,13 +379,8 @@ class NexovaMCPClient:
             return result
         return {"outcome": "error", "message": "Unexpected response format"}
 
-    def list_products(
-        self,
-        category: str | None = None,
-        office: str | None = None,
-    ) -> dict[str, Any]:
-        """List products with optional filters."""
-        args = {}
+    def list_products(self, category: str | None = None, office: str | None = None) -> dict[str, Any]:
+        args: dict[str, Any] = {}
         if category:
             args["category"] = category
         if office:
@@ -210,24 +392,26 @@ class NexovaMCPClient:
             return result
         return {"outcome": "error", "message": "Unexpected response format"}
 
-    def create_incident(
-        self,
-        title: str,
-        description: str,
-        category: str,
-        status: str,
-        origin: str,
-        branch: str,
-    ) -> dict[str, Any]:
-        """Create a new incident."""
-        result = self.call_tool_sync("create_incident", {
-            "title": title,
-            "description": description,
-            "category": category,
-            "status": status,
-            "origin": origin,
-            "branch": branch,
-        })
+    def reject_inventory_write(self, operation: str, **details: Any) -> dict[str, Any]:
+        """Ask MCP to explicitly reject an inventory mutation attempt."""
+        arguments = {"operation": operation, **details}
+        result = self.call_tool_sync("reject_inventory_write", arguments)
+        if isinstance(result, dict):
+            return result
+        return {"outcome": "error", "message": "Unexpected response format"}
+
+    def create_incident(self, title: str, description: str, category: str, status: str, origin: str, branch: str) -> dict[str, Any]:
+        result = self.call_tool_sync(
+            "create_incident",
+            {
+                "title": title,
+                "description": description,
+                "category": category,
+                "status": status,
+                "origin": origin,
+                "branch": branch,
+            },
+        )
         if isinstance(result, dict):
             return result
         return {"outcome": "error", "message": "Unexpected response format"}
@@ -236,6 +420,7 @@ class NexovaMCPClient:
 # ==========================================================================
 #  CLI entry point
 # ==========================================================================
+
 
 async def _main() -> None:
     parser = argparse.ArgumentParser(description="Call a Nexova MCP tool.")
@@ -248,7 +433,7 @@ async def _main() -> None:
     token = args.token or os.environ.get("MCP_TEST_TOKEN")
     client = NexovaMCPClient(server_url=args.server, token=token)
 
-    arguments = {}
+    arguments: dict[str, Any] = {}
     if args.args_json:
         arguments = json.loads(args.args_json)
 
@@ -256,7 +441,6 @@ async def _main() -> None:
     for arg in sys.argv:
         if "=" in arg and not arg.startswith("--"):
             k, v = arg.split("=", 1)
-            # Try to parse int or float
             try:
                 v = int(v)
             except ValueError:
