@@ -7,8 +7,9 @@ from dotenv import load_dotenv
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
+from tinydb.table import Table
 
-from services.api.dependencies import UserTables
+from services.api.dependencies import RequestTables
 from services.api.models import User
 from services.api.services.users import get_user_by_id
 
@@ -30,12 +31,19 @@ if ACCESS_TOKEN_EXPIRE_MINUTES <= 0:
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
-def create_access_token(user_id: int) -> str:
+def create_access_token(
+	user_id: int,
+	scopes: tuple[str, ...] = ("incidents:read", "incidents:write", "inventory:read"),
+) -> str:
 	expires_at = datetime.now(timezone.utc) + timedelta(
 		minutes=ACCESS_TOKEN_EXPIRE_MINUTES
 	)
 	return jwt.encode(
-		{"sub": str(user_id), "exp": expires_at},
+		{
+			"sub": str(user_id),
+			"exp": expires_at,
+			"scope": " ".join(scopes),
+		},
 		JWT_SECRET_KEY,
 		algorithm=JWT_ALGORITHM,
 	)
@@ -46,7 +54,7 @@ def get_current_user(
 		HTTPAuthorizationCredentials | None,
 		Depends(bearer_scheme),
 	],
-	tables: UserTables,
+	tables: RequestTables,
 ) -> User:
 	unauthorized = HTTPException(
 		status_code=status.HTTP_401_UNAUTHORIZED,
@@ -67,6 +75,9 @@ def get_current_user(
 	except (JWTError, TypeError, ValueError) as error:
 		raise unauthorized from error
 
+	# Reuse the request-scoped tables already protected by get_request_tables.
+	# Reopening TinyDB here can deadlock: the request dependency holds the lock
+	# while FastAPI resolves this dependency for the same request.
 	user = get_user_by_id(tables[0], user_id)
 	if user is None or not user.is_active:
 		raise unauthorized

@@ -27,15 +27,26 @@ export async function validateSession(signal: AbortSignal): Promise<void> {
   const token = readSessionToken();
   if (!token) throw new InvalidSessionError();
   let response: Response;
+  const requestController = new AbortController();
+  const abortWithParent = () => requestController.abort(signal.reason);
+  if (signal.aborted) throw signal.reason;
+  signal.addEventListener("abort", abortWithParent, { once: true });
+  const timeout = window.setTimeout(() => requestController.abort(), 10000);
   try {
     response = await fetch("/api/auth/me", {
       headers: { Authorization: `Bearer ${token}` },
       cache: "no-store",
-      signal,
+      signal: requestController.signal,
     });
   } catch (error) {
     if (signal.aborted) throw error;
+    if (requestController.signal.aborted) {
+      throw new Error("La comprobación de sesión tardó demasiado. Comprueba que la API esté disponible e inténtalo de nuevo.");
+    }
     throw new Error("No se pudo verificar la sesión. Comprueba la conexión con la API.");
+  } finally {
+    window.clearTimeout(timeout);
+    signal.removeEventListener("abort", abortWithParent);
   }
   if (response.status === 401 || response.status === 403) {
     if (readSessionToken() === token) clearSessionToken();

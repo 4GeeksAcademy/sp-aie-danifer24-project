@@ -21,6 +21,7 @@ function ProtectedSession({ children }: { children: ReactNode }) {
   useEffect(() => {
     const controller = new AbortController();
     let generation = 0;
+    let checking = false;
     function trackAuthorizedView() {
       if (trackedView.current) return;
       trackedView.current = true;
@@ -44,6 +45,8 @@ function ProtectedSession({ children }: { children: ReactNode }) {
       router.replace("/login");
     }
     async function checkSession() {
+      if (checking || controller.signal.aborted) return;
+      checking = true;
       const current = ++generation;
       try {
         await validateSession(controller.signal);
@@ -55,11 +58,20 @@ function ProtectedSession({ children }: { children: ReactNode }) {
         if (controller.signal.aborted || current !== generation) return;
         if (error instanceof InvalidSessionError) rejectSession();
         else setResult({ error: error instanceof Error ? error.message : "No se pudo verificar tu sesión." });
+      } finally {
+        checking = false;
       }
     }
+    // Avoid validating the session on every brief tab/window focus (for
+    // example, when opening DevTools or switching away and back).
+    let lastFocusCheck = 0;
     function refreshSession() {
-      setResult(null);
-      void checkSession();
+      const now = Date.now();
+      if (now - lastFocusCheck < 30000) return;
+      lastFocusCheck = now;
+      if (!checking) {
+        void checkSession();
+      }
     }
     void checkSession();
     window.addEventListener("nexova:unauthorized", rejectSession);

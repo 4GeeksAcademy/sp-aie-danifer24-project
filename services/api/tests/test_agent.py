@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 from services.api.security import get_current_user
 
@@ -31,7 +31,9 @@ def test_agent_query_invokes_compiled_graph_and_returns_run_id(api):
         "answer": "Tarifa del 22% sobre el salario anual.",
         "run_id": "run-agent-123",
     }
-    run_graph.assert_called_once_with("¿Cuál es la tarifa de headhunting?")
+    run_graph.assert_called_once_with(
+        "¿Cuál es la tarifa de headhunting?", mcp_token=ANY
+    )
 
 
 def test_agent_query_returns_safe_error_when_graph_node_fails(api):

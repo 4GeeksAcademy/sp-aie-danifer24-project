@@ -1,5 +1,5 @@
 import { forwardApiRequest } from "../../../../lib/api-proxy";
 
 export function POST(request: Request) {
-  return forwardApiRequest(request, "knowledge/query");
+  return forwardApiRequest(request, "agent/query", true);
 }

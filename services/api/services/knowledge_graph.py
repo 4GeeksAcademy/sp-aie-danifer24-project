@@ -14,26 +14,56 @@ from uuid import uuid4
 
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
-
+from langgraph.runtime import Runtime
 from data.pipelines.rag import generate_answer, retrieve
 from services.api.models import IncidentBranch, IncidentCategory, IncidentOrigin, IncidentStatus
-from services.api.services.incident_tool import (
-    IncidentLookupInput,
-    IncidentLookupOutput,
-    IncidentToolOutcome,
-    lookup_incidents,
-)
-from services.api.services.inventory_tool import (
-    InventoryLookupInput,
-    InventoryLookupOutput,
-    InventoryToolOutcome,
-    lookup_inventory,
-)
+from mcps.nexova_mcp.request_context import api_bearer_token
+
+# ── Tool provider selection ──────────────────────────────────────────────
+# When USE_MCP_BACKEND is truthy, the agent routes incident and inventory
+# lookups through the MCP Server instead of hitting databases directly.
+_USE_MCP_BACKEND = os.environ.get("USE_MCP_BACKEND", "").lower() in ("1", "true", "yes")
+
+if _USE_MCP_BACKEND:
+    from services.api.services.incident_tool import (
+        IncidentLookupInput,
+        IncidentLookupOutput,
+        IncidentToolOutcome,
+    )
+    from services.api.services.inventory_tool import (
+        InventoryLookupInput,
+        InventoryLookupOutput,
+        InventoryToolOutcome,
+    )
+    from services.api.services.mcp_agent_adapter import (
+        lookup_incidents_mcp as lookup_incidents,
+        lookup_inventory_mcp as lookup_inventory,
+    )
+else:
+    from services.api.services.incident_tool import (
+        IncidentLookupInput,
+        IncidentLookupOutput,
+        IncidentToolOutcome,
+        lookup_incidents,
+    )
+    from services.api.services.inventory_tool import (
+        InventoryLookupInput,
+        InventoryLookupOutput,
+        InventoryToolOutcome,
+        lookup_inventory,
+    )
+# ─────────────────────────────────────────────────────────────────────────
 
 logger = logging.getLogger(__name__)
 
 TRACE_DIR = Path(os.getenv("KNOWLEDGE_GRAPH_TRACE_DIR", "data/traces/knowledge_graph"))
 _TRACE_LOCK = Lock()
+
+
+class KnowledgeGraphContext(TypedDict, total=False):
+    """Execution-scoped secrets passed separately from checkpointed graph state."""
+
+    mcp_token: str
 
 
 class KnowledgeGraphState(TypedDict, total=False):
@@ -59,16 +89,17 @@ class KnowledgeGraphState(TypedDict, total=False):
 _NODE_NAMES = {
     "receive_question", "route_request", "retrieve", "incident_lookup",
     "generate_answer", "no_context", "incident_response",
-    "inventory_lookup", "inventory_response",
+    "inventory_lookup", "inventory_response", "reject_inventory_write",
 }
 _TRANSITIONS = {
     START: {"receive_question"},
     "receive_question": {"route_request", END},
-    "route_request": {"incident_lookup", "inventory_lookup", "retrieve"},
+    "route_request": {"incident_lookup", "inventory_lookup", "reject_inventory_write", "retrieve"},
     "incident_lookup": {"incident_response"},
     "incident_response": {"retrieve", END},
     "inventory_lookup": {"inventory_response"},
     "inventory_response": {"retrieve", END},
+    "reject_inventory_write": {END},
     "retrieve": {"generate_answer", "no_context"},
     "generate_answer": {END},
     "no_context": {END},
@@ -197,18 +228,46 @@ def build_knowledge_graph(
         # Product stock/name/SKU queries route to live inventory; ticket lookups
         # route to incidents; business policy questions continue through RAG.
         question = state["question"]
+        write_match = re.search(
+            r"\b(crear|crea|creación|añadir|añade|agregar|agrega|actualizar|actualiza|modificar|modifica|cambiar|cambia|eliminar|elimina|borrar|borra|delete|create|update|modify|remove)\b",
+            question,
+            re.IGNORECASE,
+        )
+        inventory_context = re.search(
+            r"\b(producto|inventario|stock|existencias|SKU|art[ií]culo)\b",
+            question,
+            re.IGNORECASE,
+        )
+        inventory_write = bool(write_match and inventory_context)
         inventory_match = re.search(
             r"\b(?:stock|inventario|existencias|disponibilidad)\b.*?\b(?:de|del|para)\s+(.+)$",
             question,
             re.IGNORECASE,
         )
-        sku_match = re.search(r"\bSKU\s*[:#]?\s*([\w-]+)", question, re.IGNORECASE)
+        sku_match = re.search(r"\b(?:SKU\s*[:#]?\s*|(?:producto|art[ií]culo)\s+)([\w-]+)", question, re.IGNORECASE)
         product_match = re.search(r"\bproducto\s*#?\s*(\d+)\b", question, re.IGNORECASE)
-        incident_match = re.search(r"\b(?:ticket|incidencia|incidente)\s*#?\s*(\d+)\b", question, re.IGNORECASE)
+        incident_match = re.search(
+            r"\b(?:ticket|incidencia|incidente)\s*#?\s*(\d+)\b",
+            question,
+            re.IGNORECASE,
+        )
+        # Recognise natural formulations such as “qué incidente tiene el ID 1”.
+        # Restrict this fallback to incident-related questions so unrelated IDs
+        # are not routed to the Incidents Manager.
+        if incident_match is None and re.search(
+            r"\b(?:ticket|incidencia|incidente)s?\b", question, re.IGNORECASE
+        ):
+            incident_match = re.search(
+                r"\b(?:id|identificador|n[uú]?mero)\s*#?\s*(\d+)\b",
+                question,
+                re.IGNORECASE,
+            )
         incident_lookup = None
         inventory_lookup = None
 
-        if inventory_match or sku_match or product_match:
+        if inventory_write:
+            route = "reject_inventory_write"
+        elif inventory_match or sku_match or product_match:
             if product_match:
                 inventory_lookup = InventoryLookupInput(product_id=int(product_match.group(1)))
             elif sku_match:
@@ -254,6 +313,7 @@ def build_knowledge_graph(
         active_tool = (
             "incident_lookup" if incident_lookup is not None
             else "inventory_lookup" if inventory_lookup is not None
+            else "reject_inventory_write" if inventory_write
             else None
         )
         use_rag = route == "retrieve" or rag_intent
@@ -280,8 +340,16 @@ def build_knowledge_graph(
             ),
         }
 
-    def lookup_incident_node(state: KnowledgeGraphState) -> KnowledgeGraphState:
-        outcome = incident_fn(state["incident_lookup"])
+    def lookup_incident_node(
+        state: KnowledgeGraphState, runtime: Runtime[KnowledgeGraphContext]
+    ) -> KnowledgeGraphState:
+        mcp_token = (runtime.context or {}).get("mcp_token")
+        token_context = api_bearer_token.set(mcp_token) if mcp_token else None
+        try:
+            outcome = incident_fn(state["incident_lookup"], token=mcp_token)
+        finally:
+            if token_context is not None:
+                api_bearer_token.reset(token_context)
         records = [record.model_dump(mode="json") for record in outcome.incidents]
         return {
             "incident_result": outcome,
@@ -289,6 +357,29 @@ def build_knowledge_graph(
                 state, "incident_lookup", outcome=outcome.outcome.value,
                 incident_count=len(records), incidents=records, message=outcome.message,
             ),
+        }
+
+    def reject_inventory_write_node(
+        state: KnowledgeGraphState, runtime: Runtime[KnowledgeGraphContext]
+    ) -> KnowledgeGraphState:
+        from mcps.nexova_mcp.mcp_client import NexovaMCPClient
+
+        mcp_token = (runtime.context or {}).get("mcp_token") or api_bearer_token.get()
+        question = state["question"].casefold()
+        operation = (
+            "delete" if re.search(r"\b(elimina|eliminar|borra|borrar|quita|quitar|delete|remove)\b", question)
+            else "update" if re.search(r"\b(actualiza|actualizar|modifica|modificar|cambia|cambiar|update|modify)\b", question)
+            else "create"
+        )
+        result = NexovaMCPClient(server_url=os.environ.get("MCP_SERVER_URL", "http://mcp:8010/sse"), token=mcp_token).reject_inventory_write(
+            operation=operation,
+        )
+        return {
+            "answer": result.get(
+                "message",
+                "El inventario es de solo lectura; no se permiten operaciones de escritura.",
+            ),
+            "trace": _record(state, "reject_inventory_write", outcome=result.get("outcome"), error=result.get("error"), message=result.get("message")),
         }
 
     def incident_response(state: KnowledgeGraphState) -> KnowledgeGraphState:
@@ -318,8 +409,16 @@ def build_knowledge_graph(
             ),
         }
 
-    def lookup_inventory_node(state: KnowledgeGraphState) -> KnowledgeGraphState:
-        outcome = inventory_fn(state["inventory_lookup"])
+    def lookup_inventory_node(
+        state: KnowledgeGraphState, runtime: Runtime[KnowledgeGraphContext]
+    ) -> KnowledgeGraphState:
+        mcp_token = (runtime.context or {}).get("mcp_token")
+        token_context = api_bearer_token.set(mcp_token) if mcp_token else None
+        try:
+            outcome = inventory_fn(state["inventory_lookup"], token=mcp_token)
+        finally:
+            if token_context is not None:
+                api_bearer_token.reset(token_context)
         products = [product.model_dump(mode="json") for product in outcome.products]
         return {
             "inventory_result": outcome,
@@ -422,13 +521,14 @@ def build_knowledge_graph(
     def route_after_retrieval(state: KnowledgeGraphState) -> str:
         return "generate" if state.get("chunks") else "no_context"
 
-    builder = StateGraph(KnowledgeGraphState)
+    builder = StateGraph(KnowledgeGraphState, context_schema=KnowledgeGraphContext)
     builder.add_node("receive_question", receive_question)
     builder.add_node("route_request", route_request)
     builder.add_node("incident_lookup", lookup_incident_node)
     builder.add_node("incident_response", incident_response)
     builder.add_node("inventory_lookup", lookup_inventory_node)
     builder.add_node("inventory_response", inventory_response)
+    builder.add_node("reject_inventory_write", reject_inventory_write_node)
     builder.add_node("retrieve", retrieve_context)
     builder.add_node("generate_answer", generate_response)
     builder.add_node("no_context", no_context)
@@ -444,6 +544,7 @@ def build_knowledge_graph(
         {
             "incident_lookup": "incident_lookup",
             "inventory_lookup": "inventory_lookup",
+            "reject_inventory_write": "reject_inventory_write",
             "retrieve": "retrieve",
         },
     )
@@ -453,6 +554,7 @@ def build_knowledge_graph(
         {"retrieve": "retrieve", "finish": END},
     )
     builder.add_edge("inventory_lookup", "inventory_response")
+    builder.add_edge("reject_inventory_write", END)
     builder.add_conditional_edges(
         "inventory_response", route_after_tool,
         {"retrieve": "retrieve", "finish": END},
@@ -478,7 +580,9 @@ def _config(run_id: str) -> dict[str, Any]:
     return {"configurable": {"thread_id": run_id}}
 
 
-def run_knowledge_graph(question: str, *, run_id: str | None = None) -> KnowledgeGraphState:
+def run_knowledge_graph(
+    question: str, *, run_id: str | None = None, mcp_token: str | None = None
+) -> KnowledgeGraphState:
     """Run with a per-node checkpoint; return answer, state and inspectable trace."""
     current_run_id = run_id or str(uuid4())
     logger.info("knowledge_graph_run_started %s", json.dumps({"run_id": current_run_id}))
@@ -486,6 +590,7 @@ def run_knowledge_graph(question: str, *, run_id: str | None = None) -> Knowledg
         result = knowledge_graph.invoke(
             {"question": question, "run_id": current_run_id, "chunks": [], "trace": []},
             config=_config(current_run_id),
+            context={"mcp_token": mcp_token} if mcp_token else {},
         )
     except Exception as exc:
         _write_trace_event(

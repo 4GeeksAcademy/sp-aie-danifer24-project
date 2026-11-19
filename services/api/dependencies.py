@@ -5,22 +5,23 @@ from fastapi import Depends
 from sqlmodel import Session
 from tinydb.table import Table
 
-from services.api.database import database_lock, get_database, get_db
+from services.api.database import get_database, get_db
 
 
 DatabaseSession = Annotated[Session, Depends(get_db)]
 
 
 def get_request_tables() -> Iterator[tuple[Table, Table, Table, Table, Table]]:
-	with database_lock:
-		with get_database() as database:
-			yield (
-				database.table("users"),
-				database.table("profiles"),
-				database.table("suppliers"),
-				database.table("password_resets"),
-				database.table("incidents"),
-			)
+	# Do not hold a process-wide lock across yield: internal MCP-to-API calls
+	# can re-enter this dependency before the outer request completes.
+	with get_database() as database:
+		yield (
+			database.table("users"),
+			database.table("profiles"),
+			database.table("suppliers"),
+			database.table("password_resets"),
+			database.table("incidents"),
+		)
 
 
 RequestTables = Annotated[

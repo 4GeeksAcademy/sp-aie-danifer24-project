@@ -1,15 +1,40 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { BookOpenText, LoaderCircle, MessageCircleQuestion, Send } from "lucide-react";
+import { clearStoredAccessToken, getStoredAccessToken } from "@/lib/auth";
 
 type KnowledgeAnswer = { answer?: string; detail?: string };
+type SavedKnowledgeState = { question: string; answer: string; error: string };
+const KNOWLEDGE_STATE_KEY = "nexova:knowledge-state";
 
 export default function KnowledgePage() {
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(KNOWLEDGE_STATE_KEY);
+      if (!saved) return;
+      const state = JSON.parse(saved) as Partial<SavedKnowledgeState>;
+      if (typeof state.question === "string") setQuestion(state.question);
+      if (typeof state.answer === "string") setAnswer(state.answer);
+      if (typeof state.error === "string") setError(state.error);
+    } catch {
+      sessionStorage.removeItem(KNOWLEDGE_STATE_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      const state: SavedKnowledgeState = { question, answer, error };
+      sessionStorage.setItem(KNOWLEDGE_STATE_KEY, JSON.stringify(state));
+    } catch {
+      // The current page remains usable when browser storage is unavailable.
+    }
+  }, [question, answer, error]);
 
   async function submitQuestion(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -21,14 +46,26 @@ export default function KnowledgePage() {
     setError("");
 
     try {
+      const token = getStoredAccessToken();
+      if (!token) {
+        throw new Error("Inicia sesión para continuar.");
+      }
       const response = await fetch("/api/knowledge/query", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ question: normalizedQuestion }),
         cache: "no-store",
       });
       const payload: KnowledgeAnswer = await response.json().catch(() => ({}));
 
+      if (response.status === 401 || response.status === 403) {
+        clearStoredAccessToken();
+        window.dispatchEvent(new Event("nexova:unauthorized"));
+      }
       if (!response.ok) {
         throw new Error(typeof payload.detail === "string" ? payload.detail : "No se pudo obtener una respuesta. Inténtalo de nuevo.");
       }

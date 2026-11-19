@@ -17,10 +17,12 @@ RUN uv pip install --system --no-cache \
     "psycopg2-binary>=2.9.13" \
     "openai>=1.0,<4.0" \
     "qdrant-client>=1.20.0" \
+    "httpx2>=2.14.0" \
     && mkdir -p /app/data /app/uis/backoffice
 
 COPY . ./services
 COPY --from=repo /packages/shared ./packages/shared
+COPY --from=repo /mcps ./mcps
 COPY --from=repo /scripts ./scripts
 COPY --from=repo /data ./data
 

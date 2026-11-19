@@ -20,7 +20,7 @@ def api():
     database = TinyDB(storage=MemoryStorage)
     tables = tuple(
         database.table(name)
-        for name in ("users", "profiles", "suppliers", "password_resets")
+        for name in ("users", "profiles", "suppliers", "password_resets", "incidents")
     )
     app.dependency_overrides[get_request_tables] = lambda: tables
     with patch("services.api.routes.auth.send_reset_email") as mail, TestClient(app) as client:
