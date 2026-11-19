@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
+from mcps.nexova_mcp.request_context import api_bearer_token
 
 # Ensure .env is loaded
 _env_path = Path(__file__).resolve().parents[3] / ".env"
@@ -51,43 +52,43 @@ from services.api.services.inventory_tool import (
 
 logger = logging.getLogger(__name__)
 
-MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL", "http://localhost:8010/mcp")
+MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL", "http://localhost:8010/sse")
 MCP_CLIENT_TIMEOUT = float(os.environ.get("MCP_CLIENT_TIMEOUT", "10"))
 
 
 # ==========================================================================
-#  MCP Client (lazy singleton, async init)
+#  Per-request MCP client (keeps caller credentials isolated)
 # ==========================================================================
 
 class _MCPClientProxy:
-    """Lazy proxy to NexovaMCPClient that initializes on first use."""
+    """Create a per-request MCP client so credentials never leak across users."""
 
-    def __init__(self):
-        self._client = None
-        self._connected = False
+    def _client_for_request(self, token: str | None = None):
+        from mcps.nexova_mcp.mcp_client import NexovaMCPClient
 
-    def _ensure(self):
-        if not self._connected:
-            from mcps.nexova_mcp.mcp_client import NexovaMCPClient
-            self._client = NexovaMCPClient(
-                server_url=MCP_SERVER_URL,
-                timeout=MCP_CLIENT_TIMEOUT,
-            )
-            self._connected = True
-        return self._client
+        # LangGraph may run nodes on worker threads. The MCP credential is
+        # passed explicitly by each adapter invocation to avoid relying on
+        # ContextVar propagation across executor boundaries.
+        token = token or api_bearer_token.get()
+        if not token:
+            raise RuntimeError("La solicitud del agente no tiene un token MCP asociado.")
+        return NexovaMCPClient(
+            server_url=MCP_SERVER_URL,
+            token=token,
+            timeout=MCP_CLIENT_TIMEOUT,
+        )
 
-    def get_incident(self, incident_id: int) -> dict:
-        return self._ensure().get_incident(incident_id)
+    def get_incident(self, incident_id: int, *, token: str | None = None) -> dict:
+        return self._client_for_request(token).get_incident(incident_id)
 
-    def list_incidents(self, **filters) -> dict:
-        return self._ensure().list_incidents(**filters)
+    def list_incidents(self, *, token: str | None = None, **filters) -> dict:
+        return self._client_for_request(token).list_incidents(**filters)
 
-    def get_product(self, **kwargs) -> dict:
-        return self._ensure().get_product(**kwargs)
+    def get_product(self, *, token: str | None = None, **kwargs) -> dict:
+        return self._client_for_request(token).get_product(**kwargs)
 
-    def list_products(self, **kwargs) -> dict:
-        return self._ensure().list_products(**kwargs)
-
+    def list_products(self, *, token: str | None = None, **kwargs) -> dict:
+        return self._client_for_request(token).list_products(**kwargs)
 
 _client_proxy = _MCPClientProxy()
 
@@ -119,24 +120,22 @@ def _parse_incident_record(raw: dict) -> IncidentRecord:
     )
 
 
-def lookup_incidents_mcp(request: IncidentLookupInput) -> IncidentLookupOutput:
+def lookup_incidents_mcp(
+    request: IncidentLookupInput, *, token: str | None = None
+) -> IncidentLookupOutput:
     """Replace ``incident_tool.lookup_incidents`` via MCP Server.
 
     Input/Output contracts are identical to the original.
     """
     logger.info(
-        "mcp_adapter.lookup_incidents called: ticket_id=%s filters=%s",
+        "mcp_adapter.lookup_incidents called: ticket_id=%s",
         request.ticket_id,
-        {
-            "status": request.status,
-            "category": request.category,
-            "origin": request.origin,
-            "branch": request.branch,
-        },
     )
     try:
         if request.ticket_id is not None:
-            result = _client_proxy.get_incident(request.ticket_id)
+            result = _client_proxy.get_incident(request.ticket_id, token=token or api_bearer_token.get())
+            if result.get("outcome") == "success" and isinstance(result.get("result"), dict):
+                result = result["result"]
             if result.get("outcome") == "found":
                 incident = result.get("incident", {})
                 records = [_parse_incident_record(incident)]
@@ -156,11 +155,14 @@ def lookup_incidents_mcp(request: IncidentLookupInput) -> IncidentLookupOutput:
                 )
         else:
             result = _client_proxy.list_incidents(
+                token=token or api_bearer_token.get(),
                 status=request.status.value if request.status else None,
                 category=request.category.value if request.category else None,
                 origin=request.origin.value if request.origin else None,
                 branch=request.branch.value if request.branch else None,
             )
+            if isinstance(result, list):
+                result = {"outcome": "found", "incidents": result}
             if isinstance(result, dict) and result.get("outcome") == "found":
                 records = [_parse_incident_record(r) for r in result.get("incidents", [])]
                 if not records:
@@ -219,23 +221,25 @@ def _parse_product(raw: dict) -> AssetResponse:
     )
 
 
-def lookup_inventory_mcp(request: InventoryLookupInput) -> InventoryLookupOutput:
+def lookup_inventory_mcp(
+    request: InventoryLookupInput, *, token: str | None = None
+) -> InventoryLookupOutput:
     """Replace ``inventory_tool.lookup_inventory`` via MCP Server.
 
     Input/Output contracts are identical to the original.
     """
     logger.info(
-        "mcp_adapter.lookup_inventory called: product_id=%s sku=%s name=%s",
-        request.product_id,
-        request.sku,
-        request.name,
+        "mcp_adapter.lookup_inventory called: tool=lookup_inventory_mcp",
     )
     try:
         result = _client_proxy.get_product(
+            token=token or api_bearer_token.get(),
             product_id=request.product_id,
             sku=request.sku,
             name=request.name,
         )
+        if result.get("outcome") == "success" and isinstance(result.get("result"), dict):
+            result = result["result"]
         if result.get("outcome") == "found":
             product = result.get("product", {})
             records = [_parse_product(product)]
