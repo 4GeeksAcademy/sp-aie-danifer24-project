@@ -17,6 +17,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.runtime import Runtime
 from data.pipelines.rag import generate_answer, retrieve
 from services.api.models import IncidentBranch, IncidentCategory, IncidentOrigin, IncidentStatus
+from services.api.services.agent_memory import get_memory_service
 from mcps.nexova_mcp.request_context import api_bearer_token
 
 # ── Tool provider selection ──────────────────────────────────────────────
@@ -83,6 +84,7 @@ class KnowledgeGraphState(TypedDict, total=False):
     route: NotRequired[str]
     active_tool: NotRequired[str | None]
     use_rag: NotRequired[bool]
+    memory_proposal: NotRequired[dict[str, Any] | None]
 
 
 # Explicit graph manifest validated before compilation.
@@ -90,19 +92,21 @@ _NODE_NAMES = {
     "receive_question", "route_request", "retrieve", "incident_lookup",
     "generate_answer", "no_context", "incident_response",
     "inventory_lookup", "inventory_response", "reject_inventory_write",
+    "evaluate_memory",
 }
 _TRANSITIONS = {
     START: {"receive_question"},
-    "receive_question": {"route_request", END},
+    "receive_question": {"route_request", END},  # error → END directly
     "route_request": {"incident_lookup", "inventory_lookup", "reject_inventory_write", "retrieve"},
     "incident_lookup": {"incident_response"},
-    "incident_response": {"retrieve", END},
+    "incident_response": {"retrieve", "evaluate_memory"},
     "inventory_lookup": {"inventory_response"},
-    "inventory_response": {"retrieve", END},
-    "reject_inventory_write": {END},
+    "inventory_response": {"retrieve", "evaluate_memory"},
+    "reject_inventory_write": {"evaluate_memory"},
     "retrieve": {"generate_answer", "no_context"},
-    "generate_answer": {END},
-    "no_context": {END},
+    "generate_answer": {"evaluate_memory"},
+    "no_context": {"evaluate_memory"},
+    "evaluate_memory": {END},
 }
 _EXPECTED_STATE_TYPES = {
     "question": str,
@@ -119,6 +123,7 @@ _EXPECTED_STATE_TYPES = {
     "incident_result": IncidentLookupOutput,
     "inventory_lookup": InventoryLookupInput | None,
     "inventory_result": InventoryLookupOutput,
+    "memory_proposal": dict[str, Any] | None,
 }
 
 
@@ -513,13 +518,171 @@ def build_knowledge_graph(
         }
 
     def route_after_tool(state: KnowledgeGraphState) -> str:
-        return "retrieve" if state.get("use_rag") else "finish"
+            return "retrieve" if state.get("use_rag") else "evaluate_memory"
 
     def route_after_question(state: KnowledgeGraphState) -> str:
         return "invalid" if state.get("error") else "route"
 
     def route_after_retrieval(state: KnowledgeGraphState) -> str:
         return "generate" if state.get("chunks") else "no_context"
+
+        def evaluate_memory_node(state: KnowledgeGraphState) -> KnowledgeGraphState:
+            """
+            After an answer is ready, evaluate whether the interaction contains
+            memorizable content and, if so, create a pending proposal.
+
+            Criteria (from CONTEXT.md):
+            - Corrected escalation procedures
+            - Recurrent client preferences
+            - Known incident patterns
+
+            Never creates a proposal if one is already pending.
+            Never writes to Qdrant ``*_knowledge`` collections.
+            """
+            answer = state.get("answer", "")
+            question = state.get("question", "")
+            if not answer or not question:
+                return {"trace": _record(state, "evaluate_memory", proposal_created=False, reason="no_content")}
+
+            # ── Memorizability heuristics ──────────────────────────────────────
+            answer_lower = answer.casefold()
+            question_lower = question.casefold()
+
+            # Check for escalation/correction patterns
+            has_escalation = bool(re.search(
+                r"\b(escalaci[óo]n|escalar|reasignaci[óo]n|reasignar|derivar|transferir|redirigir)\b",
+                answer_lower,
+            ))
+            has_sla_change = bool(re.search(
+                r"\b(SLA|acuerdo\s+de\s+nivel|tiempo\s+de\s+resoluci[óo]n|plazo)\b",
+                answer_lower,
+            ))
+            has_preference = bool(re.search(
+                r"\b(siempre\s+prefiere|preferencia|suele|habitualmente|normalmente)\b",
+                answer_lower,
+            ))
+            has_pattern = bool(re.search(
+                r"\b(suele[n]?\s+(?:ir|pasar|ocurrir|resolverse)|patr[oó]n|t[ií]pico|frecuente|recurrente)\b",
+                answer_lower,
+            ))
+            has_client_ref = bool(re.search(
+                r"\b(cliente|cuenta|contrato)\b", answer_lower,
+            ))
+
+            # Combined heuristic: at least two signals or one strong signal
+            signals = sum([has_escalation, has_sla_change, has_preference, has_pattern, has_client_ref])
+            strong_signal = has_escalation or has_sla_change or (has_preference and has_client_ref)
+
+            if not (signals >= 2 or strong_signal):
+                return {"trace": _record(
+                    state, "evaluate_memory",
+                    proposal_created=False,
+                    reason="not_valuable",
+                    signals=signals,
+                    strong_signal=strong_signal,
+                )}
+
+            # ── Build proposal fact ────────────────────────────────────────────
+            # Extract entity if identifiable
+            entity = _extract_entity(answer)
+            fact_type = (
+                "escalation" if has_escalation or has_sla_change
+                else "preference" if has_preference
+                else "pattern"
+            )
+            # Use the original answer as the fact content (will be reviewed)
+            content = _extract_memorizable_content(answer)
+
+            if not content:
+                return {"trace": _record(
+                    state, "evaluate_memory",
+                    proposal_created=False, reason="content_empty",
+                )}
+
+            fact = {
+                "type": fact_type,
+                "content": content,
+                "entity": entity,
+            }
+
+            # ── Check for existing proposal ── (singleton enforcement)
+            try:
+                mem_svc = get_memory_service()
+                if mem_svc.has_proposal():
+                    return {"trace": _record(
+                        state, "evaluate_memory",
+                        proposal_created=False, reason="already_pending",
+                    )}
+                mem_svc.set_proposal(fact, source_run_id=state.get("run_id", ""))
+            except Exception as exc:
+                logger.warning("AgentMemory set_proposal failed: %s", exc)
+                return {"trace": _record(
+                    state, "evaluate_memory",
+                    proposal_created=False, reason="redis_error",
+                )}
+
+            # Append the proposal message to the answer
+            proposal_suffix = (
+                f"\n\n---\n*He registrado que {content}*"
+                f"\n¿Quieres que lo recuerde para futuras conversaciones? "
+                "(responde 'sí' para guardarlo, 'no' para descartarlo o corrígelo si no es exacto.)"
+            )
+            updated_answer = answer + proposal_suffix
+
+            return {
+                "answer": updated_answer,
+                "memory_proposal": fact,
+                "trace": _record(
+                    state, "evaluate_memory",
+                    proposal_created=True,
+                    fact_type=fact_type,
+                    entity=entity,
+                    content=content,
+                ),
+            }
+
+        # ── Helper: extract a concise entity reference ─────────────────────
+        def _extract_entity(text: str) -> str:
+            """Try to extract a business entity (client name, ticket type, category)."""
+            # Look for "cliente de <...>", "clientes <...>"
+            client_match = re.search(
+                r"\b(?:cliente[s]?\s+(?:de\s+)?|clientes\s+)(\w+(?:\s+\w+)?)",
+                text, re.IGNORECASE,
+            )
+            if client_match:
+                return client_match.group(1).strip().rstrip(".,;")
+
+            # Look for "tickets de <...>"
+            ticket_match = re.search(
+                r"\b(?:tickets|incidencias|incidentes)\s+(?:de|para)\s+(\w+(?:\s+\w+)?)",
+                text, re.IGNORECASE,
+            )
+            if ticket_match:
+                return ticket_match.group(1).strip().rstrip(".,;")
+            return ""
+
+        def _extract_memorizable_content(text: str) -> str:
+            """
+            Extract the most relevant sentence(s) for the memory fact.
+            Prefer sentences containing escalation, preference or pattern keywords.
+            """
+            sentences = re.split(r"(?<=[.!?])\s+", text)
+            candidates = []
+            for sentence in sentences:
+                if re.search(
+                    r"\b(?:escalaci[oó]n|SLA|prefiere|siempre|suele|t[ií]pico|patr[oó]n|"
+                    r"cambi[oó]|nuevo|actualizado|directo|resuelve)\b",
+                    sentence, re.IGNORECASE,
+                ):
+                    candidates.append(sentence.strip())
+            if candidates:
+                return " ".join(candidates[:2])
+            # Fallback: first substantive sentence
+            for s in sentences:
+                cleaned = s.strip()
+                if len(cleaned) > 20:
+                    return cleaned
+            return text[:200]
 
     builder = StateGraph(KnowledgeGraphState, context_schema=KnowledgeGraphContext)
     builder.add_node("receive_question", receive_question)
@@ -532,7 +695,7 @@ def build_knowledge_graph(
     builder.add_node("retrieve", retrieve_context)
     builder.add_node("generate_answer", generate_response)
     builder.add_node("no_context", no_context)
-    builder.add_edge(START, "receive_question")
+    builder.add_edge(START, 'receive_question')
     builder.add_conditional_edges(
         "receive_question",
         route_after_question,
@@ -551,21 +714,22 @@ def build_knowledge_graph(
     builder.add_edge("incident_lookup", "incident_response")
     builder.add_conditional_edges(
         "incident_response", route_after_tool,
-        {"retrieve": "retrieve", "finish": END},
+            {"retrieve": "retrieve", "evaluate_memory": "evaluate_memory"},
     )
     builder.add_edge("inventory_lookup", "inventory_response")
-    builder.add_edge("reject_inventory_write", END)
+    builder.add_edge("reject_inventory_write", "evaluate_memory")
     builder.add_conditional_edges(
         "inventory_response", route_after_tool,
-        {"retrieve": "retrieve", "finish": END},
+            {"retrieve": "retrieve", "evaluate_memory": "evaluate_memory"},
     )
     builder.add_conditional_edges(
         "retrieve",
         route_after_retrieval,
         {"generate": "generate_answer", "no_context": "no_context"},
     )
-    builder.add_edge("generate_answer", END)
-    builder.add_edge("no_context", END)
+    builder.add_edge("generate_answer", "evaluate_memory")
+    builder.add_edge("no_context", "evaluate_memory")
+    builder.add_edge("evaluate_memory", END)
     try:
         return builder.compile(checkpointer=checkpointer or MemorySaver())
     except Exception as exc:
