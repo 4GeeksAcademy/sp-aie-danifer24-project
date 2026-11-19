@@ -8,6 +8,7 @@ from services.api.services.incident_tool import (
     IncidentToolOutcome,
 )
 from services.api.services.knowledge_graph import build_knowledge_graph
+from mcps.nexova_mcp.request_context import api_bearer_token
 
 
 def found_incident():
@@ -23,6 +24,28 @@ def found_incident():
         created_at=now,
         updated_at=now,
     )
+
+
+def test_graph_restores_run_scoped_mcp_token_inside_worker_node(monkeypatch, tmp_path):
+    observed_tokens = []
+
+    def incident_tool(request):
+        observed_tokens.append(api_bearer_token.get())
+        return IncidentLookupOutput(outcome=IncidentToolOutcome.NOT_FOUND)
+
+    from services.api.services import knowledge_graph as graph_module
+
+    monkeypatch.setattr(graph_module, "TRACE_DIR", tmp_path)
+    monkeypatch.setattr(
+        graph_module, "knowledge_graph", build_knowledge_graph(incident_fn=incident_tool)
+    )
+    result = graph_module.run_knowledge_graph(
+        "Estado del ticket 123", run_id="token-propagation-test", mcp_token="scoped-token"
+    )
+
+    assert result["answer"] == "No se encontró una incidencia que coincida con la consulta."
+    assert observed_tokens == ["scoped-token"]
+    assert api_bearer_token.get() is None
 
 
 def test_graph_routes_ticket_id_to_incident_tool_and_returns_actual_data():
