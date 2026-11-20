@@ -18,6 +18,8 @@ from langgraph.runtime import Runtime
 from data.pipelines.rag import generate_answer, retrieve
 from services.api.models import IncidentBranch, IncidentCategory, IncidentOrigin, IncidentStatus
 from services.api.services.agent_memory import get_memory_service
+from services.api.services.harness import post_generation_guardrails, post_rag_guardrails
+from services.api.services.system_prompt import build_secure_prompt
 from mcps.nexova_mcp.request_context import api_bearer_token
 
 # ── Tool provider selection ──────────────────────────────────────────────
@@ -461,21 +463,33 @@ def build_knowledge_graph(
 
     def retrieve_context(state: KnowledgeGraphState) -> KnowledgeGraphState:
         chunks = retrieve_fn(state["question"])
+
+        # Guardrail: filtrar fragmentos RAG con instrucciones enmascaradas
+        safe_chunks, rag_verdicts = post_rag_guardrails(chunks)
+        filtered_count = len(chunks) - len(safe_chunks)
+        if filtered_count:
+            logger.warning(
+                "GUARDRAIL_RAG_FILTER: removed %d/%d chunks with masked instructions",
+                filtered_count, len(chunks),
+            )
+
         return {
-            "chunks": chunks,
+            "chunks": safe_chunks,
             "trace": _record(
                 state,
                 "retrieve",
-                chunk_count=len(chunks),
+                chunk_count=len(safe_chunks),
+                filtered_count=filtered_count,
+                rag_guardrails=rag_verdicts,
                 sources_used=["rag"],
-                sources=sorted({chunk.get("source_document", "unknown") for chunk in chunks}),
+                sources=sorted({chunk.get("source_document", "unknown") for chunk in safe_chunks}),
                 retrieved_chunks=[
                     {
                         "source_document": chunk.get("source_document"),
                         "section": chunk.get("section"),
                         "text": chunk.get("text"),
                     }
-                    for chunk in chunks
+                    for chunk in safe_chunks
                 ],
             ),
         }
@@ -489,22 +503,52 @@ def build_knowledge_graph(
         return f"{partial}\n\n{rag_answer}"
 
     def generate_response(state: KnowledgeGraphState) -> KnowledgeGraphState:
-        rag_answer = generate_fn(state["question"], state["chunks"])
+        # Usar system prompt seguro con separacion instrucciones/contexto/input
+        secure_prompt = build_secure_prompt(state["question"], state["chunks"])
+        rag_answer = generate_fn(secure_prompt, state["chunks"])
         answer = _with_partial_answer(state, rag_answer)
+
+        # Guardrail post-generacion: detectar datos sensibles en la respuesta
+        post_guardrail = post_generation_guardrails(answer, question=state.get("question", ""))
+        safe_answer = post_guardrail["safe_answer"]
+
         return {
-            "answer": answer,
+            "answer": safe_answer,
             "trace": _record(
                 state,
                 "generate_answer",
-                answer=answer,
+                answer=safe_answer,
+                blocked=post_guardrail["blocked"],
+                block_reason=post_guardrail.get("block_reason") or "",
+                was_redirected=post_guardrail.get("was_redirected", False),
                 rag_answer=rag_answer,
+                guardrails=post_guardrail["verdicts"],
                 sources_used=([state["active_tool"]] if state.get("active_tool") else []) + ["rag"],
                 context_chunk_count=len(state["chunks"]),
             ),
         }
 
+    _OUT_OF_DOMAIN_PATTERNS = re.compile(
+        r"\b(?:clima|tiempo\s+(?:meterol|atmosf)|pron[oó]stico|"
+        r"temperatura|lluvia|soleado|nublado|viento|"
+        r"hora\s+(?:actual|es|exacta)|qu[eé]\s+hora\s+(?:es|tengo)|"
+        r"fecha|d[ií]a\s+(?:de\s+hoy|actual|es)|qu[eé]\s+d[ií]a\s+es\s+hoy|"
+        r"noticia|deporte|f[uú]tbol|b[eé]isbol|baloncesto|"
+        r"receta|cocinar|pel[ií]cula|canci[oó]n|c[oó]mo\s+(?:est[áa]\s+el|est[aá]n|se\s+)|"
+        r"qu[eé]\s+(?:significa|es)\s+)"
+        r"(?!.*(?:ticket|incidencia|soporte|tarifa|procedimiento|contrato|pol[ií]tica|FAQ|reembolso))",
+        re.IGNORECASE,
+    )
+
     def no_context(state: KnowledgeGraphState) -> KnowledgeGraphState:
-        rag_answer = "No tengo información suficiente en la base de conocimiento para responder esa pregunta."
+        question = state.get("question", "")
+        # Si la pregunta es fuera de dominio (clima, hora, etc.), pasar por el LLM
+        # para que el system prompt redirija al proposito de soporte.
+        if _OUT_OF_DOMAIN_PATTERNS.search(question):
+            secure_prompt = build_secure_prompt(question, [])
+            rag_answer = generate_fn(secure_prompt, [])
+        else:
+            rag_answer = "No tengo información suficiente en la base de conocimiento para responder esa pregunta."
         answer = _with_partial_answer(state, rag_answer)
         return {
             "answer": answer,
@@ -523,166 +567,166 @@ def build_knowledge_graph(
     def route_after_question(state: KnowledgeGraphState) -> str:
         return "invalid" if state.get("error") else "route"
 
+    def evaluate_memory_node(state: KnowledgeGraphState) -> KnowledgeGraphState:
+        """
+        After an answer is ready, evaluate whether the interaction contains
+        memorizable content and, if so, create a pending proposal.
+
+        Criteria (from CONTEXT.md):
+        - Corrected escalation procedures
+        - Recurrent client preferences
+        - Known incident patterns
+
+        Never creates a proposal if one is already pending.
+        Never writes to Qdrant ``*_knowledge`` collections.
+        """
+        answer = state.get("answer", "")
+        question = state.get("question", "")
+        if not answer or not question:
+            return {"trace": _record(state, "evaluate_memory", proposal_created=False, reason="no_content")}
+
+        # ── Memorizability heuristics ──────────────────────────────────────
+        answer_lower = answer.casefold()
+        question_lower = question.casefold()
+
+        # Check for escalation/correction patterns
+        has_escalation = bool(re.search(
+            r"\b(escalaci[óo]n|escalar|reasignaci[óo]n|reasignar|derivar|transferir|redirigir)\b",
+            answer_lower,
+        ))
+        has_sla_change = bool(re.search(
+            r"\b(SLA|acuerdo\s+de\s+nivel|tiempo\s+de\s+resoluci[óo]n|plazo)\b",
+            answer_lower,
+        ))
+        has_preference = bool(re.search(
+            r"\b(siempre\s+prefiere|preferencia|suele|habitualmente|normalmente)\b",
+            answer_lower,
+        ))
+        has_pattern = bool(re.search(
+            r"\b(suele[n]?\s+(?:ir|pasar|ocurrir|resolverse)|patr[oó]n|t[ií]pico|frecuente|recurrente)\b",
+            answer_lower,
+        ))
+        has_client_ref = bool(re.search(
+            r"\b(cliente|cuenta|contrato)\b", answer_lower,
+        ))
+
+        # Combined heuristic: at least two signals or one strong signal
+        signals = sum([has_escalation, has_sla_change, has_preference, has_pattern, has_client_ref])
+        strong_signal = has_escalation or has_sla_change or (has_preference and has_client_ref)
+
+        if not (signals >= 2 or strong_signal):
+            return {"trace": _record(
+                state, "evaluate_memory",
+                proposal_created=False,
+                reason="not_valuable",
+                signals=signals,
+                strong_signal=strong_signal,
+            )}
+
+        # ── Build proposal fact ────────────────────────────────────────────
+        # Extract entity if identifiable
+        entity = _extract_entity(answer)
+        fact_type = (
+            "escalation" if has_escalation or has_sla_change
+            else "preference" if has_preference
+            else "pattern"
+        )
+        # Use the original answer as the fact content (will be reviewed)
+        content = _extract_memorizable_content(answer)
+
+        if not content:
+            return {"trace": _record(
+                state, "evaluate_memory",
+                proposal_created=False, reason="content_empty",
+            )}
+
+        fact = {
+            "type": fact_type,
+            "content": content,
+            "entity": entity,
+        }
+
+        # ── Check for existing proposal ── (singleton enforcement)
+        try:
+            mem_svc = get_memory_service()
+            if mem_svc.has_proposal():
+                return {"trace": _record(
+                    state, "evaluate_memory",
+                    proposal_created=False, reason="already_pending",
+                )}
+            mem_svc.set_proposal(fact, source_run_id=state.get("run_id", ""))
+        except Exception as exc:
+            logger.warning("AgentMemory set_proposal failed: %s", exc)
+            return {"trace": _record(
+                state, "evaluate_memory",
+                proposal_created=False, reason="redis_error",
+            )}
+
+        # Append the proposal message to the answer
+        proposal_suffix = (
+            f"\n\n---\n*He registrado que {content}*"
+            f"\n¿Quieres que lo recuerde para futuras conversaciones? "
+            "(responde 'sí' para guardarlo, 'no' para descartarlo o corrígelo si no es exacto.)"
+        )
+        updated_answer = answer + proposal_suffix
+
+        return {
+            "answer": updated_answer,
+            "memory_proposal": fact,
+            "trace": _record(
+                state, "evaluate_memory",
+                proposal_created=True,
+                fact_type=fact_type,
+                entity=entity,
+                content=content,
+            ),
+        }
+
+    # ── Helper: extract a concise entity reference ─────────────────────
+    def _extract_entity(text: str) -> str:
+        """Try to extract a business entity (client name, ticket type, category)."""
+        # Look for "cliente de <...>", "clientes <...>"
+        client_match = re.search(
+            r"\b(?:cliente[s]?\s+(?:de\s+)?|clientes\s+)(\w+(?:\s+\w+)?)",
+            text, re.IGNORECASE,
+        )
+        if client_match:
+            return client_match.group(1).strip().rstrip(".,;")
+
+        # Look for "tickets de <...>"
+        ticket_match = re.search(
+            r"\b(?:tickets|incidencias|incidentes)\s+(?:de|para)\s+(\w+(?:\s+\w+)?)",
+            text, re.IGNORECASE,
+        )
+        if ticket_match:
+            return ticket_match.group(1).strip().rstrip(".,;")
+        return ""
+
+    def _extract_memorizable_content(text: str) -> str:
+        """
+        Extract the most relevant sentence(s) for the memory fact.
+        Prefer sentences containing escalation, preference or pattern keywords.
+        """
+        sentences = re.split(r"(?<=[.!?])\s+", text)
+        candidates = []
+        for sentence in sentences:
+            if re.search(
+                r"\b(?:escalaci[oó]n|SLA|prefiere|siempre|suele|t[ií]pico|patr[oó]n|"
+                r"cambi[oó]|nuevo|actualizado|directo|resuelve)\b",
+                sentence, re.IGNORECASE,
+            ):
+                candidates.append(sentence.strip())
+        if candidates:
+            return " ".join(candidates[:2])
+        # Fallback: first substantive sentence
+        for s in sentences:
+            cleaned = s.strip()
+            if len(cleaned) > 20:
+                return cleaned
+        return text[:200]
+
     def route_after_retrieval(state: KnowledgeGraphState) -> str:
         return "generate" if state.get("chunks") else "no_context"
-
-        def evaluate_memory_node(state: KnowledgeGraphState) -> KnowledgeGraphState:
-            """
-            After an answer is ready, evaluate whether the interaction contains
-            memorizable content and, if so, create a pending proposal.
-
-            Criteria (from CONTEXT.md):
-            - Corrected escalation procedures
-            - Recurrent client preferences
-            - Known incident patterns
-
-            Never creates a proposal if one is already pending.
-            Never writes to Qdrant ``*_knowledge`` collections.
-            """
-            answer = state.get("answer", "")
-            question = state.get("question", "")
-            if not answer or not question:
-                return {"trace": _record(state, "evaluate_memory", proposal_created=False, reason="no_content")}
-
-            # ── Memorizability heuristics ──────────────────────────────────────
-            answer_lower = answer.casefold()
-            question_lower = question.casefold()
-
-            # Check for escalation/correction patterns
-            has_escalation = bool(re.search(
-                r"\b(escalaci[óo]n|escalar|reasignaci[óo]n|reasignar|derivar|transferir|redirigir)\b",
-                answer_lower,
-            ))
-            has_sla_change = bool(re.search(
-                r"\b(SLA|acuerdo\s+de\s+nivel|tiempo\s+de\s+resoluci[óo]n|plazo)\b",
-                answer_lower,
-            ))
-            has_preference = bool(re.search(
-                r"\b(siempre\s+prefiere|preferencia|suele|habitualmente|normalmente)\b",
-                answer_lower,
-            ))
-            has_pattern = bool(re.search(
-                r"\b(suele[n]?\s+(?:ir|pasar|ocurrir|resolverse)|patr[oó]n|t[ií]pico|frecuente|recurrente)\b",
-                answer_lower,
-            ))
-            has_client_ref = bool(re.search(
-                r"\b(cliente|cuenta|contrato)\b", answer_lower,
-            ))
-
-            # Combined heuristic: at least two signals or one strong signal
-            signals = sum([has_escalation, has_sla_change, has_preference, has_pattern, has_client_ref])
-            strong_signal = has_escalation or has_sla_change or (has_preference and has_client_ref)
-
-            if not (signals >= 2 or strong_signal):
-                return {"trace": _record(
-                    state, "evaluate_memory",
-                    proposal_created=False,
-                    reason="not_valuable",
-                    signals=signals,
-                    strong_signal=strong_signal,
-                )}
-
-            # ── Build proposal fact ────────────────────────────────────────────
-            # Extract entity if identifiable
-            entity = _extract_entity(answer)
-            fact_type = (
-                "escalation" if has_escalation or has_sla_change
-                else "preference" if has_preference
-                else "pattern"
-            )
-            # Use the original answer as the fact content (will be reviewed)
-            content = _extract_memorizable_content(answer)
-
-            if not content:
-                return {"trace": _record(
-                    state, "evaluate_memory",
-                    proposal_created=False, reason="content_empty",
-                )}
-
-            fact = {
-                "type": fact_type,
-                "content": content,
-                "entity": entity,
-            }
-
-            # ── Check for existing proposal ── (singleton enforcement)
-            try:
-                mem_svc = get_memory_service()
-                if mem_svc.has_proposal():
-                    return {"trace": _record(
-                        state, "evaluate_memory",
-                        proposal_created=False, reason="already_pending",
-                    )}
-                mem_svc.set_proposal(fact, source_run_id=state.get("run_id", ""))
-            except Exception as exc:
-                logger.warning("AgentMemory set_proposal failed: %s", exc)
-                return {"trace": _record(
-                    state, "evaluate_memory",
-                    proposal_created=False, reason="redis_error",
-                )}
-
-            # Append the proposal message to the answer
-            proposal_suffix = (
-                f"\n\n---\n*He registrado que {content}*"
-                f"\n¿Quieres que lo recuerde para futuras conversaciones? "
-                "(responde 'sí' para guardarlo, 'no' para descartarlo o corrígelo si no es exacto.)"
-            )
-            updated_answer = answer + proposal_suffix
-
-            return {
-                "answer": updated_answer,
-                "memory_proposal": fact,
-                "trace": _record(
-                    state, "evaluate_memory",
-                    proposal_created=True,
-                    fact_type=fact_type,
-                    entity=entity,
-                    content=content,
-                ),
-            }
-
-        # ── Helper: extract a concise entity reference ─────────────────────
-        def _extract_entity(text: str) -> str:
-            """Try to extract a business entity (client name, ticket type, category)."""
-            # Look for "cliente de <...>", "clientes <...>"
-            client_match = re.search(
-                r"\b(?:cliente[s]?\s+(?:de\s+)?|clientes\s+)(\w+(?:\s+\w+)?)",
-                text, re.IGNORECASE,
-            )
-            if client_match:
-                return client_match.group(1).strip().rstrip(".,;")
-
-            # Look for "tickets de <...>"
-            ticket_match = re.search(
-                r"\b(?:tickets|incidencias|incidentes)\s+(?:de|para)\s+(\w+(?:\s+\w+)?)",
-                text, re.IGNORECASE,
-            )
-            if ticket_match:
-                return ticket_match.group(1).strip().rstrip(".,;")
-            return ""
-
-        def _extract_memorizable_content(text: str) -> str:
-            """
-            Extract the most relevant sentence(s) for the memory fact.
-            Prefer sentences containing escalation, preference or pattern keywords.
-            """
-            sentences = re.split(r"(?<=[.!?])\s+", text)
-            candidates = []
-            for sentence in sentences:
-                if re.search(
-                    r"\b(?:escalaci[oó]n|SLA|prefiere|siempre|suele|t[ií]pico|patr[oó]n|"
-                    r"cambi[oó]|nuevo|actualizado|directo|resuelve)\b",
-                    sentence, re.IGNORECASE,
-                ):
-                    candidates.append(sentence.strip())
-            if candidates:
-                return " ".join(candidates[:2])
-            # Fallback: first substantive sentence
-            for s in sentences:
-                cleaned = s.strip()
-                if len(cleaned) > 20:
-                    return cleaned
-            return text[:200]
 
     builder = StateGraph(KnowledgeGraphState, context_schema=KnowledgeGraphContext)
     builder.add_node("receive_question", receive_question)
@@ -695,6 +739,7 @@ def build_knowledge_graph(
     builder.add_node("retrieve", retrieve_context)
     builder.add_node("generate_answer", generate_response)
     builder.add_node("no_context", no_context)
+    builder.add_node("evaluate_memory", evaluate_memory_node)
     builder.add_edge(START, 'receive_question')
     builder.add_conditional_edges(
         "receive_question",

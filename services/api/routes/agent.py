@@ -11,6 +11,7 @@ from services.api.routes.knowledge import KnowledgeQueryRequest, KnowledgeQueryR
 from services.api.services.knowledge_graph import run_knowledge_graph
 from services.api.services.agent_memory import get_memory_service
 from services.api.services.memory_classifier import MemoryClassifier, MemoryVerdict
+from services.api.services.harness import pre_graph_guardrails, get_guardrail_stats
 from mcps.nexova_mcp.request_context import api_bearer_token
 
 logger = logging.getLogger(__name__)
@@ -19,6 +20,12 @@ router = APIRouter(
     tags=["agent"],
     dependencies=[Depends(get_current_user)],
 )
+
+
+@router.get("/guardrail-stats")
+def guardrail_stats() -> dict:
+    """Resumen de cuántas veces se activó cada guardrail durante la sesión."""
+    return get_guardrail_stats()
 
 
 @router.post("/query", response_model=KnowledgeQueryResponse)
@@ -40,7 +47,37 @@ def agent_query(
         _handle_proposal(mem_svc, payload.question, proposal_obj, current_user.id)
         # After handling, the proposal is cleared; proceed with normal query.
 
-    # ── Phase 2: Execute the knowledge graph ───────────────────────────────
+    # ── Phase 2: Pre-graph guardrails (jailbreak, chatbot personal, cross-client, etc.) ──
+    # Ejecutar SIEMPRE, independientemente de si hay propuesta de memoria pendiente.
+    guardrail_result = pre_graph_guardrails(payload.question)
+    if guardrail_result["blocked"]:
+        log_data = {
+            "action": "blocked_by_guardrail",
+            "reason": guardrail_result["block_reason"],
+            "question": payload.question,
+            "user_id": current_user.id,
+        }
+        logger.warning("GUARDRAIL_BLOCKED %s", log_data)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Lo siento, solo puedo ayudarte con consultas de soporte de Nexova. "
+                "Si tienes alguna pregunta sobre tu ticket, incidencia o los servicios "
+                "de soporte, estaré encantado de ayudarte."
+            ),
+        )
+    if guardrail_result.get("redirected"):
+        return KnowledgeQueryResponse(
+            answer=(
+                "¡Hola! Soy el asistente de soporte de Nexova. "
+                "¿En qué puedo ayudarte hoy? Puedes consultarme sobre tickets, "
+                "incidencias, tarifas, servicios o cualquier duda relacionada "
+                "con tu soporte técnico."
+            ),
+            run_id="",
+        )
+
+    # ── Phase 3: Execute the knowledge graph ───────────────────────────────
     mcp_token = create_access_token(
         current_user.id,
         scopes=("incidents:read", "inventory:read"),
