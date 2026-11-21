@@ -13,7 +13,7 @@ from pydantic import (
 	field_validator,
 	model_validator,
 )
-from sqlalchemy import CheckConstraint, DateTime, Index, JSON
+from sqlalchemy import CheckConstraint, DateTime, Index, JSON, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field as SQLField, SQLModel
 
@@ -466,3 +466,109 @@ class ResetPasswordRequest(NewPasswordRequest):
 
 class ChangePasswordRequest(NewPasswordRequest):
 	current_password: str
+
+
+# ──────────────────────────────────────────────
+# RFP Pipeline models (Hito 9)
+# ──────────────────────────────────────────────
+
+
+class TicketStatus(str, Enum):
+    """Ticket lifecycle states across Hito 9 Parts 1–3."""
+
+    ANALIZANDO = "analizando"
+    DESCARTADO = "descartado"
+    ANALISIS_COMPLETO = "analisis_completo"
+    GENERANDO_BORRADOR = "generando_borrador"
+    EN_EVALUACION = "en_evaluacion"
+    NEEDS_HUMAN_REVIEW = "needs_human_review"
+    ESPERANDO_APROBACION = "esperando_aprobacion"
+    TERMINADO = "terminado"
+
+
+class ApprovalStatus(str, Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    REQUEST_CHANGES = "request_changes"
+
+
+class Ticket(SQLModel, table=True):
+    __tablename__ = "rfp_tickets"
+    __table_args__ = (
+        Index("idx_ticket_status", "status"),
+        Index("idx_ticket_created", "created_at"),
+    )
+
+    id: int | None = SQLField(default=None, primary_key=True)
+    ticket_id: str = SQLField(unique=True, nullable=False, index=True)
+    status: TicketStatus = SQLField(default=TicketStatus.ANALIZANDO, sa_type=String)
+    error_message: str | None = None
+
+    rfp_id: str | None = None
+    raw_pdf_path: str | None = None
+    is_valid_rfp: bool | None = None
+
+    created_at: datetime = SQLField(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_type=DateTime(timezone=True),
+    )
+    updated_at: datetime = SQLField(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_type=DateTime(timezone=True),
+        sa_column_kwargs={"onupdate": lambda: datetime.now(timezone.utc)},
+    )
+
+
+class RFPMetadata(SQLModel, table=True):
+    __tablename__ = "rfp_metadata"
+
+    id: int | None = SQLField(default=None, primary_key=True)
+    rfp_id: str = SQLField(unique=True, nullable=False, index=True)
+    ticket_id: str = SQLField(foreign_key="rfp_tickets.ticket_id", nullable=False, index=True)
+
+    client_name: str | None = None
+    client_hq: str | None = None
+    services_requested: list[str] | None = SQLField(default=None, sa_type=JSONB)
+    scope: str | None = None
+    deadline: date | None = None
+    budget_range: str | None = None
+    departments_needed: list[str] | None = SQLField(default=None, sa_type=JSONB)
+    currency: str | None = None
+
+    word_count: int | None = None
+    readability_flesch: float | None = None
+    readability_gunning_fog: float | None = None
+
+    raw_text_preview: str | None = None
+
+
+class DepartmentSection(SQLModel, table=True):
+    __tablename__ = "rfp_department_sections"
+    __table_args__ = (
+        Index("idx_dept_ticket", "ticket_id"),
+        Index("idx_dept_dept", "department_id"),
+    )
+
+    id: int | None = SQLField(default=None, primary_key=True)
+    ticket_id: str = SQLField(foreign_key="rfp_tickets.ticket_id", nullable=False, index=True)
+    department_id: str = SQLField(nullable=False)
+    department_name: str | None = None
+    key_aspects: str | None = None
+    raw_section_text: str | None = None
+
+    approval_status: ApprovalStatus = SQLField(default=ApprovalStatus.PENDING, sa_type=String)
+    approved_by: str | None = None
+    approved_at: datetime | None = SQLField(
+        default=None, sa_type=DateTime(timezone=True)
+    )
+
+
+class FinalDocument(SQLModel, table=True):
+    __tablename__ = "rfp_final_documents"
+
+    id: int | None = SQLField(default=None, primary_key=True)
+    ticket_id: str = SQLField(foreign_key="rfp_tickets.ticket_id", nullable=False, index=True)
+    document_type: str | None = None
+    content: str | None = None
+    file_path: str | None = None
