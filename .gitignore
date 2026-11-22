@@ -7,3 +7,4 @@ __pycache__/
 /data/suppliers.json
 /data/traces/
 /services/data/traces/
+/data/raw/

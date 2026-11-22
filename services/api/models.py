@@ -508,6 +508,8 @@ class Ticket(SQLModel, table=True):
     rfp_id: str | None = None
     raw_pdf_path: str | None = None
     is_valid_rfp: bool | None = None
+    sales_summary: str | None = None
+    handoff_json: str | None = None
 
     created_at: datetime = SQLField(
         default_factory=lambda: datetime.now(timezone.utc),
