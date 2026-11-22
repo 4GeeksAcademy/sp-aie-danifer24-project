@@ -46,6 +46,8 @@ class RFPIntakeState(TypedDict, total=False):
     worker_inputs: dict[str, Any]
     departments_needed: list[str]
     department_sections: dict[str, Any]
+    sales_summary: str | None
+    handoff_payload: dict[str, Any] | None
     rfp_id: str | None
     ticket_status: str | None
     error: str | None
@@ -153,19 +155,101 @@ def _update_ticket_status(
         session.commit()
 
 
-# ── Pipeline nodes ─────────────────────────────────────────────────────
+# ── Pipeline nodes ─────────────────────────────────────
 
 
-def classify_rfp(state: dict[str, Any]) -> dict[str, Any]:
-    """
-    Determine if the document is a valid RFP from a potential client.
-    Returns dict with keys to merge into shared state.
-    """
-    text = state.get("markdown", "")
+# This file contains ONLY the replacement text for step 2.
+# It will be read and spliced into rfp_intake.py by step2_apply.py.
+
+_DEPARTMENT_WORKER_PROMPTS = {
+    "seleccion": (
+        "Eres un agente de Talento y Seleccion de Nexova.\\n"
+        "Revisa el extracto de la RFP del cliente y extrae ASPECTOS CLAVE.\\n\\n"
+        "Cliente: {client_name}\\n"
+        "Servicios solicitados: {services}\\n\\n"
+        "Extrae SOLO informacion explicita. No inventes cifras.\\n\\n"
+        "Devuelve JSON con: roles_to_cover, estimated_close_time,\\n"
+        "consulting_hours, key_aspects, open_questions"
+    ),
+    "capacitacion": (
+        "Eres un agente de Capacitacion Corporativa de Nexova.\\n"
+        "Revisa el extracto de la RFP del cliente y extrae ASPECTOS CLAVE.\\n\\n"
+        "Cliente: {client_name}\\n"
+        "Servicios solicitados: {services}\\n\\n"
+        "Extrae SOLO informacion explicita. No inventes cifras.\\n\\n"
+        "Devuelve JSON con: applicable_programs, duration, modality,\\n"
+        "key_aspects, open_questions"
+    ),
+    "soporte": (
+        "Eres un agente de Soporte al Cliente de Nexova.\\n"
+        "Revisa el extracto de la RFP del cliente y extrae ASPECTOS CLAVE.\\n\\n"
+        "Cliente: {client_name}\\n"
+        "Servicios solicitados: {services}\\n\\n"
+        "Extrae SOLO informacion explicita. No inventes cifras.\\n\\n"
+        "Devuelve JSON con: agent_count, shifts, sla_response,\\n"
+        "key_aspects, open_questions"
+    ),
+}
+
+
+def _llm_classify(text: str, client_name: str = "") -> dict[str, Any] | None:
+    # Classify document via OpenAI LLM directly. Returns None if LLM is unavailable.
+    try:
+        from openai import OpenAI
+        client = OpenAI()
+    except (ImportError, Exception) as exc:
+        logger.warning("LLM classify import failed: %s", exc)
+        return None
+
+    prompt = (
+        "Eres un clasificador de documentos para Nexova, "
+        "consultora espanola de RRHH y outsourcing.\n"
+        "Determina si el siguiente documento es una RFP "
+        "(Request for Proposal) valida\n"
+        "de un cliente potencial.\n"
+        "Reglas:\n"
+        "- Una RFP valida es una SOLICITUD de servicios "
+        "(seleccion, capacitacion, soporte).\n"
+        "- NO es RFP si el documento es un pitch comercial "
+        "(la empresa se ofrece a si misma).\n"
+        "- NO es RFP si es solo informacion general sin "
+        "solicitud de servicios.\n"
+        "- La mera presencia de la palabra RFP no la hace valida.\n\n"
+        f"Cliente (si se conoce): {client_name}\n\n"
+        f"Documento:\n{text[:4000]}\n\n"
+        "Responde en JSON EXACTO:\n"
+        '{"is_valid_rfp": true/false, '
+        '"reason": "explicacion breve"}'
+    )
+    try:
+        raw = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1,
+        )
+        response_text = raw.choices[0].message.content or ""
+        idx_start = response_text.find("{")
+        idx_end = response_text.rfind("}")
+        if idx_start >= 0 and idx_end > idx_start:
+            result = json.loads(response_text[idx_start : idx_end + 1])
+            return {
+                "is_valid_rfp": result.get("is_valid_rfp", False),
+                "classification_reason": result.get(
+                    "reason", "Clasificado por LLM."
+                ),
+            }
+    except Exception as exc:
+        logger.warning("LLM classification failed: %s", exc)
+
+    return None
+
+
+def _heuristic_classify(text: str) -> dict[str, Any]:
+    # Heuristic-only classification - fallback when LLM unavailable.
     if not text or len(text.strip()) < 50:
         return {
             "is_valid_rfp": False,
-            "classification_reason": "Documento demasiado corto o vacío.",
+                "classification_reason": "No se detectan señales de RFP: documento demasiado corto o vacío.",
         }
     text_lower = text.lower()
 
@@ -173,7 +257,7 @@ def classify_rfp(state: dict[str, Any]) -> dict[str, Any]:
         phrase in text_lower
         for phrase in [
             "rfp", "request for proposal", "solicitud de propuesta",
-            "propuesta", "cotizacion", "estimado", "nexova",
+            "propuesta",
         ]
     )
     has_service_request = any(
@@ -187,16 +271,17 @@ def classify_rfp(state: dict[str, Any]) -> dict[str, Any]:
     has_vendor_pitch = any(
         phrase in text_lower
         for phrase in [
-            "somos expertos", "ofrecemos", "nuestro producto",
+            "somos", "ofrecemos", "nuestro producto",
             "we offer", "our platform", "we specialize",
             "we are a leading", "our solution",
         ]
     )
 
-    if has_vendor_pitch and not has_rfp_greeting:
+    if has_vendor_pitch and not has_rfp_greeting and not has_service_request:
         return {
             "is_valid_rfp": False,
-            "classification_reason": "Documento es un pitch de proveedor, no una RFP de cliente.",
+            "classification_reason": "Documento es un pitch de proveedor, "
+            "no una RFP de cliente.",
         }
 
     if has_rfp_greeting or has_service_request:
@@ -207,8 +292,33 @@ def classify_rfp(state: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "is_valid_rfp": False,
-        "classification_reason": "No se detectaron señales de RFP de cliente.",
+        "classification_reason": "No se detectaron senales de RFP de cliente.",
     }
+
+
+def classify_rfp(state: dict[str, Any]) -> dict[str, Any]:
+    # Determine if the document is a valid RFP from a potential client.
+    # LLM-first, falls back to heuristic when LLM is unavailable.
+    # Returns dict with keys to merge into shared state.
+    text = state.get("markdown", "")
+    if not text or len(text.strip()) < 50:
+        return {
+            "is_valid_rfp": False,
+            "classification_reason": "Documento demasiado corto o vacio.",
+        }
+
+    client_name = state.get("metadata", {}).get("client_name", "")
+    llm_result = _llm_classify(text, client_name)
+
+    if llm_result is not None:
+        logger.info(
+            "LLM classification: %s",
+            llm_result.get("classification_reason"),
+        )
+        return llm_result
+
+    logger.info("LLM unavailable, falling back to heuristic classification")
+    return _heuristic_classify(text)
 
 
 def extract_metadata(state: dict[str, Any]) -> dict[str, Any]:
@@ -357,13 +467,23 @@ def extract_department_aspects(state: dict[str, Any]) -> dict[str, Any]:
     """
     worker_inputs = state.get("worker_inputs", {})
     sections: dict[str, dict[str, Any]] = {}
+    metadata = state.get("metadata", {})
+    full_text = state.get("markdown", "")
 
     for dept_id, inputs in worker_inputs.items():
-        text_lower = inputs.get("text_excerpt", "").lower()
+        # Normalise: worker_inputs can be dict (from route_to_departments) or plain string (from tests)
+        if isinstance(inputs, str):
+            text_lower = inputs.lower()
+            dept_name = _DEPARTMENTS.get(dept_id, {}).get("name", dept_id)
+            responsible = _DEPARTMENTS.get(dept_id, {}).get("responsible", "")
+        else:
+            text_lower = (inputs.get("text_excerpt") or full_text or "").lower()
+            dept_name = inputs.get("department_name", dept_id)
+            responsible = inputs.get("responsible", "")
         aspects: dict[str, Any] = {
             "department_id": dept_id,
-            "department_name": inputs.get("department_name", dept_id),
-            "responsible": inputs.get("responsible", ""),
+            "department_name": dept_name,
+            "responsible": responsible,
         }
 
         if dept_id == "seleccion":
@@ -401,7 +521,7 @@ def extract_department_aspects(state: dict[str, Any]) -> dict[str, Any]:
                 r"(\d+)\s*(?:agentes?|personas?|operadores?|staff|team)",
                 text_lower, re.IGNORECASE,
             )
-            aspects["agent_count"] = int(agents[0][0]) if agents else None
+            aspects["agent_count"] = int(agents[0]) if agents else None
             aspects["shifts"] = "24/7 (según solicitud)"
             aspects["sla_response"] = "24 horas (requisito obligatorio)"
             aspects["open_questions"] = [
@@ -411,14 +531,139 @@ def extract_department_aspects(state: dict[str, Any]) -> dict[str, Any]:
             ]
 
         aspects["key_aspects"] = (
-            f"Aspectos clave para {inputs.get('department_name', dept_id)} "
-            f"en propuesta para {inputs.get('client_name', 'cliente')}"
+                    f"Aspectos clave para {dept_name} "
+                    f"en propuesta para {metadata.get('client_name', 'cliente')}"
         )
         sections[dept_id] = aspects
 
     return {
         "department_sections": sections,
     }
+
+
+# ── Synthesizer node ───────────────────────────────────────────────────
+
+
+def synthesize_results(state: dict[str, Any]) -> dict[str, Any]:
+    # Synthesizer: consolidates department analysis into a sales summary
+    # and handoff payload for Part 2.
+    sections = state.get("department_sections", {})
+    metadata = state.get("metadata", {})
+    client_name = metadata.get("client_name", "Cliente no identificado")
+
+    if not sections:
+        return {
+            "sales_summary": "No hay secciones de departamento para sintetizar.",
+        "handoff_payload": None,
+        }
+
+    dept_summaries = []
+    for dept_id, section in sections.items():
+        dept_info = _DEPARTMENTS.get(dept_id, {})
+        aspects = section.get("key_aspects", "")
+        dept_summaries.append(
+            "- "
+            + dept_info.get("name", dept_id)
+            + " (resp: "
+            + dept_info.get("responsible", "")
+            + "):\\n"
+            + "  "
+            + str(aspects)[:500]
+        )
+
+    sales_summary = _llm_generate_summary(client_name, dept_summaries)
+
+    handoff_payload = {
+            "version": "1.0",
+        "ticket_id": state.get("ticket_id"),
+        "client_name": client_name,
+            "workstreams": {
+            k: {kk: vv for kk, vv in v.items() if kk != "text_excerpt"}
+            for k, v in sections.items()
+        },
+        "sales_summary": sales_summary,
+    }
+
+    return {
+        "sales_summary": sales_summary,
+        "handoff_payload": handoff_payload,
+    }
+
+
+def _llm_generate_summary(
+    client_name: str, dept_summaries: list[str]
+) -> str:
+    # Generate a consolidated sales summary via LLM, with fallback.
+    try:
+        from openai import OpenAI
+        client = OpenAI()
+    except (ImportError, Exception):
+        parts = [str(d) for d in dept_summaries]
+        return "Resumen para ventas - " + client_name + ":\n" + "\n".join(parts)
+
+    prompt = (
+        "Eres un sintetizador de propuestas para Nexova.\n"
+        "Genera un resumen para el equipo de Ventas "
+        "sobre que ofrecer a quien.\n\n"
+        "Cliente: " + client_name + "\n"
+        "Analisis por departamento:\n"
+        + "\n".join(dept_summaries)
+        + "\n\n"
+        'Responde en JSON: {"recomendation": "que ofrecer a quien", '
+        '"key_opportunities": ["op1", "op2"], '
+        '"next_steps": ["paso1", "paso2"]}'
+    )
+    try:
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+        )
+        response = resp.choices[0].message.content or ""
+        return response
+    except Exception as exc:
+        logger.warning("LLM summary failed: %s", exc)
+        return "Resumen generado para " + client_name + "."
+
+
+def _llm_extract_aspects(
+    dept_id: str,
+    client_name: str,
+    extracto: str,
+) -> dict[str, Any] | None:
+    # Attempt LLM extraction of department aspects; returns None on failure (heuristic fallback).
+    try:
+        from openai import OpenAI
+        client = OpenAI()
+    except Exception:
+        return None
+
+    prompt = (
+        "Extrae informacion estructurada de este extracto de RFP para el departamento "
+        + dept_id
+        + ".\nCliente: "
+        + client_name
+        + "\nExtracto: "
+        + extracto
+        + "\n"
+        "Devuelve JSON con las claves relevantes para ese departamento. "
+        "Si falta informacion, indica 'Por determinar'."
+    )
+    try:
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1,
+        )
+        response = resp.choices[0].message.content or ""
+        idx_start = response.find("{")
+        idx_end = response.rfind("}")
+        if idx_start >= 0 and idx_end > idx_start:
+            data = json.loads(response[idx_start : idx_end + 1])
+            return data
+    except Exception:
+        return None
+    return None
 
 
 # ── Persistence nodes ──────────────────────────────────────────────────
@@ -440,10 +685,12 @@ def reject_document_node(state: dict[str, Any]) -> dict[str, Any]:
 
 
 def persist_results_node(state: dict[str, Any]) -> dict[str, Any]:
-    """Persist ticket status, metadata and department sections to Supabase."""
+    """Persist ticket status, metadata, department sections and handoff payload to Supabase."""
     ticket_id = state.get("ticket_id")
     metadata = state.get("metadata", {})
     sections = state.get("department_sections", {})
+    handoff_payload = state.get("handoff_payload")
+    sales_summary = state.get("sales_summary")
 
     if not ticket_id:
         return {"error": "No ticket_id in state"}
@@ -483,6 +730,9 @@ def persist_results_node(state: dict[str, Any]) -> dict[str, Any]:
         if ticket_obj:
             ticket_obj.rfp_id = rfp_id
             ticket_obj.is_valid_rfp = True
+            ticket_obj.sales_summary = sales_summary
+            if handoff_payload:
+                ticket_obj.handoff_json = json.dumps(handoff_payload, ensure_ascii=False)
 
         for dept_id, section_data in sections.items():
             dept_section = DepartmentSection(
@@ -500,6 +750,8 @@ def persist_results_node(state: dict[str, Any]) -> dict[str, Any]:
         "rfp_id": rfp_id,
         "ticket_status": TicketStatus.ANALISIS_COMPLETO.value,
         "sections_persisted": list(sections.keys()),
+        "sales_summary": sales_summary,
+        "handoff_payload": handoff_payload,
     }
 
 
@@ -514,6 +766,7 @@ def build_rfp_intake_graph() -> StateGraph:
     builder.add_node("extract_metadata", extract_metadata)
     builder.add_node("route_to_departments", route_to_departments)
     builder.add_node("extract_department_aspects", extract_department_aspects)
+    builder.add_node("synthesize_results", synthesize_results)
     builder.add_node("persist_results", persist_results_node)
     builder.add_node("reject_document", reject_document_node)
 
@@ -525,7 +778,8 @@ def build_rfp_intake_graph() -> StateGraph:
     )
     builder.add_edge("extract_metadata", "route_to_departments")
     builder.add_edge("route_to_departments", "extract_department_aspects")
-    builder.add_edge("extract_department_aspects", "persist_results")
+    builder.add_edge("extract_department_aspects", "synthesize_results")
+    builder.add_edge("synthesize_results", "persist_results")
     builder.add_edge("persist_results", END)
     builder.add_edge("reject_document", END)
 
@@ -540,7 +794,7 @@ def _validate_graph_definition(graph: StateGraph) -> None:
     """Verify all expected nodes and edges are present — fails fast on startup."""
     expected_nodes = {
         "classify_rfp", "extract_metadata", "route_to_departments",
-        "extract_department_aspects", "persist_results", "reject_document",
+        "extract_department_aspects", "synthesize_results", "persist_results", "reject_document",
     }
     actual_nodes = set(graph.nodes.keys()) if hasattr(graph, "nodes") else set()
     # LangGraph v1.2+ might not expose .nodes directly; skip validation if unavailable
@@ -576,6 +830,8 @@ def run_rfp_intake(
         "worker_inputs": {},
         "departments_needed": [],
         "department_sections": {},
+        "sales_summary": None,
+        "handoff_payload": None,
         "rfp_id": None,
         "ticket_status": None,
         "error": None,

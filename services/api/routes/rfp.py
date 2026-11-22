@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from datetime import datetime, timezone
@@ -117,7 +118,7 @@ def get_ticket(
     session: Session = Depends(get_db),
 ) -> TicketResponse:
     """Get ticket status and results."""
-    ticket = session.get(Ticket, ticket_id)
+    ticket = session.query(Ticket).filter(Ticket.ticket_id == ticket_id).first()
     if not ticket:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -147,7 +148,7 @@ def get_ticket_departments(
         .all()
     )
     if not sections:
-        ticket = session.get(Ticket, ticket_id)
+        ticket = session.query(Ticket).filter(Ticket.ticket_id == ticket_id).first()
         if not ticket:
             raise HTTPException(status_code=404, detail="Ticket no encontrado.")
         raise HTTPException(
@@ -160,9 +161,10 @@ def get_ticket_departments(
         "ticket_id": ticket_id,
         "departments": {
             s.department_id: {
-                "key_aspects": s.key_aspects,
+                            "department_id": s.department_id,
+                            "department_name": s.department_name,
+                            "key_aspects": json.loads(s.key_aspects) if s.key_aspects else {},
                 "approval_status": s.approval_status,
-                "approver": s.approver,
             }
             for s in sections
         },
@@ -247,7 +249,7 @@ def _background_pipeline(ticket_id: str, pdf_path: str) -> None:
 def _update_ticket_status(
     session: Session, ticket_id: str, status: TicketStatus, error_message: str | None = None
 ) -> None:
-    ticket = session.get(Ticket, ticket_id)
+    ticket = session.query(Ticket).filter(Ticket.ticket_id == ticket_id).first()
     if ticket:
         ticket.status = status
         ticket.updated_at = datetime.now(timezone.utc)
