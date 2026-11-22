@@ -15,6 +15,7 @@ export default function BackofficeNavigation() {
         <Link href="/incidents" aria-current={pathname === "/incidents" ? "page" : undefined}>Incidencias</Link>
         <Link href="/reporting" aria-current={pathname.startsWith("/reporting") ? "page" : undefined}>Rendimiento</Link>
         <Link href="/knowledge" aria-current={pathname.startsWith("/knowledge") ? "page" : undefined}>Base de conocimiento</Link>
+                <Link href="/rfp" aria-current={pathname.startsWith("/rfp") ? "page" : undefined}>RFPs</Link>
         <Link href="/validacion-tecnica" aria-current={pathname === "/validacion-tecnica" ? "page" : undefined}>Validación técnica</Link>
         <Link href="/account/profile" aria-current={pathname.startsWith("/account") ? "page" : undefined}>Mi cuenta</Link>
       </div>

@@ -6,3 +6,5 @@ __pycache__/
 .env.docker
 /data/suppliers.json
 /data/traces/
+/services/data/traces/
+/data/raw/
