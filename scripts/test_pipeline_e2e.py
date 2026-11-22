@@ -2,6 +2,7 @@
 """End-to-end offline test of the RFP pipeline without a running server."""
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 from uuid import uuid4
@@ -88,12 +89,25 @@ Se requiere analisis legal, auditoria financiera, y evaluacion de compliance.
     with Session(engine) as session:
         # Ticket
         t = session.execute(
-            sa_text("SELECT status, is_valid_rfp, rfp_id FROM rfp_tickets WHERE ticket_id = :tid"),
+                    sa_text("SELECT status, is_valid_rfp, rfp_id, sales_summary FROM rfp_tickets WHERE ticket_id = :tid"),
             {"tid": ticket_id},
         ).fetchone()
         check(t is not None, "ticket row exists")
         check(t[0] == "analisis_completo", f"ticket status = {t[0]!r}")
         check(t[1] is True, f"ticket is_valid_rfp = {t[1]}")
+        check(t[3] is not None and len(t[3]) > 0, f"ticket sales_summary present (len={len(t[3]) if t[3] else 0})")
+
+    # Handoff payload
+    ho_q = sa_text("SELECT handoff_json FROM rfp_tickets WHERE ticket_id = :tid")
+    ho_row = session.execute(ho_q, {"tid": ticket_id}).fetchone()
+    check(ho_row is not None and ho_row[0] is not None, "handoff_json present")
+    if ho_row and ho_row[0]:
+        ho = json.loads(ho_row[0])
+        check(isinstance(ho, dict), "handoff_json is dict")
+        check(ho.get("version") == "1.0", f"handoff version = {ho.get('version')}")
+        check(ho.get("ticket_id") == ticket_id, f"handoff ticket_id = {ho.get('ticket_id')}")
+        check(len(ho.get("workstreams", {})) >= 1, f"handoff workstreams count = {len(ho.get('workstreams', {}))}")
+        check("seleccion" in ho.get("workstreams", {}), "handoff includes seleccion workstream")
 
         # Metadata
         m = session.execute(
