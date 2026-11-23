@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { clearStoredAccessToken, getStoredAccessToken } from "@/lib/auth";
 
 type TicketStatus = {
@@ -20,6 +20,26 @@ type DepartmentInfo = {
   approval_status: string;
 };
 
+type EvaluationResultType = {
+  overall_pass: boolean;
+  department_id: string;
+  readability: { pass_: boolean; score: number | null; details: string };
+  relevance: { pass_: boolean; missing_aspects: string[]; details: string };
+  compliance: { pass_: boolean; rule_ids: string[]; violations: string[]; details: string };
+  feedback_for_generator: string;
+};
+
+type DraftDeptInfo = {
+  department_id: string;
+  department_name: string;
+  draft_content: string | null;
+  key_aspects: Record<string, unknown>;
+  approval_status: string;
+  needs_human_review: boolean;
+  iteration_count: number;
+  evaluation_result: EvaluationResultType | null;
+};
+
 export default function RFPPage() {
   // Upload state
   const [uploading, setUploading] = useState(false);
@@ -32,10 +52,17 @@ export default function RFPPage() {
   const [polling, setPolling] = useState(false);
   const [pollError, setPollError] = useState("");
 
-  // Department state
+  // Department state (Part 1)
   const [departments, setDepartments] = useState<Record<string, DepartmentInfo> | null>(null);
   const [loadingDepts, setLoadingDepts] = useState(false);
   const [deptError, setDeptError] = useState("");
+
+  // Part 2 state (generation + drafts)
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState("");
+  const [drafts, setDrafts] = useState<Record<string, DraftDeptInfo> | null>(null);
+  const [loadingDrafts, setLoadingDrafts] = useState(false);
+  const [draftsError, setDraftsError] = useState("");
 
   // List state
   const [recentTickets, setRecentTickets] = useState<TicketStatus[]>([]);
@@ -129,13 +156,25 @@ export default function RFPPage() {
       }
       setTicket(payload as TicketStatus);
 
-      // If completed, load departments
+      // If completed (Part 1), load departments
       if (payload.status === "analisis_completo") {
         void loadDepartments(id);
       } else if (payload.status === "descartado") {
         // Terminal state; stop polling
+      } else if (
+        payload.status === "generando_borrador" ||
+        payload.status === "en_evaluacion"
+      ) {
+        // Part 2 in progress; load drafts and continue polling
+        void loadDrafts(id);
+        setTimeout(() => void pollTicket(id), 3000);
+      } else if (
+        payload.status === "needs_human_review"
+      ) {
+        // Terminal state for Part 2; load drafts for display
+        void loadDrafts(id);
       } else {
-        // Still processing; poll again in 3s
+        // Still processing (Part 1); poll again in 3s
         setTimeout(() => void pollTicket(id), 3000);
       }
     } catch (caught) {
@@ -177,6 +216,78 @@ export default function RFPPage() {
     }
   }
 
+  async function handleGenerate() {
+    if (!pollId || generating) return;
+
+    const token = getStoredAccessToken();
+    if (!token) {
+      setGenError("Inicia sesión para continuar.");
+      return;
+    }
+
+    setGenerating(true);
+    setGenError("");
+
+    try {
+      const response = await fetch(`/api/rfp/${pollId}/generate`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const payload = await response.json().catch(() => ({}));
+
+      if (response.status === 401 || response.status === 403) {
+        clearStoredAccessToken();
+        window.dispatchEvent(new Event("nexova:unauthorized"));
+      }
+      if (!response.ok) {
+        throw new Error(
+          typeof payload.detail === "string"
+            ? payload.detail
+            : "No se pudo iniciar la generación."
+        );
+      }
+
+      // Start polling to see status transitions
+      void pollTicket(pollId);
+    } catch (caught) {
+      setGenError(
+        caught instanceof Error ? caught.message : "Error al iniciar generación."
+      );
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function loadDrafts(id: string) {
+    const token = getStoredAccessToken();
+    if (!token) return;
+
+    setLoadingDrafts(true);
+    setDraftsError("");
+
+    try {
+      const response = await fetch(`/api/rfp/${id}/drafts`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(
+          typeof payload.detail === "string"
+            ? payload.detail
+            : "No se pudieron cargar los borradores."
+        );
+      }
+      setDrafts(payload.departments as Record<string, DraftDeptInfo>);
+    } catch (caught) {
+      setDraftsError(
+        caught instanceof Error ? caught.message : "Error al cargar borradores."
+      );
+    } finally {
+      setLoadingDrafts(false);
+    }
+  }
+
   async function loadRecentTickets() {
     const token = getStoredAccessToken();
     if (!token) return;
@@ -214,8 +325,14 @@ export default function RFPPage() {
   function statusClass(status: string): string {
     if (status === "analisis_completo" || status === "terminado") return "status-ok";
     if (status === "descartado") return "status-err";
-    if (status === "analizando") return "status-pending";
+    if (status === "analizando" || status === "generando_borrador" || status === "en_evaluacion") return "status-pending";
+    if (status === "needs_human_review") return "status-warn";
     return "";
+  }
+
+  function evalIcon(pass: boolean | undefined): string {
+    if (pass === undefined) return "⏳";
+    return pass ? "✅" : "❌";
   }
 
   // Load recent tickets on page load
@@ -317,7 +434,7 @@ export default function RFPPage() {
                     <p>
                       <strong>Estado:</strong> {info.approval_status}
                     </p>
-                    {info.key_aspects?.roles_to_cover && (
+                    {!!info.key_aspects?.roles_to_cover && (
                       <p>
                         <strong>Roles:</strong>{" "}
                         {(info.key_aspects.roles_to_cover as string[]).join(", ")}
@@ -328,13 +445,13 @@ export default function RFPPage() {
                         <strong>Agentes:</strong> {String(info.key_aspects.agent_count)}
                       </p>
                     )}
-                    {info.key_aspects?.applicable_programs && (
+                    {!!info.key_aspects?.applicable_programs && (
                       <p>
                         <strong>Programas:</strong>{" "}
                         {(info.key_aspects.applicable_programs as string[]).join(", ")}
                       </p>
                     )}
-                    {info.key_aspects?.open_questions && (
+                    {!!info.key_aspects?.open_questions && (
                       <details>
                         <summary>Preguntas pendientes</summary>
                         <ul>
@@ -342,6 +459,162 @@ export default function RFPPage() {
                             (q: string) => <li key={q}>{q}</li>
                           )}
                         </ul>
+                      </details>
+                    )}
+                  </article>
+                ))}
+              <div className="hero-actions" style={{ marginTop: "1rem" }}>
+                <button
+                  className="btn btn-dark"
+                  onClick={handleGenerate}
+                  disabled={generating}
+                >
+                  {generating ? "Generando propuesta…" : "Generar propuesta"}
+                </button>
+              </div>
+              {genError && (
+                <div className="notice notice-error" role="alert">
+                  {genError}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Drafts (Part 2) */}
+          {(ticket?.status === "generando_borrador" ||
+            ticket?.status === "en_evaluacion" ||
+            ticket?.status === "needs_human_review") && (
+            <div>
+              <h3>Borradores generados</h3>
+              {loadingDrafts && <p className="status-pending">Cargando borradores…</p>}
+              {draftsError && (
+                <div className="notice notice-error" role="alert">
+                  {draftsError}
+                </div>
+              )}
+              {drafts &&
+                Object.entries(drafts).map(([deptId, info]) => (
+                  <article
+                    className="dept-card"
+                    key={deptId}
+                    style={{
+                      borderLeft: info.needs_human_review
+                        ? "4px solid #d97706"
+                        : info.evaluation_result?.overall_pass
+                        ? "4px solid #14745d"
+                        : "4px solid #dc2626",
+                    }}
+                  >
+                    <h4>
+                      {info.department_name ?? deptId}
+                      {info.needs_human_review && (
+                        <span
+                          className="status-badge status-warn-badge"
+                          style={{
+                            marginLeft: "0.5rem",
+                            fontSize: "0.7rem",
+                            background: "#fef3c7",
+                            color: "#92400e",
+                            padding: "0.15rem 0.45rem",
+                            borderRadius: "999px",
+                          }}
+                        >
+                          Revisión humana
+                        </span>
+                      )}
+                    </h4>
+                    <p>
+                      <strong>Iteración:</strong> {info.iteration_count}
+                    </p>
+                    {info.draft_content && (
+                      <details>
+                        <summary>Ver borrador</summary>
+                        <pre
+                          style={{
+                            whiteSpace: "pre-wrap",
+                            background: "#f9fafb",
+                            padding: "0.75rem",
+                            borderRadius: "0.5rem",
+                            fontSize: "0.85rem",
+                            maxHeight: "400px",
+                            overflow: "auto",
+                            border: "1px solid #e5e7eb",
+                          }}
+                        >
+                          {info.draft_content}
+                        </pre>
+                      </details>
+                    )}
+                    {info.evaluation_result && (
+                      <details>
+                        <summary>
+                          Evaluación{" "}
+                          {info.evaluation_result.overall_pass ? "✅" : "❌"}
+                        </summary>
+                        <div
+                          style={{
+                            marginTop: "0.5rem",
+                            display: "grid",
+                            gap: "0.5rem",
+                          }}
+                        >
+                          <div>
+                            <strong>Legibilidad:</strong>{" "}
+                            {evalIcon(info.evaluation_result.readability?.pass_)}
+                            {info.evaluation_result.readability?.score != null &&
+                              ` (puntuación: ${info.evaluation_result.readability.score})`}
+                            {info.evaluation_result.readability?.details && (
+                              <p style={{ fontSize: "0.8rem", color: "#6b7280" }}>
+                                {info.evaluation_result.readability.details}
+                              </p>
+                            )}
+                          </div>
+                          <div>
+                            <strong>Pertinencia:</strong>{" "}
+                            {evalIcon(info.evaluation_result.relevance?.pass_)}
+                            {info.evaluation_result.relevance?.missing_aspects
+                              ?.length > 0 && (
+                              <p style={{ fontSize: "0.8rem", color: "#6b7280" }}>
+                                Aspectos faltantes:{" "}
+                                {info.evaluation_result.relevance.missing_aspects.join(
+                                  ", "
+                                )}
+                              </p>
+                            )}
+                            {info.evaluation_result.relevance?.details && (
+                              <p style={{ fontSize: "0.8rem", color: "#6b7280" }}>
+                                {info.evaluation_result.relevance.details}
+                              </p>
+                            )}
+                          </div>
+                          <div>
+                            <strong>Cumplimiento:</strong>{" "}
+                            {evalIcon(info.evaluation_result.compliance?.pass_)}
+                            {info.evaluation_result.compliance?.violations
+                              ?.length > 0 && (
+                              <p style={{ fontSize: "0.8rem", color: "#dc2626" }}>
+                                Violaciones:{" "}
+                                {info.evaluation_result.compliance.violations.join(
+                                  "; "
+                                )}
+                              </p>
+                            )}
+                            {info.evaluation_result.compliance?.details && (
+                              <p style={{ fontSize: "0.8rem", color: "#6b7280" }}>
+                                {info.evaluation_result.compliance.details}
+                              </p>
+                            )}
+                          </div>
+                          {info.evaluation_result.feedback_for_generator && (
+                            <div
+                              className="notice notice-info"
+                              style={{ fontSize: "0.85rem" }}
+                            >
+                              <strong>Feedback:</strong>{" "}
+                              {info.evaluation_result.feedback_for_generator}
+                            </div>
+                          )}
+                        </div>
                       </details>
                     )}
                   </article>
@@ -405,6 +678,3 @@ export default function RFPPage() {
     </main>
   );
 }
-
-// eslint-disable-next-line unused-import — required for JSX runtime
-import { useEffect } from "react";

@@ -559,6 +559,14 @@ class DepartmentSection(SQLModel, table=True):
     key_aspects: str | None = None
     raw_section_text: str | None = None
 
+    # Part 2: generated proposal draft content
+    draft_content: str | None = None
+    iteration_count: int = SQLField(default=0)
+    needs_human_review: bool = SQLField(default=False)
+
+    # Part 2: evaluation results (JSON string)
+    evaluation_result: str | None = None
+
     approval_status: ApprovalStatus = SQLField(default=ApprovalStatus.PENDING, sa_type=String)
     approved_by: str | None = None
     approved_at: datetime | None = SQLField(
