@@ -289,6 +289,30 @@ body {
 .status-in_progress { color: #14566d; background: #dff4fb; }
 .status-resolved { color: #176344; background: #ddf4e7; }
 .status-discarded { color: #694a77; background: #efe5f4; }
+.status-ok { color: #176344; font-weight: 700; }
+.status-err { color: #94372f; font-weight: 700; }
+.status-pending { color: #865709; font-weight: 700; }
+.status-warn { color: #92400e; font-weight: 700; }
+
+/* RFP-specific styles */
+.dept-card {
+  border: 1px solid #dde7e2;
+  border-radius: 0.75rem;
+  padding: 1rem 1.2rem;
+  margin-bottom: 0.8rem;
+  background: #fff;
+}
+.dept-card h4 {
+  margin: 0 0 0.4rem;
+  color: #183c35;
+  font-size: 1rem;
+}
+.dept-card summary {
+  cursor: pointer;
+  color: #14745d;
+  font-weight: 650;
+  font-size: 0.88rem;
+}
 .status-control { color: #536760; font-size: .73rem; }
 .status-control select:disabled { color: #71807b; background: #f5f7f6; cursor: not-allowed; }
 .summary-panel { padding: 1.2rem 1.5rem; }
