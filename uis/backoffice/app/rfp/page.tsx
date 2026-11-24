@@ -1039,21 +1039,26 @@ export default function RFPPage() {
           placeholder="Ej.: 8d873c9b"
           style={{ width: "100%", maxWidth: 520, margin: "0.5rem 0 1rem" }}
         />
-        <label htmlFor="ticket-department">Departamento</label>
-        <select
-          id="ticket-department"
-          value={ticketDepartment}
-          onChange={(event) => {
-            setTicketDepartment(event.target.value);
-            setTicketPage(1);
-          }}
-          style={{ display: "block", width: "100%", maxWidth: 520, margin: "0.5rem 0 1rem" }}
+        <div
+          className="ticket-department-filter"
+          style={{ display: "grid", gap: "0.45rem", width: "100%", maxWidth: 520, margin: "0.5rem 0 1rem" }}
         >
-          <option value="">Todos los departamentos</option>
-          <option value="seleccion">Selección</option>
-          <option value="capacitacion">Capacitación</option>
-          <option value="soporte">Soporte</option>
-        </select>
+          <label htmlFor="ticket-department">Departamento</label>
+          <select
+            id="ticket-department"
+            value={ticketDepartment}
+            onChange={(event) => {
+              setTicketDepartment(event.target.value);
+              setTicketPage(1);
+            }}
+            style={{ width: "100%" }}
+          >
+            <option value="">Todos los departamentos</option>
+            <option value="seleccion">Selección</option>
+            <option value="capacitacion">Capacitación</option>
+            <option value="soporte">Soporte</option>
+          </select>
+        </div>
         <div role="tablist" aria-label="Filtrar tickets" style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginBottom: "1rem" }}>
           {ticketTabs.map((tab) => (
             <button
@@ -1065,7 +1070,7 @@ export default function RFPPage() {
                 setTicketTab(tab.id);
                 setTicketPage(1);
               }}
-              className={ticketTab === tab.id ? "btn btn-dark" : "btn"}
+              className={ticketTab === tab.id ? "btn btn-dark" : "btn btn-light"}
             >
               {tab.label}
             </button>
