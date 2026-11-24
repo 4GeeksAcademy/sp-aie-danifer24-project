@@ -174,7 +174,7 @@ class TestGenerationPipeline:
         ticket_id = _create_ticket_with_data(["seleccion"])
         result = run_rfp_generation(ticket_id)
 
-        assert result["ticket_status"] == "generando_borrador"
+        assert result["ticket_status"] == "esperando_aprobacion"
         assert "seleccion" in result["departments"]
         assert result["departments"]["seleccion"]["generated"] is True
         assert result["departments"]["seleccion"]["draft_length"] > 0
@@ -194,14 +194,14 @@ class TestGenerationPipeline:
             assert len(section.draft_content) > 0
             # Ticket status updated
             ticket = session.query(Ticket).filter(Ticket.ticket_id == ticket_id).first()
-            assert ticket.status == TicketStatus.GENERANDO_BORRADOR
+            assert ticket.status == TicketStatus.ESPERANDO_APROBACION
 
     def test_generates_capacitacion_draft_e2e(self):
         """Full pipeline generates draft for capacitacion department."""
         ticket_id = _create_ticket_with_data(["capacitacion"])
         result = run_rfp_generation(ticket_id)
 
-        assert result["ticket_status"] == "generando_borrador"
+        assert result["ticket_status"] == "esperando_aprobacion"
         assert "capacitacion" in result["departments"]
         assert result["departments"]["capacitacion"]["generated"] is True
 
@@ -222,7 +222,7 @@ class TestGenerationPipeline:
         ticket_id = _create_ticket_with_data(["soporte"])
         result = run_rfp_generation(ticket_id)
 
-        assert result["ticket_status"] == "generando_borrador"
+        assert result["ticket_status"] == "esperando_aprobacion"
         assert "soporte" in result["departments"]
         assert result["departments"]["soporte"]["generated"] is True
 
@@ -243,7 +243,7 @@ class TestGenerationPipeline:
         ticket_id = _create_ticket_with_data(["seleccion", "capacitacion"])
         result = run_rfp_generation(ticket_id)
 
-        assert result["ticket_status"] == "generando_borrador"
+        assert result["ticket_status"] == "esperando_aprobacion"
         assert len(result["departments"]) == 2
         assert "seleccion" in result["departments"]
         assert "capacitacion" in result["departments"]
@@ -253,7 +253,7 @@ class TestGenerationPipeline:
         ticket_id = _create_ticket_with_data(["seleccion", "capacitacion", "soporte"])
         result = run_rfp_generation(ticket_id)
 
-        assert result["ticket_status"] == "generando_borrador"
+        assert result["ticket_status"] == "esperando_aprobacion"
         assert len(result["departments"]) == 3
         for d in ["seleccion", "capacitacion", "soporte"]:
             assert d in result["departments"]
@@ -271,7 +271,7 @@ class TestGenerationPipeline:
         )
         result = run_rfp_generation(ticket_id)
 
-        assert result["ticket_status"] == "generando_borrador"
+        assert result["ticket_status"] == "esperando_aprobacion"
         # The draft should reference the client name from handoff
         with Session(engine) as session:
             section = (
@@ -318,7 +318,7 @@ class TestGenerationPipeline:
         ticket_id = _create_ticket_with_data(["seleccion"])
         result = run_rfp_generation(ticket_id)
 
-        assert result["ticket_status"] == "generando_borrador"
+        assert result["ticket_status"] == "esperando_aprobacion"
         with Session(engine) as session:
             section = (
                 session.query(DepartmentSection)
@@ -342,7 +342,7 @@ class TestGenerationPipeline:
         ticket_id = _create_ticket_with_data(["capacitacion"])
         result = run_rfp_generation(ticket_id)
 
-        assert result["ticket_status"] == "generando_borrador"
+        assert result["ticket_status"] == "esperando_aprobacion"
         assert result["departments"]["capacitacion"]["draft_length"] > 0
 
     def test_no_departments_returns_error(self):
@@ -412,7 +412,7 @@ class TestGenerationIterationCycle:
         assert result["departments"]["seleccion"]["iterations"] == 1
         assert result["departments"]["seleccion"]["evaluation"]["overall_pass"] is True
         assert result["departments"]["seleccion"]["needs_human_review"] is False
-        assert result["ticket_status"] == "generando_borrador"
+        assert result["ticket_status"] == "esperando_aprobacion"
 
     @patch("services.api.services.rfp_generation._generate_draft_llm")
     def test_ticket_transitions_through_en_evaluacion(self, mock_llm):
@@ -428,8 +428,8 @@ class TestGenerationIterationCycle:
         with Session(engine) as session:
             ticket = session.query(Ticket).filter(Ticket.ticket_id == ticket_id).first()
             assert ticket is not None
-            # Final status should be generando_borrador (not needs_human_review)
-            assert ticket.status == TicketStatus.GENERANDO_BORRADOR
+            # Completed compliant drafts are ready for departmental approval.
+            assert ticket.status == TicketStatus.ESPERANDO_APROBACION
 
 
 # ── Compliance-failure tests ───────────────────────────────────────

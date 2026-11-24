@@ -574,6 +574,24 @@ class DepartmentSection(SQLModel, table=True):
     )
 
 
+class RFPApprovalTrace(SQLModel, table=True):
+    """Durable audit events for approval and arbitration pipeline steps."""
+
+    __tablename__ = "rfp_approval_traces"
+    __table_args__ = (Index("idx_rfp_approval_trace_ticket", "ticket_id", "id"),)
+
+    id: int | None = SQLField(default=None, primary_key=True)
+    ticket_id: str = SQLField(foreign_key="rfp_tickets.ticket_id", nullable=False, index=True)
+    department_id: str | None = None
+    agent: str = SQLField(nullable=False)
+    input_data: dict = SQLField(default_factory=dict, sa_type=JSONB)
+    output_data: dict = SQLField(default_factory=dict, sa_type=JSONB)
+    created_at: datetime = SQLField(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_type=DateTime(timezone=True),
+    )
+
+
 class FinalDocument(SQLModel, table=True):
     __tablename__ = "rfp_final_documents"
 
