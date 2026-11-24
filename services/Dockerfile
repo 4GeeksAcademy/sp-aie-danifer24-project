@@ -15,6 +15,8 @@ RUN uv pip install --system --no-cache \
     "redis>=8.1.0" \
     "sqlmodel>=0.0.48" \
     "psycopg2-binary>=2.9.13" \
+    "psycopg[binary]>=3.3.0" \
+    "bcrypt>=4.0.0" \
     "openai>=1.0,<4.0" \
     "qdrant-client>=1.20.0" \
     "httpx2>=2.14.0" \

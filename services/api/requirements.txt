@@ -14,3 +14,4 @@ uvicorn[standard]>=0.30,<1.0
 python-multipart>=0.0.9,<1.0
 httpx2>=2.14.0
 markitdown[pdf]>=0.1.0
+langgraph-checkpoint-postgres>=3.2.1

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, BookOpenText, Boxes, Building2, ClipboardList, FlaskConical, ChartNoAxesCombined } from "lucide-react";
+import { ArrowRight, BookOpenText, Boxes, Building2, ClipboardList, FlaskConical, ChartNoAxesCombined, FileText } from "lucide-react";
 
 export default function HomePage() {
   return (
@@ -40,6 +40,11 @@ export default function HomePage() {
             <span className="backoffice-home-icon"><BookOpenText size={21} /></span>
             <span className="backoffice-home-card-copy"><strong>Asistente comercial</strong><span>Consulta la base de conocimiento de Nexova y prepara respuestas para prospectos.</span></span>
             <span className="backoffice-home-card-action">Hacer una consulta <ArrowRight size={16} /></span>
+          </Link>
+          <Link className="panel backoffice-home-card" href="/rfp">
+            <span className="backoffice-home-icon"><FileText size={21} /></span>
+            <span className="backoffice-home-card-copy"><strong>Gestión de RFPs</strong><span>Carga solicitudes, consulta tickets y revisa aprobaciones y propuestas.</span></span>
+            <span className="backoffice-home-card-action">Gestionar RFPs <ArrowRight size={16} /></span>
           </Link>
           <Link className="panel backoffice-home-card" href="/validacion-tecnica">
             <span className="backoffice-home-icon"><FlaskConical size={21} /></span>

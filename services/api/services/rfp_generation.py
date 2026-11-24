@@ -540,13 +540,13 @@ def run_rfp_generation(ticket_id: str) -> dict[str, Any]:
             "evaluation": evaluation.to_dict() if evaluation else None,
         }
 
-    # Update ticket status reflecting generation + evaluation progress
-        # - If any section exhausted iterations: needs_human_review
-        # - If all passed (even with iterations): generando_borrador (ready for Part 3)
+    # Generation is complete when all department drafts have been persisted.
+    # A compliant draft is ready to enter Part 3; a failed evaluation remains
+    # explicitly flagged for human review before approval starts.
     final_status = (
         TicketStatus.NEEDS_HUMAN_REVIEW
         if any_needs_human_review
-        else TicketStatus.GENERANDO_BORRADOR
+        else TicketStatus.ESPERANDO_APROBACION
     )
     with Session(engine) as session:
         ticket = session.query(Ticket).filter(Ticket.ticket_id == ticket_id).first()
